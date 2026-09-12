@@ -260,6 +260,17 @@ const atlasDaily = ATLAS_PAYMENT_CONFIG.enabled
         minimumConfirmations: ATLAS_PAYMENT_CONFIG.minConfirmations,
       },
       dailyPoolLuna: ATLAS_DAILY_POOL_LUNA,
+      /*
+       * The pot is capped by what the treasury actually holds.
+       *
+       * ATLAS_DAILY_POOL_LUNA is an intent, not a balance. Production ran it at
+       * 10,000 Luna against a treasury holding 3,338, so standing() advertised
+       * roughly three times what could be settled. Reading the balance off the
+       * reward chain makes the advertised share a number the treasury can pay.
+       */
+      treasuryBalanceLuna: atlasRewardChain && atlasPayoutTreasury
+        ? () => atlasRewardChain.balanceOf(atlasPayoutTreasury)
+        : undefined,
       stateStore: ATLAS_PRODUCTION_GATE.durableRepository ? atlasStateStore : undefined,
     })
   : undefined;

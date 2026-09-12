@@ -181,3 +181,54 @@ describe('NIM Atlas chain reader network verification', () => {
     expect(reader.networkVerification()).toBe('verified');
   });
 });
+
+/*
+ * Reading the treasury's balance, so the daily pot is capped by what exists.
+ *
+ * Null means "unknown", never "empty": a caller that sizes a reward pot from
+ * this would otherwise stop paying every time an RPC blinked.
+ */
+describe('the treasury balance', () => {
+  const TREASURY = 'NQ21YC9EFUGGC7LN172X3877CF7AVEJB78EF';
+  const ok = (result: unknown) => ({ ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result }) }) as unknown as Response;
+
+  it('reads a balance in Luna through the nested data envelope', async () => {
+    const fetchImpl = async () => ok({ data: { address: TREASURY, balance: 3338, type: 'basic' } });
+    const reader = createAtlasChainReader({ network: 'testalbatross', rpcUrls: ['https://rpc.test'], minConfirmations: 3, fetchImpl });
+    expect(await reader.balanceOf(TREASURY)).toBe(3338);
+  });
+
+  it('accepts an address written with the spaces Nimiq displays', async () => {
+    const fetchImpl = async () => ok({ data: { balance: 7 } });
+    const reader = createAtlasChainReader({ network: 'testalbatross', rpcUrls: ['https://rpc.test'], minConfirmations: 3, fetchImpl });
+    expect(await reader.balanceOf('NQ21 YC9E FUGG C7LN 172X 3877 CF7A VEJB 78EF')).toBe(7);
+  });
+
+  it('reports unknown rather than empty when every reader fails', async () => {
+    const fetchImpl = async () => { throw new Error('offline'); };
+    const reader = createAtlasChainReader({ network: 'testalbatross', rpcUrls: ['https://rpc.test'], minConfirmations: 3, fetchImpl });
+    expect(await reader.balanceOf(TREASURY)).toBeNull();
+  });
+
+  it('refuses to read a balance off a chain it has rejected', async () => {
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { method: string };
+      if (body.method === 'getBlockByNumber') return ok({ data: { hash: 'deadbeef' } });
+      return ok({ data: { balance: 999 } });
+    };
+    const reader = createAtlasChainReader({
+      network: 'mainalbatross', rpcUrls: ['https://rpc.test'], minConfirmations: 10,
+      fetchImpl, expectedGenesisHash: '968f7ad96731644edd4949961ae186ae832ddbb79284db1069799d66ae5bfd06',
+    });
+    expect(await reader.balanceOf(TREASURY)).toBeNull();
+    expect(reader.networkVerification()).toBe('rejected');
+  });
+
+  it('refuses an address that is not a Nimiq address', async () => {
+    let called = false;
+    const fetchImpl = async () => { called = true; return ok({ data: { balance: 1 } }); };
+    const reader = createAtlasChainReader({ network: 'testalbatross', rpcUrls: ['https://rpc.test'], minConfirmations: 3, fetchImpl });
+    expect(await reader.balanceOf('not-an-address')).toBeNull();
+    expect(called).toBe(false);
+  });
+});

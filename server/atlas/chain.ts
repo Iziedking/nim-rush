@@ -29,6 +29,14 @@ export type AtlasChainNetworkVerification = 'unconfigured' | 'unchecked' | 'veri
 export interface AtlasChainReader {
   observe(lookup: string): Promise<AtlasChainObservation | null>;
   networkVerification(): AtlasChainNetworkVerification;
+  /**
+   * Spendable balance of an address in Luna, or null when it cannot be read.
+   *
+   * Null is "unknown", never "empty": a failed RPC or an unproved chain must
+   * not be reported as a drained treasury, because a caller that sizes a
+   * reward pot from this would silently stop paying on a transient outage.
+   */
+  balanceOf(address: string): Promise<number | null>;
 }
 
 /**
@@ -112,6 +120,24 @@ export function createAtlasChainReader(options: {
           return observation;
         } catch {
           // A failed RPC is not evidence of a failed payment. Try the next configured reader.
+        }
+      }
+      return null;
+    },
+    async balanceOf(address) {
+      const normalised = address.replace(/\s/g, '').toUpperCase();
+      if (!/^NQ\d{2}[0-9A-HJ-NP-VXY]{32}$/.test(normalised)) return null;
+      // Same guard as observe(): a balance read off an unproved chain is not
+      // evidence about this chain's treasury.
+      if (!(await verifyNetwork())) return null;
+      for (const rpcUrl of options.rpcUrls) {
+        try {
+          const account = record(await rpc(fetchImpl, rpcUrl, 'getAccountByAddress', [normalised], timeoutMs));
+          const balance = integer(account?.balance);
+          if (balance === null) continue;
+          return balance;
+        } catch {
+          // Try the next reader; an outage is not a zero balance.
         }
       }
       return null;

@@ -26,9 +26,17 @@ export interface AtlasDailyStanding {
   eligibleCount: number;
   /** What one wallet would receive if the day closed now, in Luna. */
   shareLuna: number | null;
-  /** The pot for the day, in Luna. Null when no treasury is configured. */
+  /**
+   * The pot the day can actually pay, in Luna. Null when no treasury is
+   * configured. Capped by the treasury's on-chain balance, so it is never a
+   * promise the treasury cannot keep.
+   */
   poolLuna: number | null;
-  /** False when no treasury is funded, so the UI can say so rather than imply a payout. */
+  /** What the pot is configured to be, before the treasury balance caps it. */
+  configuredPoolLuna: number | null;
+  /** The treasury's on-chain balance in Luna, or null when it cannot be read. */
+  treasuryLuna: number | null;
+  /** False when nothing can be paid, so the UI can say so rather than imply a payout. */
   rewardsEnabled: boolean;
 }
 
@@ -73,10 +81,59 @@ export function createAtlasDailyService(options: {
   expectation: AtlasDailyPaymentExpectation;
   /** The day's pot in Luna. Null when no treasury is funded. */
   dailyPoolLuna?: number | null;
+  /**
+   * The treasury's on-chain balance, in Luna. Null when it cannot be read.
+   *
+   * Without this the service advertised whatever ATLAS_DAILY_POOL_LUNA said
+   * regardless of what the treasury held. Production was configured at 10,000
+   * Luna against a treasury holding 3,338, so every player would have been
+   * shown a share roughly three times what could be paid. Advertising a share
+   * nothing can settle is the same failure already fixed once in payouts.ts.
+   */
+  treasuryBalanceLuna?: () => Promise<number | null>;
+  /** How long a balance reading is reused before it is re-read. */
+  balanceCacheMs?: number;
   stateStore?: AtlasStateStore;
 }): AtlasDailyService {
   const now = options.now ?? Date.now;
-  const poolLuna = options.dailyPoolLuna ?? null;
+  const configuredPoolLuna = options.dailyPoolLuna ?? null;
+  const balanceCacheMs = options.balanceCacheMs ?? 30_000;
+  let cachedBalance: { at: number; value: number | null } | null = null;
+
+  /*
+   * Cached, because standing() is public and polled: an uncached read would
+   * put one RPC call on a shared open node per player per poll.
+   */
+  async function treasuryBalance(): Promise<number | null> {
+    if (!options.treasuryBalanceLuna) return null;
+    if (cachedBalance && now() - cachedBalance.at < balanceCacheMs) return cachedBalance.value;
+    let value: number | null = null;
+    try {
+      value = await options.treasuryBalanceLuna();
+    } catch {
+      value = null;
+    }
+    // An unreadable balance keeps the last good reading rather than collapsing
+    // the pot to nothing on a single transient failure.
+    if (value === null && cachedBalance) return cachedBalance.value;
+    cachedBalance = { at: now(), value };
+    return value;
+  }
+
+  /**
+   * What the day can actually pay.
+   *
+   * An unknown balance falls back to the configured pot rather than to zero:
+   * refusing to show a pot because an RPC blinked would be its own dishonesty,
+   * and the payout path verifies funds again before it sends anything.
+   */
+  async function payablePool(): Promise<number | null> {
+    if (configuredPoolLuna === null) return null;
+    const balance = await treasuryBalance();
+    if (balance === null) return configuredPoolLuna;
+    return Math.max(0, Math.min(configuredPoolLuna, balance));
+  }
+
   let days: Record<string, Set<string>> = {};
   let hydrated = false;
   let operations: Promise<void> = Promise.resolve();
@@ -145,12 +202,15 @@ export function createAtlasDailyService(options: {
       }, true);
     },
 
+    /* The configured ceiling, not the payable pot: it is synchronous and so
+     * cannot consult the treasury. standing() and pendingObligation() are the
+     * numbers shown to players. */
     estimateShare(eligibleCount) {
-      if (poolLuna === null) return null;
+      if (configuredPoolLuna === null) return null;
       if (!Number.isSafeInteger(eligibleCount) || eligibleCount <= 0) return null;
       // Integer Luna throughout. A share is floored so the sum of every share
       // can never exceed the pot; the remainder stays with the treasury.
-      return Math.floor(poolLuna / eligibleCount);
+      return Math.floor(configuredPoolLuna / eligibleCount);
     },
 
     async pendingObligation(input) {
@@ -160,7 +220,8 @@ export function createAtlasDailyService(options: {
         const qualified = Boolean(today?.has(keyFor(input.actorId, input.walletAddress, input.challengeId)));
         if (!qualified) return { status: 'not-eligible' as const, amountLuna: null };
         const wallets = distinctWallets(today);
-        const share = poolLuna === null || wallets === 0 ? null : Math.floor(poolLuna / wallets);
+        const pool = await payablePool();
+        const share = pool === null || wallets === 0 ? null : Math.floor(pool / wallets);
         return { status: 'pending-close' as const, amountLuna: share };
       }, false);
     },
@@ -169,12 +230,16 @@ export function createAtlasDailyService(options: {
       return serialise(async () => {
         const date = options.date();
         const wallets = distinctWallets(days[date]);
+        const pool = await payablePool();
         return {
           date,
           eligibleCount: wallets,
-          shareLuna: poolLuna === null || wallets === 0 ? null : Math.floor(poolLuna / wallets),
-          poolLuna,
-          rewardsEnabled: poolLuna !== null,
+          shareLuna: pool === null || wallets === 0 ? null : Math.floor(pool / wallets),
+          poolLuna: pool,
+          configuredPoolLuna,
+          treasuryLuna: await treasuryBalance(),
+          // A funded-but-empty treasury is not "rewards on". Zero pays nobody.
+          rewardsEnabled: pool !== null && pool > 0,
         };
       }, false);
     },
