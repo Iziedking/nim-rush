@@ -40,6 +40,51 @@ export interface AtlasCompetitionSummary {
   dailyObligation: { status: 'estimating' | 'pending' | 'verified-paid' | 'unawarded'; amountLuna: number | null };
 }
 
+/**
+ * What the day's pot is worth right now.
+ *
+ * `poolLuna` is what the treasury can actually settle, already capped by its
+ * on-chain balance; `configuredPoolLuna` is the intent before that cap. Both
+ * are shown, because a player who is told the pot shrank deserves to see why.
+ *
+ * The two capped fields are optional: a server deployed before the cap landed
+ * simply omits them, and the daily screen has to keep working against it.
+ */
+export interface AtlasDailyStandingSummary {
+  date: string;
+  eligibleCount: number;
+  shareLuna: number | null;
+  poolLuna: number | null;
+  configuredPoolLuna?: number | null;
+  treasuryLuna?: number | null;
+  rewardsEnabled: boolean;
+}
+
+/** The server's finding on a submitted day, not the player's claim. */
+export interface AtlasDailySubmitResult {
+  accepted: boolean;
+  eligible: boolean;
+  duplicate?: boolean;
+  retryable?: boolean;
+  reason?: string;
+  date: string;
+}
+
+export interface AtlasDailyObligationSummary {
+  status: 'pending-close' | 'not-eligible';
+  amountLuna: number | null;
+}
+
+export interface AtlasDailySubmitInput {
+  actorId: string;
+  walletAddress: string;
+  challengeId: string;
+  answer: string;
+  replayComplete: boolean;
+  assistance: AtlasAssistance;
+  payment?: { txHash?: string; network?: string; recipient?: string; valueLuna?: number; canonical?: boolean; success?: boolean; confirmations?: number };
+}
+
 export interface AtlasCompetitiveRunInput {
   runId: string;
   ticketId: string;
@@ -110,6 +155,9 @@ export interface AtlasApiClient {
   reconcileOrder(orderId: string): Promise<AtlasOrderSummary>;
   cancelOrder(orderId: string, reason: string): Promise<AtlasOrderSummary>;
   getOrder(orderId: string): Promise<AtlasOrderSummary>;
+  getDailyStanding(): Promise<AtlasDailyStandingSummary>;
+  submitDaily(input: AtlasDailySubmitInput): Promise<AtlasDailySubmitResult>;
+  getDailyObligation(input: { actorId: string; walletAddress: string; challengeId: string }): Promise<AtlasDailyObligationSummary>;
 }
 
 type AtlasFetch = ApiFetch;
@@ -140,7 +188,49 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     reconcileOrder: (orderId) => requestOrder(fetchImpl, `${baseUrl}/atlas/api/orders/${encodeURIComponent(orderId)}/reconcile`, { method: 'POST' }),
     cancelOrder: (orderId, reason) => requestOrder(fetchImpl, `${baseUrl}/atlas/api/orders/${encodeURIComponent(orderId)}/cancel`, { method: 'POST', body: { reason } }),
     getOrder: (orderId) => requestOrder(fetchImpl, `${baseUrl}/atlas/api/orders/${encodeURIComponent(orderId)}`),
+    getDailyStanding: () => requestData(fetchImpl, `${baseUrl}/atlas/api/daily/standing`, isDailyStanding),
+    /*
+     * A refusal is a normal answer here, not an error: the player asked whether
+     * they qualified and the server said no, with a reason they can act on. The
+     * route returns 200 with `accepted: false` for exactly that reason.
+     */
+    submitDaily: (input) => requestData(fetchImpl, `${baseUrl}/atlas/api/daily/submit`, isDailySubmitResult, { method: 'POST', body: input }),
+    getDailyObligation: (input) => requestData(fetchImpl, `${baseUrl}/atlas/api/daily/obligation`, isDailyObligation, { method: 'POST', body: input }),
   };
+}
+
+function isDailyStanding(value: unknown): value is AtlasDailyStandingSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.date === 'string'
+    && Number.isSafeInteger(row.eligibleCount)
+    && nullableInteger(row.shareLuna)
+    && nullableInteger(row.poolLuna)
+    // Optional, so a server deployed before the treasury cap still validates.
+    && (row.configuredPoolLuna === undefined || nullableInteger(row.configuredPoolLuna))
+    && (row.treasuryLuna === undefined || nullableInteger(row.treasuryLuna))
+    && typeof row.rewardsEnabled === 'boolean';
+}
+
+function isDailySubmitResult(value: unknown): value is AtlasDailySubmitResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.accepted === 'boolean'
+    && typeof row.eligible === 'boolean'
+    && typeof row.date === 'string'
+    && (row.duplicate === undefined || typeof row.duplicate === 'boolean')
+    && (row.retryable === undefined || typeof row.retryable === 'boolean')
+    && (row.reason === undefined || typeof row.reason === 'string');
+}
+
+function isDailyObligation(value: unknown): value is AtlasDailyObligationSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return (row.status === 'pending-close' || row.status === 'not-eligible') && nullableInteger(row.amountLuna);
+}
+
+function nullableInteger(value: unknown): boolean {
+  return value === null || Number.isSafeInteger(value);
 }
 
 function isLeaderboard(value: unknown): value is AtlasLeaderboardRow[] {

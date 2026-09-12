@@ -180,7 +180,18 @@ describe('NIM Atlas public first district UI', () => {
     const app = readFileSync(new URL('../src/atlas/app/atlas-app.ts', import.meta.url), 'utf8');
     expect(app).toContain('DAILY ATLAS PUZZLE');
     expect(app).toContain('LEARN / SOLVE / VERIFY');
-    expect(app).toContain('Reward share appears only after server verification');
+    /*
+     * This used to assert the literal 'Reward share appears only after server
+     * verification'. The screen said exactly that and then never called the
+     * server, so the assertion pinned a promise the product could not keep.
+     * What matters is that the verification is real, so that is what is checked.
+     */
+    expect(app).toContain('submitDailyToServer');
+    expect(app).toContain('this.api.submitDaily(');
+    expect(app).toContain('this.api.getDailyStanding()');
+    // A share is never quoted from a pot the treasury cannot settle.
+    expect(app).toContain('rewardsEnabled');
+    expect(app).toContain('No pool is funded today, so no share is owed');
     expect(app).toContain('EXPLORER LEADERBOARD');
     expect(app).toContain('BUILDER LEADERBOARD');
     expect(app).toContain('BOARD UNAVAILABLE');

@@ -25,6 +25,11 @@
   --atlas-verified: #06d6a0;
   --atlas-selected: #4cc9f0;
 
+  /* Real money on the live chain. Its own token rather than borrowing
+     --atlas-explorer: the two happen to share a gold today, but a path colour
+     and a treasury colour must be able to move apart. */
+  --atlas-treasury: #ffd166;
+
   /* The two paths, wherever they appear */
   --atlas-explorer: #ffd166;
   --atlas-builder: #a78bfa;
@@ -461,6 +466,11 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .atlas-daily h1 { margin-top: 10px; font-size: clamp(36px, 11vw, 62px); }
 .atlas-daily-choices { display: grid; gap: 8px; margin-top: 18px; }
 .atlas-daily-choices .atlas-primary { margin-top: 0; }
+/* The one place a player sees real mainnet money before the lantern. Gold
+   edge rather than the magenta accent, so it reads as treasury, not action. */
+.atlas-daily-reward { margin-top: 18px; padding: 14px; border: 2px solid var(--atlas-ink); border-left: 6px solid var(--atlas-treasury); background: var(--atlas-raised); box-shadow: 3px 3px 0 var(--atlas-ink); }
+.atlas-daily-reward p { margin: 8px 0 0; max-width: 56ch; font-size: 14px; line-height: 1.4; }
+.atlas-daily-reward p:first-child { margin-top: 0; }
 .atlas-core-run { width: min(100%, 760px); }
 .atlas-core-run h1 { max-width: 12ch; margin-top: 10px; font-size: clamp(38px, 10vw, 66px); }
 .atlas-core-objective { margin-top: 18px; padding: 14px; border: 2px solid var(--atlas-ink); border-left: 6px solid var(--atlas-signal); background: var(--atlas-raised); box-shadow: 3px 3px 0 var(--atlas-ink); }

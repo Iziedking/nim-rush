@@ -24,13 +24,14 @@ import { ATLAS_LANTERN_PRICE_NIM, ATLAS_LUNAS_PER_NIM } from '../../../shared/at
 import { ATLAS_KNOWLEDGE_BOOK, createKnowledgeBookState, gradeKnowledgeTeachBack, unlockKnowledgeFragment, type KnowledgeBookState } from '../../../shared/atlas/knowledge';
 import { ATLAS_EVERGREEN_ADVENTURES, replayEvergreenAdventure, type EvergreenAction, type EvergreenAdventure, type EvergreenState } from '../../../shared/atlas/adventures/evergreen';
 import { ATLAS_MAINNET_SHOP_ITEMS } from '../../../shared/atlas/shop';
-import { createAtlasApiClient, type AtlasCompetitionSummary, type AtlasCompetitiveTicket } from '../api';
+import { createAtlasApiClient, type AtlasCompetitionSummary, type AtlasCompetitiveTicket, type AtlasDailyObligationSummary, type AtlasDailyStandingSummary, type AtlasDailySubmitResult } from '../api';
 import { createAtlasWalletAdapter } from '../wallet';
 import { createAtlasWalletBindingFlow } from '../wallet-binding';
 import { getOrCreateCredential } from '../../net/player-credential';
 import type { AtlasWalletBinding } from '../../../shared/atlas/wallet-binding';
 import { AtlasPaymentController } from './payment-controller';
 import { readAtlasClientPaymentConfig } from '../payment-config';
+import type { AtlasDailyChallenge } from '../../../shared/atlas/daily';
 import { dailyChallengeChoices, dailyRetryHint, evergreenTeachBackChoices, formatDailyChoice, selectDailyChallenge } from '../product-model';
 import { createSemanticWorldControl } from '../ui/semantic-world-controls';
 import { createAtlasToolkit, type AtlasToolkit } from '../ui/atlas-toolkit';
@@ -121,6 +122,19 @@ export class AtlasApp {
   private teachBackNotice = '';
   private dailyNotice = '';
   private dailyCompletedDate: string | null = readDailyCompletedDate();
+  /*
+   * The daily run's server state.
+   *
+   * The screen used to say "Reward share appears only after server
+   * verification" and then never call the server, so the reward it named could
+   * not arrive. `/atlas/api/daily/*` has been live and tested for a while with
+   * no client at all; these hold what it answers.
+   */
+  private dailyStanding: AtlasDailyStandingSummary | null = null;
+  private dailyStandingBusy = false;
+  private dailySubmitBusy = false;
+  private dailyServerResult: AtlasDailySubmitResult | null = null;
+  private dailyObligation: AtlasDailyObligationSummary | null = null;
   private evergreenAdventure: EvergreenAdventure = ATLAS_EVERGREEN_ADVENTURES[0]!;
   private evergreenActions: EvergreenAction[] = [];
   private evergreenState: EvergreenState = replayEvergreenAdventure(this.evergreenAdventure, []);
@@ -1501,6 +1515,9 @@ export class AtlasApp {
     this.screen = 'daily';
     this.dailyNotice = '';
     this.dailyCompletedDate = readDailyCompletedDate();
+    this.dailyServerResult = null;
+    this.dailyObligation = null;
+    void this.refreshDailyStanding();
     const dispatch = selectAtlasHubDispatch(new Date());
     const chapter = getAtlasStoryChapter(dispatch.chapterId);
     if (chapter) {
@@ -1660,6 +1677,71 @@ export class AtlasApp {
     this.ui.append(panel);
   }
 
+  /**
+   * What the day's pot is worth, read from the server.
+   *
+   * Failure is quiet on purpose: the daily puzzle is playable offline and a
+   * standing that cannot be read should cost the player the reward panel, not
+   * the puzzle. `dailyStanding` staying null is what the render treats as
+   * "unknown", and it never invents a number to fill the gap.
+   */
+  private async refreshDailyStanding(): Promise<void> {
+    if (this.dailyStandingBusy) return;
+    this.dailyStandingBusy = true;
+    try {
+      this.dailyStanding = await this.api.getDailyStanding();
+    } catch {
+      this.dailyStanding = null;
+    } finally {
+      this.dailyStandingBusy = false;
+      if (this.screen === 'daily') this.renderDailyPuzzle();
+    }
+  }
+
+  /**
+   * Ask the server whether today's answer qualifies this wallet.
+   *
+   * The body is the player's claim; eligibility is the server's finding. A
+   * refusal comes back as a normal 200 with a reason, so it is rendered as an
+   * answer rather than as a failure.
+   */
+  private async submitDailyToServer(challenge: AtlasDailyChallenge, answer: string): Promise<void> {
+    const walletAddress = this.atlasWalletBinding?.address;
+    if (!walletAddress) {
+      this.dailyNotice = 'Correct. Connect your Nimiq wallet to claim a share of today’s pool — the answer alone cannot be paid to anyone.';
+      this.renderDailyPuzzle();
+      return;
+    }
+    if (this.dailySubmitBusy) return;
+    this.dailySubmitBusy = true;
+    this.dailyNotice = 'Correct. Asking the server to verify today’s run...';
+    this.renderDailyPuzzle();
+    try {
+      const result = await this.api.submitDaily({
+        actorId: this.sessionActorId,
+        walletAddress,
+        challengeId: challenge.id,
+        answer,
+        replayComplete: true,
+        assistance: 'none',
+      });
+      this.dailyServerResult = result;
+      this.dailyNotice = describeDailyResult(result);
+      if (result.eligible) {
+        // Re-read both, because this submission may have changed the split.
+        this.dailyObligation = await this.api
+          .getDailyObligation({ actorId: this.sessionActorId, walletAddress, challengeId: challenge.id })
+          .catch(() => null);
+        void this.refreshDailyStanding();
+      }
+    } catch {
+      this.dailyNotice = 'Your answer is correct, but the server could not be reached. Your local progress is kept; try again to claim a share.';
+    } finally {
+      this.dailySubmitBusy = false;
+      if (this.screen === 'daily') this.renderDailyPuzzle();
+    }
+  }
+
   private renderDailyPuzzle(): void {
     this.ui.replaceChildren();
     const challenge = selectDailyChallenge(new Date());
@@ -1688,22 +1770,93 @@ export class AtlasApp {
     for (const answer of dailyChallengeChoices(challenge)) {
       const choice = actionButton(formatDailyChoice(answer), () => {
         if (this.dailyCompletedDate === today) return;
-        this.dailyNotice = answer === challenge.answer ? 'Correct locally. Reward share appears only after server verification.' : dailyRetryHint(challenge);
-        if (answer === challenge.answer) {
-          this.dailyCompletedDate = today;
-          writeDailyCompletedDate(today);
-          const dispatch = selectAtlasHubDispatch(new Date());
-          const chapter = getAtlasStoryChapter(dispatch.chapterId);
-          if (chapter) this.audio.narrateLine(chapter.voice.completion);
+        if (answer !== challenge.answer) {
+          this.dailyNotice = dailyRetryHint(challenge);
+          this.renderDailyPuzzle();
+          return;
         }
-        this.renderDailyPuzzle();
+        this.dailyCompletedDate = today;
+        writeDailyCompletedDate(today);
+        const dispatch = selectAtlasHubDispatch(new Date());
+        const chapter = getAtlasStoryChapter(dispatch.chapterId);
+        if (chapter) this.audio.narrateLine(chapter.voice.completion);
+        // The screen promised a reward "after server verification" and never
+        // asked the server. Now it does.
+        void this.submitDailyToServer(challenge, answer);
       }, `Answer ${formatDailyChoice(answer)}`);
-      choice.disabled = completedToday;
+      choice.disabled = completedToday || this.dailySubmitBusy;
       choices.append(choice);
     }
     panel.append(choices);
-    if (this.dailyNotice) panel.append(element('p', this.dailyNotice.startsWith('Correct') ? 'atlas-builder-success' : 'atlas-lantern-error', this.dailyNotice));
+    if (this.dailyNotice) panel.append(element('p', dailyNoticeTone(this.dailyNotice), this.dailyNotice));
+    /*
+     * The claim is a separate affordance from the answer.
+     *
+     * Answering correctly disables the choices for the rest of the day, so a
+     * player who answered before connecting a wallet — or who answered while
+     * the server was unreachable — would otherwise have no way to ever claim
+     * the share the screen just promised them. This is that way.
+     */
+    const verified = this.dailyServerResult?.eligible === true;
+    if (completedToday && !verified) {
+      const claim = actionButton(
+        this.dailySubmitBusy ? 'Checking with the server...' : this.atlasWalletBinding ? 'Claim today’s share' : 'Connect wallet to claim today’s share',
+        () => {
+          if (this.atlasWalletBinding) void this.submitDailyToServer(challenge, challenge.answer);
+          else void this.bindCoreRunWallet();
+        },
+        'Claim a share of today’s pool',
+      );
+      claim.disabled = this.dailySubmitBusy || this.walletBindingBusy;
+      panel.append(claim);
+    }
+    panel.append(this.dailyRewardPanel());
     this.ui.append(panel);
+  }
+
+  /**
+   * The day's pot, as the server reports it.
+   *
+   * Every number here is live mainnet: this is the one place a judge can see
+   * real money before playing to the lantern. It says "unavailable" rather
+   * than guessing, and it never shows a share when the treasury cannot pay it.
+   */
+  private dailyRewardPanel(): HTMLElement {
+    const panel = element('div', 'atlas-daily-reward');
+    panel.append(element('p', 'atlas-eyebrow', 'TODAY’S POOL / NIMIQ MAINNET'));
+    const standing = this.dailyStanding;
+    if (!standing) {
+      panel.append(element('p', 'atlas-quiet', this.dailyStandingBusy
+        ? 'Reading today’s pool from the network...'
+        : 'Today’s pool is unavailable right now. The puzzle still plays; the share cannot be quoted until the server answers.'));
+      return panel;
+    }
+    if (!standing.rewardsEnabled) {
+      panel.append(element('p', 'atlas-quiet', 'No pool is funded today, so no share is owed. Atlas says so rather than showing a number nothing can pay.'));
+      return panel;
+    }
+    panel.append(
+      element('p', 'atlas-lantern-mode', `POOL ${formatLuna(standing.poolLuna)} / ${standing.eligibleCount} QUALIFIED TODAY`),
+      element('p', 'atlas-trial-copy', standing.shareLuna === null
+        ? 'No wallet has qualified yet today. Answer correctly with a connected wallet and the pool is yours to share.'
+        : `If the day closed now, each qualifying wallet receives ${formatLuna(standing.shareLuna)}.`),
+    );
+    /*
+     * Shown only when the treasury is the binding constraint. Telling a player
+     * the pot shrank without telling them why reads as the product losing
+     * money; telling them the treasury balance is the cap is the honest version.
+     */
+    const configured = standing.configuredPoolLuna;
+    if (typeof configured === 'number' && standing.poolLuna !== null && configured > standing.poolLuna) {
+      panel.append(element('p', 'atlas-quiet', `Today’s pool is capped by the treasury balance: ${formatLuna(standing.poolLuna)} of a ${formatLuna(configured)} target.`));
+    }
+    if (this.dailyObligation?.status === 'pending-close' && this.dailyObligation.amountLuna !== null) {
+      panel.append(element('p', 'atlas-builder-success', `You qualified. ${formatLuna(this.dailyObligation.amountLuna)} is owed to your wallet at the close of the day.`));
+    }
+    if (!this.atlasWalletBinding) {
+      panel.append(element('p', 'atlas-quiet', 'A share is paid to a wallet, so a wallet has to be connected before the answer counts.'));
+    }
+    return panel;
   }
 
   private openEvergreen = (): void => {
@@ -2680,6 +2833,43 @@ function writeDailyCompletedDate(value: string): void {
   } catch {
     // A private browsing storage failure must not block the daily mission.
   }
+}
+
+/**
+ * Luna is an integer unit; 1 NIM is 100,000 Luna.
+ *
+ * Both are shown because the pot is small in NIM terms and a bare Luna figure
+ * reads as larger than it is, while a bare NIM figure rounds the real amount
+ * away. Neither alone is honest.
+ */
+function formatLuna(luna: number | null): string {
+  if (luna === null) return 'unavailable';
+  const nim = luna / 100_000;
+  return `${luna.toLocaleString('en-US')} Luna (${nim.toLocaleString('en-US', { maximumFractionDigits: 5 })} NIM)`;
+}
+
+/** Plain language for the server's refusal reasons. */
+function describeDailyResult(result: AtlasDailySubmitResult): string {
+  if (result.duplicate) return 'Already counted today. One wallet earns one share a day, however many times it answers.';
+  if (result.eligible) return 'Verified by the server. Your wallet is in today’s pool.';
+  const reasons: Record<string, string> = {
+    identity_required: 'A wallet is needed before a share can be owed to anyone.',
+    unknown_challenge: 'That is not today’s challenge. Reopen the daily run for the current one.',
+    wrong_answer: 'The server did not accept that answer.',
+    assistance_used: 'Answers revealed by a hint cannot earn a share.',
+    replay_incomplete: 'The run was not finished. Play it through and submit again.',
+    payment_mismatch: 'Today’s challenge needs a payment matching the posted recipient and amount.',
+    payment_unverified: 'Your payment is on the network but not confirmed deeply enough yet. Try again shortly.',
+    consensus_stale: 'The network reading was too old to trust. Try again once consensus is fresh.',
+    validator_concentration: 'The validator spread was too narrow to count.',
+  };
+  return reasons[result.reason ?? ''] ?? 'The server did not count this run today.';
+}
+
+function dailyNoticeTone(notice: string): string {
+  if (notice.startsWith('Verified') || notice.startsWith('Already counted')) return 'atlas-builder-success';
+  if (notice.startsWith('Correct')) return 'atlas-quiet';
+  return 'atlas-lantern-error';
 }
 
 function lastLanternStorageKey(actorId: string, role: AtlasRole, mode: LastLanternState['mode']): string {
