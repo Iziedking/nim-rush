@@ -9,6 +9,7 @@ import { BLITZ_CITIES } from '../../shared/atlas/blitz/cities';
 
 type StoredRow = Omit<BlitzLeaderboardRow, 'rank'>;
 type StoredTicket = BlitzTicket & { usedByRunId?: string };
+const BLITZ_RANKED_SUBMISSION_WINDOW_MS = 120_000;
 
 export interface AtlasBlitzSnapshot {
   readonly version: 1;
@@ -93,6 +94,9 @@ export function createAtlasBlitzService(options: {
       const ticket = tickets.get(input.ticketId);
       if (!ticket) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket is missing.');
       if (now() >= ticket.expiresAt) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket expired before the run was submitted.');
+      if (now() - ticket.issuedAt > BLITZ_RANKED_SUBMISSION_WINDOW_MS) {
+        throw new AtlasBlitzError('ticket', 'A ranked Beacon Blitz run must finish within two minutes of ticket issue.');
+      }
       const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || ticket.seed !== input.seed;
       if (mismatch) throw new AtlasBlitzError('ticket', 'Beacon Blitz submission does not match its ticket.');
       if (ticket.usedByRunId && ticket.usedByRunId !== input.runId) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket has already been used.');

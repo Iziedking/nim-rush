@@ -63,4 +63,24 @@ describe('Beacon Blitz verified competition service', () => {
     expect(board.map((row) => row.username)).toEqual(['Sface', 'Kemi']);
     expect(board.every((row) => row.verified)).toBe(true);
   });
+
+  it('rejects a ranked trace held beyond the two-minute live-run window', async () => {
+    let current = 1_000;
+    const service = createAtlasBlitzService({
+      identity: identity({ 'season-1:actor-a': walletA }),
+      now: () => current,
+      randomId: () => 'ticket-slow',
+    });
+    const ticket = await service.issueTicket({
+      actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'dubai', seasonId: 'season-1',
+    });
+    const trace = await completeTrace('dubai', ticket.seed);
+    current = ticket.issuedAt + 120_001;
+    await expect(service.submit({
+      runId: 'run-slow', ticketId: ticket.id, actorId: ticket.actorId,
+      walletAddress: ticket.walletAddress, username: ticket.username, cityId: ticket.cityId,
+      seasonId: ticket.seasonId, seed: ticket.seed, frames: trace.frames,
+      traceHash: trace.hash, claimedScore: trace.score,
+    })).rejects.toThrow(/two minutes/i);
+  });
 });
