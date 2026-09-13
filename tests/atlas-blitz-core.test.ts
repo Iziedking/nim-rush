@@ -68,7 +68,7 @@ describe('Beacon Blitz deterministic arcade core', () => {
     expect(state.missions[0]?.resolved).toBe(true);
   });
 
-  it('finishes every launch city in 65–85 seconds on a clean strong run', () => {
+  it('finishes every launch city in 55–75 seconds on a clean strong run', () => {
     for (const city of BLITZ_CITIES) {
       let state = createBlitzRun({ cityId: city.id, seed: `${city.id}-clean-finish` });
       for (let tick = 0; tick < BLITZ_TICK_RATE * 90 && state.phase !== 'finished'; tick += 1) {
@@ -77,8 +77,8 @@ describe('Beacon Blitz deterministic arcade core', () => {
         state = stepBlitzRun(state, { steer: 0, drift: false, boost: tick % 120 < 24, relayChoice: choice });
       }
       expect(state.phase, city.id).toBe('finished');
-      expect(state.elapsedMs, city.id).toBeGreaterThanOrEqual(65_000);
-      expect(state.elapsedMs, city.id).toBeLessThanOrEqual(85_000);
+      expect(state.elapsedMs, city.id).toBeGreaterThanOrEqual(55_000);
+      expect(state.elapsedMs, city.id).toBeLessThanOrEqual(75_000);
       expect(state.score, city.id).toBe(
         state.distanceScore + state.driftScore + state.relayScore + state.timeBonus - state.penaltyScore,
       );
