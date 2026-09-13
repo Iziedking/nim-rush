@@ -65,7 +65,9 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const laneOffset = clamp((state.laneOffset + laneStep) * (Math.abs(steer) < 0.04 ? 0.997 : 1), -city.roadWidth * 0.72, city.roadWidth * 0.72);
   const offRoad = Math.abs(laneOffset) > city.roadWidth * 0.5;
   const targetSpeed = offRoad ? 14 : city.baseSpeedMps + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0);
-  let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.38 : 0.55);
+  // A bike should hook up immediately after GO. Keep the authoritative target
+  // speed unchanged, but make the launch response feel responsive on touch.
+  let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : 0.55);
   let boostEnergy = clamp(state.boostEnergy + (driftActive ? 0.38 : 0.045) - (boostActive ? 1.05 : 0), 0, 100);
   const distanceMeters = Math.min(city.lengthMeters, state.distanceMeters + speedMps / BLITZ_TICK_RATE);
   let distanceScore = Math.floor(distanceMeters * 10);
