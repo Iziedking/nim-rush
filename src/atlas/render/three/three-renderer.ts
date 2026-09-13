@@ -757,7 +757,23 @@ export class ThreeAtlasRenderer implements AtlasSceneRenderer {
       const mastMaterial = station.mast.material as MeshStandardMaterial;
       const beamMaterial = station.beam.material as MeshBasicMaterial;
       lightMaterial.color.setHex(color);
+      /*
+       * A lit lantern emits, it does not merely change hue.
+       *
+       * These were plain colour swaps on a standard material, so completing a
+       * station read as a swatch changing rather than as a light coming on -
+       * which is the one moment the whole chapter builds to. Emissive is what
+       * separates "this object is painted gold" from "this object is the
+       * source of the light". The active station breathes; a finished one
+       * holds steady, because a thing still being worked on should look
+       * different from a thing that is done.
+       */
+      const glow = complete ? 0.95 : active ? 0.55 + Math.sin(tick / 8) * 0.25 : 0;
+      lightMaterial.emissive.setHex(complete || active ? color : ATLAS_WORLD_PALETTE.emissiveOff);
+      lightMaterial.emissiveIntensity = glow;
       ringMaterial.color.setHex(ringColor);
+      ringMaterial.emissive.setHex(complete ? ringColor : ATLAS_WORLD_PALETTE.emissiveOff);
+      ringMaterial.emissiveIntensity = complete ? 0.45 : 0;
       mastMaterial.color.setHex(complete ? ATLAS_WORLD_PALETTE.lanternMastComplete : ATLAS_WORLD_PALETTE.lanternMast);
       beamMaterial.color.setHex(complete ? ATLAS_WORLD_PALETTE.lanternComplete : ATLAS_WORLD_PALETTE.lanternLit);
       station.light.scale.setScalar(active ? 1 + Math.sin(tick / 8) * 0.08 : complete ? 1.08 : 0.86);
@@ -833,6 +849,12 @@ export class ThreeAtlasRenderer implements AtlasSceneRenderer {
     const ferryLightMaterial = visuals.ferryLight.material as MeshBasicMaterial;
     const haloMaterial = visuals.towerHalo.material as MeshBasicMaterial;
     signalMaterial.color.setHex(activeColor);
+    /* Same reason as the builder stations: a signal that is on should emit.
+     * The ferry light and the tower halo are already MeshBasicMaterial, so
+     * they are full-bright by construction and need nothing here. */
+    const signalLit = restoration === 'restored' || restoration === 'confirming' || completedStations > 0;
+    signalMaterial.emissive.setHex(signalLit ? activeColor : ATLAS_WORLD_PALETTE.emissiveOff);
+    signalMaterial.emissiveIntensity = restoration === 'restored' ? 0.85 : signalLit ? 0.5 : 0;
     ferryMaterial.color.setHex(restoration === 'restored' ? ATLAS_WORLD_PALETTE.stationWarm : ATLAS_WORLD_PALETTE.stationDim);
     ferryLightMaterial.color.setHex(activeColor);
     haloMaterial.color.setHex(restoration === 'restored' ? ATLAS_WORLD_PALETTE.lanternLit : activeColor);

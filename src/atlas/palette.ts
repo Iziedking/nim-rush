@@ -51,6 +51,16 @@ export const ATLAS_WORLD_PALETTE = Object.freeze({
   ambientLight: 0xf2f8ff,
   sunLight: 0xfff3d6,
 
+  /*
+   * "Not emitting", for materials whose emissive is switched on and off.
+   *
+   * A token rather than a bare 0x000000 in the renderer, because
+   * atlas-palette.test.ts holds the renderers to carrying no colour of their
+   * own and it is right to: an unlit lantern is a state of the palette, not a
+   * literal someone typed.
+   */
+  emissiveOff: 0x000000,
+
   // Restoration signals and lantern stations.
   restorationEmitter: 0xff477e,
   guidanceEmitter: 0xffd166,
