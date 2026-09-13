@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /*
@@ -16,6 +16,8 @@ import { describe, expect, it } from 'vitest';
  * rather than letting every surface be darkened twice.
  */
 function materials(path: string): Array<{ name: string; factor: number[] }> {
+  // A clear failure beats a raw ENOENT stack if this asset is ever moved.
+  expect(existsSync(path), `${path} is missing; point this test at a tracked asset`).toBe(true);
   const bytes = readFileSync(path);
   const json = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString('utf8'));
   return (json.materials ?? [])
@@ -34,7 +36,15 @@ function intendedHex(name: string): number[] | null {
   return [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
 }
 
-const ENVIRONMENT = 'dist/atlas/3d/v1/beacon-commons/environment.glb';
+/*
+ * The shipped runtime asset, not the build output.
+ *
+ * This pointed at dist/ first, which is a build artifact and gitignored, so it
+ * passed locally and failed on a fresh CI checkout with ENOENT. public/ is
+ * tracked, is byte-identical here, and is the file ThreeAtlasRenderer actually
+ * loads - so it is the right thing to be asserting about in any case.
+ */
+const ENVIRONMENT = 'public/atlas/3d/v1/beacon-commons/environment.glb';
 
 describe('the glTF colour space', () => {
   it('finds material names that carry their intended hex', () => {
