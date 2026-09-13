@@ -8,8 +8,15 @@ export interface AtlasSkyStop {
 
 export type AtlasCanvasFactory = (width: number, height: number) => HTMLCanvasElement | null;
 
+/*
+ * Zenith, mid sky, horizon haze.
+ *
+ * The first stop used to be `water`, which is the same value as `sky`, so the
+ * top 55% of the gradient was a single flat colour and the sky contributed no
+ * depth to any outdoor shot. Three distinct values, darkest at the top.
+ */
 const STOP_KEYS: readonly { readonly offset: number; readonly key: AtlasWorldColour }[] = [
-  { offset: 0, key: 'water' },
+  { offset: 0, key: 'skyZenith' },
   { offset: 0.55, key: 'sky' },
   { offset: 1, key: 'haze' },
 ];

@@ -85,6 +85,8 @@
 .atlas-route-card[data-chapter='0'] h2 { font-size: 19px; }
 .atlas-route-card[data-chapter='0'] .atlas-route-provenance { color: var(--atlas-signal); font-weight: 800; letter-spacing: .04em; }
 .atlas-route-card[data-chapter='1'] { border-left-color: #77d8a8; }
+
+.atlas-route-card { background-image: linear-gradient(to top, var(--atlas-mission-surface), transparent 26px); background-attachment: local, scroll; }
 .atlas-route-card[data-chapter='1'] .atlas-route-provenance { color: #197a57; font-weight: 800; letter-spacing: .04em; }
 .atlas-route-card[data-chapter='1'] .atlas-route-choices button:first-child { border-color: #77d8a8; }
 .atlas-route-card[data-chapter='2'] { border-left-color: #f2b14b; }
@@ -125,7 +127,13 @@
   .atlas-living-city-play-shell .atlas-toolkit { top: 100px; width: calc(100% - 104px); }
 }
 @media (orientation: landscape) and (max-height: 450px) {
-  .atlas-route-card { top: 96px; max-height: calc(100% - 208px); padding: 6px 8px; }
+  /*
+   * Measured on a Pixel 7 Pro in landscape: the shell is ~349px, so reserving
+   * 208px left a 141px card holding 168px of content. It is a scroll region,
+   * not lost text, but it severed mid-line and read as broken. 180px still
+   * clears the joystick and fits a chapter card without scrolling at all.
+   */
+  .atlas-route-card { top: 96px; max-height: calc(100% - 180px); padding: 6px 8px; }
   .atlas-route-card h2 { font-size: 14px; }
   .atlas-route-feed { display: none; }
 }

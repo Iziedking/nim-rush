@@ -128,12 +128,33 @@ button { min-height: 44px; }
  * It carries the panel surface so text passing underneath does not show
  * through, and a top fade so the join does not read as a hard cut.
  */
-.atlas-home-primary .atlas-start {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  margin-bottom: 0;
-  box-shadow: 0 -12px 18px -6px var(--atlas-paper), var(--atlas-glow);
+/*
+ * The start button pins to the bottom only when there is room for it to.
+ *
+ * `position: sticky; bottom: 0` shifts an element up out of its flow position
+ * to keep it on screen, and an element shifted that way paints *over* the
+ * content above it. On a tall portrait screen its flow position is already
+ * near the bottom, so the shift is small and the fade covers it. On a landscape
+ * phone the column is ~340px tall and the shift is most of the panel: probed on
+ * a Pixel 7 Pro, the button sat across the mission card's last line and the
+ * "CHOOSE YOUR FIRST PATH" heading.
+ *
+ * Below the threshold it simply flows after the mission card, which on a short
+ * screen is where a player scrolling to it expects it anyway.
+ */
+.atlas-home-primary .atlas-start { margin-bottom: 0; box-shadow: var(--atlas-glow); }
+
+@media (min-height: 620px) {
+  .atlas-home-primary .atlas-start {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    /* The fade that hides content passing under it. Drawn in the raised tint
+       at full opacity: --atlas-paper is translucent glass, so the text
+       underneath stayed legible through it and the button read as colliding
+       with the card rather than floating over it. */
+    box-shadow: 0 -16px 22px -2px rgb(var(--atlas-raised-rgb) / .99), var(--atlas-glow);
+  }
 }
 .atlas-quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
 .atlas-quick-grid .atlas-primary { min-height: 54px; margin-top: 0; padding: 9px; font-size: 10px; }
@@ -330,10 +351,17 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
  * relationship has to read as "built on", not "made by".
  */
 .atlas-crest { display: block; width: auto; height: 34px; flex: none; }
+/* The leading mark on the landing panel. Large enough to be the thing a player
+   sees first, which the 34px default was not when a centred credit sat below. */
+.atlas-crest-lead { height: 64px; margin: 0 0 4px; }
+@media (max-width: 360px) { .atlas-crest-lead { height: 52px; } }
 .atlas-faucet-section { border: 1px solid var(--atlas-mission-line); border-radius: 14px; padding: 14px; }
 .atlas-faucet-steps { margin: 10px 0 12px; padding-left: 20px; display: grid; gap: 6px; font: 500 13px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--atlas-label); }
 .atlas-faucet-section .atlas-guide-link { display: inline-block; min-height: 44px; line-height: 44px; padding: 0 16px; border-radius: var(--atlas-radius-pill); background: var(--atlas-signal); color: var(--atlas-on-accent); font-weight: 800; text-decoration: none; }
 .atlas-brand > .atlas-crest { grid-column: 1; grid-row: 1 / span 2; align-self: center; height: 26px; }
+/* A credit at the foot of the panel, not a title at the head of it. */
+.atlas-welcome > .atlas-powered-by,
+.atlas-landing-splash > .atlas-powered-by { margin-top: 18px; opacity: .72; justify-content: flex-start; }
 .atlas-powered-by { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 0; color: var(--atlas-label-dim); font: 700 10px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
 .atlas-powered-by .atlas-nimiq-mark { height: 14px; }
 .atlas-nimiq-mark[data-variant="lockup"] { height: 28px; margin: 0 0 14px; }

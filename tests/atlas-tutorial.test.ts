@@ -94,9 +94,39 @@ describe('Atlas tutorial overlay', () => {
     expect(body).not.toMatch(/actionButton|ghostButton|Skip|Close/);
   });
 
-  it('darkens the world with a filter rather than an overlay', () => {
+  it('funnels attention without draining the world of light and colour', () => {
+    /*
+     * This used to assert `filter: brightness(.48) saturate(.8)` on the city
+     * stage, which meant a new player's first impression of the place was a
+     * half-brightness, desaturated version of it, held there until they
+     * finished step one. The focus never came from that: the HUD siblings drop
+     * to opacity .26 and the spotlighted control pulses. A vignette keeps the
+     * funnel and leaves the city at full brightness and full colour.
+     */
     expect(sheet).toContain('#atlas-city-stage.is-tutorial-dimmed');
     expect(app).toContain("classList.toggle('is-tutorial-dimmed'");
+    const from = sheet.indexOf('#atlas-city-stage.is-tutorial-dimmed');
+    const rule = sheet.slice(from, sheet.indexOf('}', from));
+    expect(rule, 'the whole city is dimmed again').not.toMatch(/brightness\(/);
+    expect(rule, 'the whole city is desaturated again').not.toMatch(/saturate\(/);
+    expect(rule, 'nothing focuses attention').toMatch(/radial-gradient/);
+  });
+
+  /*
+   * Probed on a Pixel 7 Pro: the stage reported is-tutorial-dimmed while the
+   * shell had no is-tutorial class, no spotlight and no prompt, with the
+   * tutorial still on step 'walk'. applyTutorialStep is the only thing that
+   * toggles the stage class and it sits on the else branch of the route-card
+   * condition, so a route card rendered before the tutorial finished left the
+   * world dimmed permanently with nothing on screen to explain why. The shell
+   * is rebuilt each render; the stage element is not.
+   */
+  it('takes the dim off the stage when the route card replaces the tutorial', () => {
+    const start = app.indexOf('if (this.routeRun && this.freePlayDone) {');
+    expect(start, 'the route-card branch moved').toBeGreaterThan(-1);
+    const branch = app.slice(start, app.indexOf('} else this.applyTutorialStep', start));
+    expect(branch, 'the route-card branch leaves the stage dimmed').toContain('this.clearTutorialChrome()');
+    expect(app).toMatch(/private clearTutorialChrome\(\)[\s\S]{0,220}?is-tutorial-dimmed/);
   });
 
   it('remembers completion outside the progress store', () => {

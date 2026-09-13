@@ -18,7 +18,14 @@ describe('NIM Atlas clarity pass', () => {
   });
 
   it('keeps the landing screen focused on the first human need', () => {
-    expect(app).toContain('Sface is a Nimiq Pay Mini App game. NIM Atlas is the network you repair by playing.');
+    /*
+     * The test is named for the human need, so it asserts the human need.
+     *
+     * It used to also pin "Sface is a Nimiq Pay Mini App game", which is the
+     * opposite of a human need: it is the delivery mechanism, and it sat above
+     * the start button pushing Mara down the screen. The relationship is now
+     * stated on the About screen, which atlas-ui.test.ts covers.
+     */
     expect(app).toContain('Mara needs one safe NIM payment route. Restore it, carry the lantern, relight the harbor.');
     expect(app).toContain('Explorer: inspect, approve, confirm.');
     expect(app).toContain('Builder: repair, predict, verify.');

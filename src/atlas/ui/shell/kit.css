@@ -98,7 +98,27 @@
 /* The transparent game shell passes input through; its buttons must opt in. */
 .atlas-city-topbar button { pointer-events: auto; }
 
-#atlas-city-stage.is-tutorial-dimmed { filter: brightness(.48) saturate(.8); }
+/*
+ * The first-run focus, without greying the world.
+ *
+ * This used to be `filter: brightness(.48) saturate(.8)` on the whole city
+ * stage, so a new player's very first impression of the place was a
+ * half-brightness, desaturated version of it, held there until they completed
+ * step one. The focus was never coming from the world dim anyway: the HUD
+ * siblings already drop to opacity .26 and the spotlighted control pulses.
+ *
+ * A vignette funnels attention toward the centre while leaving the city at
+ * full brightness and full colour. ::before because ::after already carries
+ * the standing side gradient.
+ */
+#atlas-city-stage.is-tutorial-dimmed::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(118% 76% at 50% 54%, rgb(var(--atlas-shadow-rgb) / 0) 38%, rgb(var(--atlas-shadow-rgb) / .52) 100%);
+}
 
 .atlas-tutorial-prompt {
   position: fixed;

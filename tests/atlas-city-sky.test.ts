@@ -28,4 +28,24 @@ describe('Atlas sky', () => {
     // solid clear colour, never take the renderer down with it.
     expect(createAtlasSkyTexture(() => null)).toBeNull();
   });
+
+  /*
+   * The gradient's first two stops used to be `water` and `sky`, which are the
+   * same 0x4cc9f0, so the top 55% of every outdoor shot was one flat colour.
+   * Distinct stops, darkest first, are what make the sky read as depth.
+   */
+  it('runs through distinct colours rather than repeating one', () => {
+    const stops = atlasSkyGradientStops();
+    expect(new Set(stops.map((stop) => stop.colour)).size).toBe(stops.length);
+  });
+
+  it('is darkest at the zenith and lightest at the horizon', () => {
+    const luminance = (colour: number) =>
+      0.2126 * ((colour >> 16) & 0xff) + 0.7152 * ((colour >> 8) & 0xff) + 0.0722 * (colour & 0xff);
+    const stops = atlasSkyGradientStops();
+    for (const [index, stop] of stops.slice(1).entries()) {
+      expect(luminance(stop.colour), `stop ${index + 1} is not lighter than the one above it`)
+        .toBeGreaterThan(luminance(stops[index]!.colour));
+    }
+  });
 });

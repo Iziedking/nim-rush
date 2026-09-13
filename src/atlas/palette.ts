@@ -36,6 +36,16 @@ export const ATLAS_WORLD_PALETTE = Object.freeze({
   plant: 0x06d6a0,
 
   // Atmosphere.
+  /*
+   * The top of the sky.
+   *
+   * The gradient used to run `water` -> `sky` -> `haze`, and `water` and `sky`
+   * are the same 0x4cc9f0, so its top 55% was one flat colour: a slab of
+   * identical blue filling the upper half of every outdoor shot. A zenith that
+   * is actually darker than the horizon is what makes a sky read as depth
+   * rather than as a backdrop.
+   */
+  skyZenith: 0x1668a8,
   sky: 0x4cc9f0,
   haze: 0xa8dcf0,
   ambientLight: 0xf2f8ff,

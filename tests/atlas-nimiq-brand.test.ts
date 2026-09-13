@@ -86,8 +86,26 @@ describe('Nimiq brand presence', () => {
   });
 
   it('still credits Nimiq by name where the crest leads', () => {
-    expect(app, 'the loading splash drops the Nimiq credit').toMatch(/private renderLandingSplash[\s\S]{0,1400}?createNimiqPoweredBy/);
-    expect(app, 'the title screen drops the Nimiq credit').toMatch(/private renderWelcome[\s\S]{0,2200}?createNimiqPoweredBy/);
+    /*
+     * Sliced to the next method, like the title screen below. The credit sits
+     * at the foot of the splash now rather than beside the crest at its head:
+     * the splash is the first screen anybody ever sees, and a centred "POWERED
+     * BY NIMIQ" above the heading made it read as a Nimiq loading page.
+     */
+    const splashFrom = app.indexOf('private renderLandingSplash');
+    const splashBody = app.slice(splashFrom, app.indexOf('  private ', splashFrom + 40));
+    expect(splashBody, 'the loading splash drops the Nimiq credit').toContain('createNimiqPoweredBy');
+    /*
+     * Sliced to the next method rather than a fixed character window. The
+     * credit now sits at the foot of the panel instead of beside the crest at
+     * the head, because a centred "POWERED BY NIMIQ" above the headline read
+     * as the product's own title. It is still in renderWelcome, which is what
+     * this test is for; the old 2200-character window only ever asserted that
+     * it appeared *early*.
+     */
+    const welcomeFrom = app.indexOf('private renderWelcome');
+    const welcomeBody = app.slice(welcomeFrom, app.indexOf('  private ', welcomeFrom + 40));
+    expect(welcomeBody, 'the title screen drops the Nimiq credit').toContain('createNimiqPoweredBy');
     const helper = readFileSync(new URL('../src/atlas/ui/atlas-mark.ts', import.meta.url), 'utf8');
     expect(helper, 'the credit does not use the official mark').toContain("createNimiqMark('lockup'");
     expect(helper, 'the credit is not labelled').toContain('Powered by');

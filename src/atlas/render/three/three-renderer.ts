@@ -57,6 +57,31 @@ interface AtlasNpcSlot {
   detailLevel: 'near' | 'distant';
 }
 
+/**
+ * Put a glTF base colour back into the colour space it was authored in.
+ *
+ * Both art builders write `channel / 255.0` into `baseColorFactor`, a field
+ * the glTF spec defines as **linear**. That puts the sRGB fraction where the
+ * linear value belongs, so every surface in the game renders far lighter and
+ * flatter than the art intends. The material names carry the intended hex, so
+ * the damage is measurable: `BeaconCommons_14110e` is authored as a near-black
+ * and arrives as `#504a44`, a mid grey. `ff5a1f`, a vivid orange, arrives as
+ * `#ff9f62`, a pale salmon. That single error is most of why the city read as
+ * an untextured greybox rather than as a place.
+ *
+ * The correction happens here, at the ingest boundary, rather than in the
+ * builders. Fixing the builders without regenerating every GLB would be worse
+ * than leaving them: the shipped assets would still hold sRGB, this correction
+ * would still fire, and newly built assets would be darkened twice.
+ * `atlas-colour-space.test.ts` asserts the shipped assets still need this, so
+ * whoever does regenerate them is told to remove this step rather than
+ * discovering the double-darkening by eye.
+ */
+function atlasCorrectGltfColourSpace(color: Color): void {
+  const toLinear = (channel: number) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  color.setRGB(toLinear(color.r), toLinear(color.g), toLinear(color.b));
+}
+
 export class ThreeAtlasRenderer implements AtlasSceneRenderer {
   private renderer: WebGLRenderer | null = null;
   private scene: Scene | null = null;
@@ -479,7 +504,10 @@ export class ThreeAtlasRenderer implements AtlasSceneRenderer {
         clone.side = DoubleSide;
         const color = appearance?.colors[clone.name];
         const tintable = clone as typeof clone & { color?: Color };
+        // A wardrobe tint is authored in sRGB and converted by three, so it is
+        // already right; only an untouched glTF factor needs the correction.
         if (color && tintable.color instanceof Color) tintable.color.set(color);
+        else if (tintable.color instanceof Color) atlasCorrectGltfColourSpace(tintable.color);
         // Tint first, then band. toAtlasToonMaterial copies the colour across,
         // so doing it in the other order would shade the untinted colour and
         // throw the wardrobe away.

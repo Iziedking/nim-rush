@@ -42,7 +42,20 @@ describe('NIM Atlas public first district UI', () => {
   it('makes the SFACE and NIM Atlas relationship explicit and keeps Pay central', () => {
     const app = readFileSync(new URL('../src/atlas/app/atlas-app.ts', import.meta.url), 'utf8');
     const manifest = readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8');
-    expect(app).toContain('Sface is a Nimiq Pay Mini App game. NIM Atlas is the network you repair by playing.');
+    /*
+     * The relationship is stated on the About screen, not on the hero.
+     *
+     * "Sface is a Nimiq Pay Mini App game" was the third paragraph of the
+     * landing screen, above the button. It is true and it is plumbing: it
+     * describes the delivery mechanism to a player who has not yet been given
+     * a reason to care about the game, and it cost height on the one screen
+     * where height decides whether anybody finds the start button. What has to
+     * stay true is that the relationship is stated somewhere a player can
+     * reach, which is what this now asserts.
+     */
+    const about = readFileSync(new URL('../src/ui/about.ts', import.meta.url), 'utf8');
+    expect(about, 'the Sface / Nimiq Pay relationship is stated nowhere').toContain('Nimiq Pay Mini App game');
+    expect(about).toContain('Sface');
     /*
      * Asserted as a relationship, not as one sentence.
      *
@@ -148,7 +161,16 @@ describe('NIM Atlas public first district UI', () => {
     const landing = app.slice(landingStart, landingEnd);
     expect(app).toContain("private cityLoadState: 'loading' | 'ready' | 'unavailable' = 'loading';");
     expect(app).toContain('Start 60-second run');
-    expect(app).toContain('Learn how Nimiq works by walking through a living city');
+    /*
+     * The landing states what the player will do, in the world's own terms.
+     *
+     * This used to pin "Learn how Nimiq works by walking through a living
+     * city", which opened the game by announcing homework and put the sponsor
+     * in the first line a player reads. The promise is the same; it is now
+     * made as a hook rather than as a syllabus.
+     */
+    expect(app).toContain('The Beacon didn’t break.');
+    expect(app).toContain('from a person who needs help to a promise that actually arrives');
     expect(app).toContain('Entering Beacon Commons.');
     expect(app).toContain('CITY');
     expect(app).toContain('PLAYER');

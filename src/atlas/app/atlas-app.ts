@@ -378,12 +378,39 @@ export class AtlasApp {
       this.ui.append(panel);
       return;
     }
-    panel.append(createAtlasCrest(), createNimiqPoweredBy());
+    /*
+     * The crest leads and Nimiq is credited at the foot of the panel.
+     *
+     * Both marks used to sit together at the top, and because the attribution
+     * line is centred while the crest is not, "POWERED BY NIMIQ" read as the
+     * title of the product. A player's first impression was a Nimiq page. The
+     * crest is the mark of the thing they are about to play; the credit is a
+     * credit, and belongs where credits go.
+     */
+    panel.append(createAtlasCrest({ className: 'atlas-crest-lead' }));
     const eyebrow = element('p', 'atlas-eyebrow', 'NIM ATLAS / BEACON COMMONS');
-    const heading = element('h1', '', 'Explore Nimiq. Build what survives.');
-    const tagline = element('p', 'atlas-tagline', 'Learn how Nimiq works by walking through a living city, meeting its people, and making the right move.');
-    const identity = element('p', 'atlas-identity', 'Sface is a Nimiq Pay Mini App game. NIM Atlas is the network you repair by playing.');
-    const storyHook = element('p', 'atlas-story-hook', ATLAS_STORY.logline);
+    /*
+     * The headline opens on the world, not on the technology.
+     *
+     * It used to be "Explore Nimiq. Build what survives." over "Learn how
+     * Nimiq works by...", so the first word a player read was the sponsor and
+     * the second line announced homework. Both are drawn from ATLAS_STORY now:
+     * a hook a player can be curious about, and a promise of what they will
+     * actually do. Nimiq is credited at the foot of the panel instead.
+     */
+    const heading = element('h1', '', 'The Beacon didn’t break.');
+    const tagline = element('p', 'atlas-tagline', 'Its six threads stopped listening to each other. Follow one, from a person who needs help to a promise that actually arrives.');
+    /*
+     * "Sface is a Nimiq Pay Mini App game" used to sit here. It is true, and it
+     * is plumbing: it describes the delivery mechanism to a player who has not
+     * yet been given a reason to care about the game. The About screen still
+     * carries it for anyone who wants it.
+     */
+    /*
+     * ATLAS_STORY.logline used to sit here as a third paragraph. It says the
+     * same thing the tagline now says - six parts of a city that stopped
+     * trusting each other - so it was the screen telling the player twice.
+     */
     /*
      * The 01/02/03 learning loop used to live here.
      *
@@ -434,7 +461,7 @@ export class AtlasApp {
     const primary = element('div', 'atlas-home-primary');
     primary.append(mission, roles, promise, start, howToPlay);
     const introduction = element('div', 'atlas-home-intro');
-    introduction.append(eyebrow, heading, tagline, identity, storyHook);
+    introduction.append(eyebrow, heading, tagline);
     const homeGrid = element('div', 'atlas-home-grid');
     homeGrid.append(introduction, primary);
     const routes = document.createElement('details');
@@ -446,6 +473,7 @@ export class AtlasApp {
     const saved = this.progress.load().completedAdventureIds.includes('genesis-garden');
     panel.append(homeGrid, routes, this.renderStatusDrawer());
     if (saved) panel.append(element('p', 'atlas-saved', 'Garden seal saved on this device. You can replay it.'));
+    panel.append(createNimiqPoweredBy());
     this.ui.append(panel);
   }
 
@@ -471,9 +499,16 @@ export class AtlasApp {
   private renderLandingSplash(): HTMLElement {
     const splash = element('div', 'atlas-landing-splash');
     const state = this.cityLoadState === 'unavailable';
-    splash.append(createAtlasCrest(), createNimiqPoweredBy());
+    /*
+     * The splash is the *first* screen a player ever sees, so it follows the
+     * same rule as the title screen: the crest leads and Nimiq is credited at
+     * the foot. Both marks used to sit together at the top here too, and the
+     * centred "POWERED BY NIMIQ" out-weighed a 34px crest in the corner, so a
+     * player's first impression of the game was a Nimiq loading page.
+     */
+    splash.append(createAtlasCrest({ className: 'atlas-crest-lead' }));
     splash.append(
-      element('p', 'atlas-eyebrow', 'SFACE / NIM ATLAS'),
+      element('p', 'atlas-eyebrow', 'NIM ATLAS / BEACON COMMONS'),
       element('h1', '', state ? 'Reconnect the city.' : 'Entering Beacon Commons.'),
       element('p', 'atlas-splash-copy', state ? 'The 3D city did not finish loading. Your learning path is safe; try the city link again.' : 'A living NIM Atlas district is getting ready around you.'),
     );
@@ -499,6 +534,7 @@ export class AtlasApp {
       retry.classList.add('atlas-splash-retry');
       splash.append(retry);
     }
+    splash.append(createNimiqPoweredBy());
     return splash;
   }
 
@@ -722,6 +758,17 @@ export class AtlasApp {
     shell.append(topbar, settingsPanel, this.toolkit.element, this.createBeaconMap(), this.createCityWaypoint(), this.createCameraLookZone(), cameraCenter, controls, hint);
     shell.append(cameraMode);
     if (this.routeRun && this.freePlayDone) {
+      /*
+       * The stage's dim class outlives the shell, so this branch has to clear
+       * it. applyTutorialStep is the only thing that toggles it and it lives on
+       * the other branch, so a route card rendered while the tutorial was still
+       * incomplete left the world dimmed permanently with no prompt and no
+       * spotlight to explain why - the shell is rebuilt each render, so the
+       * chrome vanished while the class on the persistent stage element stayed.
+       * Probed on a Pixel 7 Pro: stageDimmed true, isTutorial false, zero
+       * prompts, tutorial still on step 'walk'.
+       */
+      this.clearTutorialChrome();
       this.toolkit.element.hidden = true;
       this.routeCard = createRouteCard(this.routeRun, this.actRoute);
       shell.append(this.routeCard);
@@ -2607,6 +2654,11 @@ export class AtlasApp {
     prompt.setAttribute('role', 'status');
     prompt.append(element('span', '', step.prompt), element('small', '', `STEP ${this.tutorialStepNumber()} OF 3`));
     shell.append(prompt);
+  }
+
+  /** Takes the first-run treatment off the stage, which outlives the shell. */
+  private clearTutorialChrome(): void {
+    this.livingCityHost?.classList.remove('is-tutorial-dimmed');
   }
 
   private tutorialStepNumber(): number {
