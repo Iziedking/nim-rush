@@ -905,6 +905,118 @@
       ]
     },
     {
+      "id": "obstruction-prop-01",
+      "shape": "box",
+      "position": [
+        -6.5,
+        0.88,
+        -8.5
+      ],
+      "size": [
+        1.5,
+        1.75,
+        0.5
+      ]
+    },
+    {
+      "id": "obstruction-prop-02",
+      "shape": "capsule",
+      "position": [
+        -8.75,
+        0.92,
+        6
+      ],
+      "size": [
+        1,
+        1.83,
+        0.5
+      ]
+    },
+    {
+      "id": "obstruction-prop-03",
+      "shape": "capsule",
+      "position": [
+        8.5,
+        0.94,
+        5.75
+      ],
+      "size": [
+        0.5,
+        1.88,
+        1
+      ]
+    },
+    {
+      "id": "obstruction-prop-04",
+      "shape": "capsule",
+      "position": [
+        -9.5,
+        0.92,
+        -7
+      ],
+      "size": [
+        0.5,
+        1.84,
+        0.5
+      ]
+    },
+    {
+      "id": "obstruction-prop-05",
+      "shape": "capsule",
+      "position": [
+        9.25,
+        0.84,
+        -8
+      ],
+      "size": [
+        1,
+        1.69,
+        0.5
+      ]
+    },
+    {
+      "id": "obstruction-prop-06",
+      "shape": "capsule",
+      "position": [
+        -8.5,
+        0.88,
+        -8.5
+      ],
+      "size": [
+        0.5,
+        1.75,
+        0.5
+      ]
+    },
+    {
+      "id": "obstruction-prop-07",
+      "shape": "capsule",
+      "position": [
+        -2.5,
+        0.88,
+        -20
+      ],
+      "size": [
+        0.5,
+        1.75,
+        0.5
+      ]
+    },
+    {
+      "id": "obstruction-prop-08",
+      "shape": "capsule",
+      "position": [
+        2.5,
+        0.88,
+        -20
+      ],
+      "size": [
+        0.5,
+        1.75,
+        0.5
+      ]
+    },
+    {
       "id": "obstruction-street-block-1",
       "shape": "box",
       "position": [

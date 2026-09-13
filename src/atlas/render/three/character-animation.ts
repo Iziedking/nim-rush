@@ -1,5 +1,7 @@
-import { AnimationMixer } from 'three';
+import { AnimationMixer, Mesh, MeshBasicMaterial, SphereGeometry } from 'three';
 import type { AnimationAction, AnimationClip, Object3D } from 'three';
+import { ATLAS_WORLD_PALETTE } from '../../palette';
+import { NO_OUTLINE_FLAG } from './outline';
 import type { AtlasQualityTier } from '../../../../shared/atlas/city/types';
 import type { AtlasCitizenActivity } from '../../../../shared/atlas/city/crowd';
 import type { AtlasGaitState } from '../../../../shared/atlas/city/character-gait';
@@ -144,6 +146,46 @@ interface AtlasFacialRig {
   update(deltaSeconds: number, cue: AtlasFacialCue): void;
 }
 
+/*
+ * Eye and mouth geometry, attached to the bones that already exist for it.
+ *
+ * The characters shipped with no face. Both builders place eye.L, eye.R,
+ * eyelid.L, eyelid.R and mouth as *bones only* - joints in the skin with no
+ * mesh - and build_character.py says why: "The renderer drives the mouth and
+ * eyes itself through createFacialRig". The renderer, meanwhile, assumed the
+ * art supplied the geometry and only animated the joints. Each side expected
+ * the other, so every character in the game has a blank face while a complete
+ * blink-glance-and-speak rig drives nothing anybody can see.
+ *
+ * Building it here rather than in Blender keeps the fix off the asset
+ * pipeline: no regeneration, no manifest hashes to chase. The meshes are
+ * children of the bones, so the existing update() already animates them - a
+ * blink is the eye bone's scale.y, and the mouth opens on its own scale.
+ *
+ * Unlit on purpose. At the tuned camera a head is about 25 px, and a shaded
+ * dark dot at that size turns to mud; cartoon faces read because they are flat.
+ */
+const FACE_EYE_RADIUS = 0.019;
+/* Wider than it is tall, and wider than an eye: at 25 px a mouth only reads as
+ * a mouth if it is clearly the widest mark on the face. The first pass used a
+ * near-round 0.024 and disappeared into the jaw shadow. */
+const FACE_MOUTH_RADIUS = 0.030;
+
+function attachFacePart(bone: Object3D, radius: number, squashY: number, squashZ: number, stretchX = 1): void {
+  // Idempotent: a re-bound animator must not stack a second pair of eyes.
+  if (bone.children.some((child) => child.userData.atlasFacePart === true)) return;
+  const mesh = new Mesh(
+    new SphereGeometry(radius, 8, 6),
+    new MeshBasicMaterial({ color: ATLAS_WORLD_PALETTE.ink }),
+  );
+  mesh.scale.set(stretchX, squashY, squashZ);
+  mesh.userData.atlasFacePart = true;
+  // An inverted hull around a 2 cm sphere is a black blob the size of the head.
+  mesh.userData[NO_OUTLINE_FLAG] = true;
+  mesh.renderOrder = 1;
+  bone.add(mesh);
+}
+
 function createFacialRig(root: Object3D, requestedPhase: number): AtlasFacialRig | null {
   const leftEye = findAtlasBone(root, 'eye.L');
   const rightEye = findAtlasBone(root, 'eye.R');
@@ -151,6 +193,9 @@ function createFacialRig(root: Object3D, requestedPhase: number): AtlasFacialRig
   const rightEyelid = findAtlasBone(root, 'eyelid.R');
   const mouth = root.getObjectByName('mouth');
   if (!leftEye && !rightEye && !mouth) return null;
+
+  for (const eye of [leftEye, rightEye]) if (eye) attachFacePart(eye, FACE_EYE_RADIUS, 1, 0.6);
+  if (mouth) attachFacePart(mouth, FACE_MOUTH_RADIUS, 0.34, 0.42, 1.35);
 
   const phase = positiveModulo(Number.isFinite(requestedPhase) ? requestedPhase : 0, 1);
   const eyeBase = [leftEye, rightEye].map((eye) => eye ? { eye, scaleY: eye.scale.y, rotationY: eye.rotation.y } : null);

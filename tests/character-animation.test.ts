@@ -17,6 +17,85 @@ function clips(): AnimationClip[] {
   ];
 }
 
+/*
+ * The characters shipped with no face.
+ *
+ * Both builders place eye.L, eye.R, eyelid.L, eyelid.R and mouth as bones
+ * only - joints in the skin with no mesh - and build_character.py says the
+ * renderer supplies the geometry. The renderer only animated the joints. So a
+ * complete blink-glance-and-speak rig drove nothing anybody could see, and
+ * every face in the game was blank.
+ */
+function headWithFaceBones(): Group {
+  const root = new Group();
+  const head = new Object3D();
+  head.name = 'head';
+  for (const name of ['eye.L', 'eye.R', 'eyelid.L', 'eyelid.R', 'mouth']) {
+    const bone = new Object3D();
+    bone.name = name;
+    head.add(bone);
+  }
+  root.add(head);
+  return root;
+}
+
+const faceParts = (root: Object3D) => {
+  let count = 0;
+  root.traverse((object) => { if (object.userData.atlasFacePart === true) count += 1; });
+  return count;
+};
+
+describe('the character face', () => {
+  it('gives the face bones geometry, because the art ships none', () => {
+    const root = headWithFaceBones();
+    expect(faceParts(root)).toBe(0);
+    createAtlasCharacterAnimator(root, clips());
+    // Two eyes and a mouth. Eyelids move the eyes and carry no mesh of their own.
+    expect(faceParts(root)).toBe(3);
+  });
+
+  it('does not stack a second pair of eyes when an animator is rebuilt', () => {
+    const root = headWithFaceBones();
+    createAtlasCharacterAnimator(root, clips());
+    createAtlasCharacterAnimator(root, clips());
+    expect(faceParts(root)).toBe(3);
+  });
+
+  it('opens the mouth when the citizen is talking', () => {
+    const root = headWithFaceBones();
+    const animator = createAtlasCharacterAnimator(root, clips());
+    const mouth = root.getObjectByName('mouth')!;
+    animator.update('idle', 1 / 30, 1, 'neutral');
+    const shut = mouth.scale.y;
+    let widest = 0;
+    // Speech drives a cycle, so sample it rather than trusting one frame.
+    for (let i = 0; i < 40; i += 1) {
+      animator.update('talk', 1 / 30, 1, 'talking');
+      widest = Math.max(widest, mouth.scale.y);
+    }
+    expect(widest).toBeGreaterThan(shut);
+  });
+
+  it('blinks: the eye closes and opens again', () => {
+    const root = headWithFaceBones();
+    const animator = createAtlasCharacterAnimator(root, clips());
+    const eye = root.getObjectByName('eye.L')!;
+    let smallest = Infinity, largest = 0;
+    for (let i = 0; i < 400; i += 1) {
+      animator.update('idle', 1 / 60, 1, 'neutral');
+      smallest = Math.min(smallest, eye.scale.y);
+      largest = Math.max(largest, eye.scale.y);
+    }
+    expect(smallest).toBeLessThan(largest * 0.5);
+  });
+
+  it('leaves a character with no face bones alone', () => {
+    const root = new Group();
+    expect(() => createAtlasCharacterAnimator(root, clips())).not.toThrow();
+    expect(faceParts(root)).toBe(0);
+  });
+});
+
 describe('Atlas character animation controller', () => {
   it('starts idle and changes locomotion state without replacing its mixer', () => {
     const animator = createAtlasCharacterAnimator(new Group(), clips());

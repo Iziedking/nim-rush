@@ -126,6 +126,37 @@ const scene = {
     { id: 'obstruction-ferry-house', shape: 'box', position: [8.1, 1.5, -10.0], size: [3.72, 3.4, 3.18] },
     { id: 'obstruction-north-block-west', shape: 'box', position: [-10.5, 1.1, -19.6], size: [4.0, 2.3, 3.4] },
     { id: 'obstruction-north-block-east', shape: 'box', position: [9.2, 1.1, -19.8], size: [4.4, 2.3, 3.6] },
+    /*
+     * Street furniture: trees, planters and posts.
+     *
+     * Found by sampling the environment mesh between 0.35 m and 1.70 m - the
+     * band a walking player's body occupies - and diffing the occupied cells
+     * against collider coverage. Thirteen clusters of solid geometry had no
+     * collider at all, so the player walked straight through tree trunks
+     * (65513b) and foliage (6f8e6e) in the middle of the street.
+     *
+     * Two rules decide what gets one, and four clusters are deliberately
+     * absent because of them:
+     *
+     * - Canopy is not a wall. Sampling the 6f8e6e foliage put colliders under
+     *   tree crowns; only the trunk is solid, so the sample skips that
+     *   material.
+     * - Nothing may block a place the player has to stand, or a lane the crowd
+     *   is authored to walk. (3.75, -0.75) encloses the work-repair-core
+     *   anchor, and three trunks stand on walk-outer-ring, walk-main-street
+     *   and conversation-loop. A collider that makes an objective unreachable,
+     *   or that walks citizens into a tree, is worse than the hole it fills.
+     *   Those three trunks are still walk-through; fixing them means moving
+     *   the authored lane, which is a crowd-design change, not a collider one.
+     */
+    { id: 'obstruction-prop-01', shape: 'box', position: [-6.5, 0.88, -8.5], size: [1.5, 1.75, 0.5] },
+    { id: 'obstruction-prop-02', shape: 'capsule', position: [-8.75, 0.92, 6], size: [1, 1.83, 0.5] },
+    { id: 'obstruction-prop-03', shape: 'capsule', position: [8.5, 0.94, 5.75], size: [0.5, 1.88, 1] },
+    { id: 'obstruction-prop-04', shape: 'capsule', position: [-9.5, 0.92, -7], size: [0.5, 1.84, 0.5] },
+    { id: 'obstruction-prop-05', shape: 'capsule', position: [9.25, 0.84, -8], size: [1, 1.69, 0.5] },
+    { id: 'obstruction-prop-06', shape: 'capsule', position: [-8.5, 0.88, -8.5], size: [0.5, 1.75, 0.5] },
+    { id: 'obstruction-prop-07', shape: 'capsule', position: [-2.5, 0.88, -20], size: [0.5, 1.75, 0.5] },
+    { id: 'obstruction-prop-08', shape: 'capsule', position: [2.5, 0.88, -20], size: [0.5, 1.75, 0.5] },
     ...streetBlockColliders.map(([x, z], index) => ({ id: `obstruction-street-block-${index + 1}`, shape: 'box', position: [x, 3, z], size: [3.2, 6, 4.6] })),
   ],
   emitters: [
