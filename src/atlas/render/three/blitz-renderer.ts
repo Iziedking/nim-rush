@@ -36,6 +36,7 @@ interface BikeRig {
   readonly body: Group;
   readonly wheels: readonly Mesh[];
   readonly trail: readonly Mesh[];
+  readonly motionStreaks: readonly Mesh[];
   readonly headlight: PointLight;
 }
 
@@ -181,6 +182,17 @@ export class BlitzRenderer {
       trail.visible = state.boostActive;
       trail.scale.z = state.boostActive ? 1 + Math.sin(state.tick * 0.7) * 0.22 : 0.1;
     }
+    const speedEffect = MathUtils.clamp((state.speedMps - 13) / 14, 0, 1);
+    bike.body.position.y = Math.sin(state.tick * 0.22) * speedEffect * 0.026;
+    bike.body.rotation.x = Math.sin(state.tick * 0.34) * speedEffect * 0.018;
+    bike.motionStreaks.forEach((streak, index) => {
+      const material = streak.material as MeshBasicMaterial;
+      const visible = speedEffect > 0.08;
+      streak.visible = visible;
+      streak.position.z = -1.35 - ((state.tick * (0.28 + speedEffect * 0.28) + index * 0.82) % 5.9);
+      streak.scale.z = 0.45 + speedEffect * (1.05 + (index % 3) * 0.32);
+      material.opacity = speedEffect * (state.boostActive ? 0.86 : 0.5);
+    });
     bike.headlight.intensity = state.boostActive ? 9 : 5;
     this.relayGates.forEach((gate, index) => {
       const mission = state.missions[index];
@@ -193,7 +205,8 @@ export class BlitzRenderer {
     const forward = new Vector3(Math.sin(pose.headingRadians), 0, Math.cos(pose.headingRadians));
     const right = new Vector3(forward.z, 0, -forward.x);
     const portrait = this.camera.aspect < 0.8;
-    const focus = new Vector3(pose.x, portrait ? 1.9 : 1.18, pose.z).addScaledVector(forward, portrait ? 1.9 : 2.1);
+    const speedLookahead = Math.min(1.1, state.speedMps / 24);
+    const focus = new Vector3(pose.x, portrait ? 1.9 : 1.18, pose.z).addScaledVector(forward, (portrait ? 1.9 : 2.1) + speedLookahead);
     const desired = new Vector3(pose.x, portrait ? 3.4 : 3.5, pose.z)
       .addScaledVector(forward, portrait ? -7.2 : -7.8)
       .addScaledVector(right, this.reducedMotion ? 0 : -pose.bend * 0.16);
@@ -204,7 +217,7 @@ export class BlitzRenderer {
       this.camera.position.lerp(desired, this.reducedMotion ? 0.22 : state.boostActive ? 0.13 : 0.17);
     }
     this.camera.lookAt(focus);
-    const desiredFov = this.reducedMotion ? 58 : state.boostActive ? 64 : 58 + Math.min(3, state.speedMps / 14);
+    const desiredFov = this.reducedMotion ? 58 : state.boostActive ? 71 : 60 + Math.min(6, state.speedMps / 6.5);
     this.camera.fov = MathUtils.lerp(this.camera.fov, desiredFov, 0.12);
     this.camera.updateProjectionMatrix();
   }
@@ -725,12 +738,25 @@ function createBikeAndRider(city: BlitzCityDefinition): BikeRig {
     body.add(beam);
     return beam;
   });
-  return { root, body, wheels, trail, headlight };
+  const motionStreaks = Array.from({ length: 9 }, (_, index) => {
+    const streak = new Mesh(
+      new BoxGeometry(index % 3 === 0 ? 0.07 : 0.042, 0.024, 1.55),
+      new MeshBasicMaterial({ color: index % 2 === 0 ? city.signal : 0xf7f9ff, transparent: true, opacity: 0 }),
+    );
+    streak.position.set((index % 3 - 1) * 1.05, -0.29, -1.5 - index * 0.82);
+    streak.rotation.y = (index % 2 === 0 ? 1 : -1) * 0.035;
+    streak.visible = false;
+    body.add(streak);
+    return streak;
+  });
+  return { root, body, wheels, trail, motionStreaks, headlight };
 }
 
 function createHumanRider(city: BlitzCityDefinition): Group {
   const rider = new Group();
   rider.name = 'atlas-blitz-human-rider';
+  rider.position.z = 0.08;
+  rider.rotation.x = 0.08;
   const skin = new MeshStandardMaterial({ color: 0x704631, roughness: 0.86 });
   const jacket = new MeshStandardMaterial({ color: 0x20264c, roughness: 0.72 });
   const trousers = new MeshStandardMaterial({ color: 0x10142c, roughness: 0.82 });
@@ -750,6 +776,9 @@ function createHumanRider(city: BlitzCityDefinition): Group {
   const hairCap = new Mesh(new SphereGeometry(0.174, 12, 7, 0, Math.PI * 2, 0, Math.PI * 0.48), hair);
   hairCap.position.set(0, 1.88, 0.205);
   hairCap.rotation.x = -0.12;
+  const hairBack = new Mesh(new SphereGeometry(0.145, 10, 7), hair);
+  hairBack.scale.set(0.82, 1.18, 0.58);
+  hairBack.position.set(0, 1.77, 0.08);
   const nose = new Mesh(new SphereGeometry(0.028, 7, 5), skin);
   nose.position.set(0, 1.83, 0.375);
   for (const x of [-0.055, 0.055]) {
@@ -770,7 +799,7 @@ function createHumanRider(city: BlitzCityDefinition): Group {
   const ankleLeft = new Vector3(-0.22, 0.48, 0.34);
   const ankleRight = new Vector3(0.22, 0.48, 0.34);
   rider.add(
-    torso, neck, head, hairCap, nose,
+    torso, neck, head, hairCap, hairBack, nose,
     limb(shoulderLeft, elbowLeft, 0.07, jacket),
     limb(elbowLeft, handLeft, 0.06, jacket),
     limb(shoulderRight, elbowRight, 0.07, jacket),
@@ -785,6 +814,11 @@ function createHumanRider(city: BlitzCityDefinition): Group {
     foot.position.set(x, 0.45, 0.3);
     foot.rotation.x = -0.16;
     rider.add(foot);
+  }
+  for (const x of [-0.34, 0.34]) {
+    const glove = new Mesh(new SphereGeometry(0.07, 8, 6), skin);
+    glove.position.set(x, 1.05, 0.72);
+    rider.add(glove);
   }
   const stripe = new Mesh(new BoxGeometry(0.22, 0.04, 0.03), new MeshBasicMaterial({ color: city.signal }));
   stripe.position.set(0, 1.38, 0.25);

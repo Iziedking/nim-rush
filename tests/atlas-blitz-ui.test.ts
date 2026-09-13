@@ -46,6 +46,8 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(renderer).toContain('createRelayGate');
     expect(renderer).toContain('atlas-blitz-bike');
     expect(renderer).toContain('atlas-blitz-rider-face');
+    expect(renderer).toContain('motionStreaks');
+    expect(renderer).toContain('speedLookahead');
     expect(renderer).toContain('buildBlitzRoadRibbon');
     expect(renderer).toContain('createRouteDistricts');
     expect(renderer).toContain('createCityCrowd');
