@@ -4,12 +4,12 @@
 
 ## Batch 1 — Deterministic arcade core
 
-- [ ] Add typed city, route, mission, input, run, result, and replay contracts under `shared/atlas/blitz/`.
-- [ ] Add three city routes and at least six Nimiq relay mission templates.
-- [ ] Implement fixed-step auto-forward movement, lane steering, drift, boost, collision penalties, relay gates, finish/timeout, and score breakdown.
-- [ ] Implement canonical trace hashing and authoritative replay.
-- [ ] Add focused tests for determinism, handling, mission rotation, scoring, finish, timeout, and tamper detection.
-- [ ] Run the focused core suite.
+- [x] Add typed city, route, mission, input, run, result, and replay contracts under `shared/atlas/blitz/`.
+- [x] Add three city routes and at least six Nimiq relay mission templates.
+- [x] Implement fixed-step auto-forward movement, lane steering, drift, boost, collision penalties, relay gates, finish/timeout, and score breakdown.
+- [x] Implement canonical trace hashing and authoritative replay.
+- [x] Add focused tests for determinism, handling, mission rotation, scoring, finish, timeout, and tamper detection.
+- [x] Run the focused core suite.
 
 Owner commit checkpoint:
 

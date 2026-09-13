@@ -8,7 +8,7 @@ describe('NIM Atlas public first district UI', () => {
     expect(index).toContain('/src/atlas/main.ts');
     expect(index).toContain('/src/atlas/atlas.css');
     expect(index).not.toContain('/src/relay/main.ts');
-    expect(index).toContain('Explore the network. Build what survives.');
+    expect(index).toContain('Race 90-second Nimiq relay circuits through Lagos, London, and Dubai.');
   });
 
   it('ships semantic controls and required portrait accessibility policies', () => {
