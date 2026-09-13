@@ -60,4 +60,13 @@ describe('NIM Atlas order API client', () => {
     const api = createAtlasApiClient({ baseUrl: 'https://atlas.test', fetchImpl });
     await expect(api.getCompetitiveLeaderboard('season-1', 'explorer')).resolves.toMatchObject([{ runId: 'run-1', rank: 1, prizeEligible: true }]);
   });
+
+  it('reads the city-specific Blitz board with wallet and username identity', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL) => {
+      expect(String(input)).toBe('https://atlas.test/atlas/api/blitz/leaderboard?seasonId=blitz-cycle-2&cityId=lagos');
+      return new Response(JSON.stringify({ ok: true, data: [{ runId: 'blitz-1', actorId: 'actor-1', walletAddress: 'NQ12 WALLET', username: 'Sface', cityId: 'lagos', seasonId: 'blitz-cycle-2', score: 24_500, elapsedMs: 71_200, collisions: 0, traceHash: 'b'.repeat(64), verifiedAt: 10, verified: true, rank: 1 }] }));
+    });
+    const api = createAtlasApiClient({ baseUrl: 'https://atlas.test', fetchImpl });
+    await expect(api.getBlitzLeaderboard('blitz-cycle-2', 'lagos')).resolves.toMatchObject([{ rank: 1, username: 'Sface', walletAddress: 'NQ12 WALLET', verified: true }]);
+  });
 });

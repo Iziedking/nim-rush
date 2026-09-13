@@ -110,6 +110,7 @@ import { createAtlasIdentityService } from './atlas/identity';
 import { createAtlasTicketService } from './atlas/tickets';
 import { createAtlasSubmissionService } from './atlas/submissions';
 import { createAtlasLeaderboardService } from './atlas/leaderboard';
+import { createAtlasBlitzService } from './atlas/blitz';
 import { createAtlasCompetitiveRuntime } from './atlas/competitive';
 import { ATLAS_CORE_FIXTURE } from '../shared/atlas/world';
 
@@ -285,6 +286,10 @@ const atlasIdentity = createAtlasIdentityService({ auth: playerAuth, domain: ALL
 const atlasTickets = createAtlasTicketService({ identity: atlasIdentity });
 const atlasSubmissions = createAtlasSubmissionService({ tickets: atlasTickets, expectedOrigin: ALLOWED_ORIGINS[0] ?? 'https://www.sface.site', mission: ATLAS_CORE_FIXTURE });
 const atlasLeaderboard = createAtlasLeaderboardService();
+const atlasBlitz = createAtlasBlitzService({
+  identity: atlasIdentity,
+  stateStore: ATLAS_PRODUCTION_GATE.durableRepository ? atlasStateStore : undefined,
+});
 const atlasCompetitive = ATLAS_PRODUCTION_GATE.competitive && atlasBeacon && atlasEchoes
   ? createAtlasCompetitiveRuntime({ identity: atlasIdentity, tickets: atlasTickets, submissions: atlasSubmissions, leaderboard: atlasLeaderboard, beacon: atlasBeacon, echoes: atlasEchoes, stateStore: atlasStateStore, ticketPolicy: ATLAS_COMPETITIVE_POLICY! })
   : undefined;
@@ -302,6 +307,7 @@ mountAtlasRoutes({ app, limit: rateLimiter.limit, api: createAtlasApi({
   echoes: atlasEchoes,
   identity: atlasIdentity,
   competitive: atlasCompetitive,
+  blitz: atlasBlitz,
   competition: atlasCompetitive ? () => atlasCompetitive.competition() : undefined,
   authorize: (proof, action, actorId, body) => provesActor(proof, action, actorId, body),
   orderCatalog: ATLAS_PAYMENT_CONFIG.enabled ? { itemId: ATLAS_PAYMENT_CONFIG.itemId, network: ATLAS_PAYMENT_CONFIG.network, recipient: ATLAS_PAYMENT_CONFIG.recipient!, valueLuna: ATLAS_PAYMENT_CONFIG.valueLuna } : undefined,

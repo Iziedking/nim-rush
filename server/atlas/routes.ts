@@ -15,6 +15,7 @@ import type { AtlasCompetitiveRuntime } from './competitive';
 import type { AtlasIdentityService, AtlasWalletBindingChallenge } from './identity';
 import type { AuthAction, DeviceProof } from '../../src/net/player-auth-protocol';
 import type { AtlasSnapshot } from '../../shared/atlas/state';
+import type { AtlasBlitzService } from './blitz';
 
 export interface AtlasOrderCatalog {
   itemId: 'harbor-lantern';
@@ -40,6 +41,7 @@ export interface AtlasApi {
   chain?: AtlasChainObserver;
   identity?: AtlasIdentityService;
   competitive?: AtlasCompetitiveRuntime;
+  blitz?: AtlasBlitzService;
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
 }
 
@@ -55,6 +57,7 @@ export function createAtlasApi(options: {
   chain?: AtlasChainObserver;
   identity?: AtlasIdentityService;
   competitive?: AtlasCompetitiveRuntime;
+  blitz?: AtlasBlitzService;
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
 }): AtlasApi {
   const curriculum = validateAtlasCurriculum(options.curriculum, options.now?.() ?? new Date());
@@ -79,6 +82,7 @@ export function createAtlasApi(options: {
     chain: options.chain,
     identity: options.identity,
     competitive: options.competitive,
+    blitz: options.blitz,
     authorize: options.authorize,
   };
 }
@@ -119,6 +123,16 @@ export function mountAtlasRoutes(options: {
     response.setHeader('cache-control', 'no-store');
     response.json({ ok: true, data: await options.api.competitive.leaderboard(seasonId, role) });
   });
+  options.app.get('/atlas/api/blitz/leaderboard', options.limit(120, 40), async (request, response) => {
+    if (!options.api.blitz) { response.status(503).json({ ok: false, error: 'Beacon Blitz leaderboard is unavailable.' }); return; }
+    const seasonId = typeof request.query.seasonId === 'string' ? request.query.seasonId : '';
+    const cityId = blitzCityId.safeParse(request.query.cityId);
+    if (!/^[a-z0-9-]{1,80}$/.test(seasonId) || !cityId.success) { response.status(400).json({ ok: false, error: 'Beacon Blitz leaderboard query is invalid.' }); return; }
+    try {
+      response.setHeader('cache-control', 'no-store');
+      response.json({ ok: true, data: await options.api.blitz.leaderboard(seasonId, cityId.data) });
+    } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
   options.app.post('/atlas/api/wallet/challenge', options.limit(24, 8), async (request, response) => {
     if (!options.api.identity || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Atlas wallet identity is unavailable.' }); return; }
     const parsed = walletChallengeBody.safeParse(request.body);
@@ -148,6 +162,20 @@ export function mountAtlasRoutes(options: {
     const parsed = submissionBody.safeParse(request.body);
     if (!parsed.success || !(await options.api.authorize(parsed.data.auth, 'atlas.run.submit', parsed.data.actorId, withoutAuth(parsed.data)))) { response.status(403).json({ ok: false, error: 'Atlas run submission was rejected.' }); return; }
     try { response.status(201).json({ ok: true, data: await options.api.competitive.submit({ ...withoutAuth(parsed.data), claimedSnapshot: parsed.data.claimedSnapshot as AtlasSnapshot }) }); }
+    catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
+  options.app.post('/atlas/api/blitz/tickets', options.limit(24, 8), async (request, response) => {
+    if (!options.api.blitz || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Beacon Blitz competition is unavailable.' }); return; }
+    const parsed = blitzTicketBody.safeParse(request.body);
+    if (!parsed.success || !(await options.api.authorize(parsed.data.auth, 'atlas.ticket.issue', parsed.data.actorId, withoutAuth(parsed.data)))) { response.status(403).json({ ok: false, error: 'Beacon Blitz ticket request was rejected.' }); return; }
+    try { response.status(201).json({ ok: true, data: await options.api.blitz.issueTicket(withoutAuth(parsed.data)) }); }
+    catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
+  options.app.post('/atlas/api/blitz/runs', options.limit(12, 4), async (request, response) => {
+    if (!options.api.blitz || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Beacon Blitz competition is unavailable.' }); return; }
+    const parsed = blitzSubmissionBody.safeParse(request.body);
+    if (!parsed.success || !(await options.api.authorize(parsed.data.auth, 'atlas.run.submit', parsed.data.actorId, withoutAuth(parsed.data)))) { response.status(403).json({ ok: false, error: 'Beacon Blitz run submission was rejected.' }); return; }
+    try { response.status(201).json({ ok: true, data: await options.api.blitz.submit(withoutAuth(parsed.data)) }); }
     catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
   options.app.post('/atlas/api/orders', options.limit(30, 10), async (request, response) => {
@@ -220,6 +248,10 @@ const walletBindBody = z.object({ actorId, challenge: z.unknown(), publicKey: z.
 const ticketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), role: z.enum(['explorer', 'builder']), auth: authProof });
 const actionBody = z.object({ moveX: z.number().finite(), moveY: z.number().finite(), tool: z.enum(['none', 'scanner', 'relay-tether', 'shield-pulse']), interact: z.boolean(), system: z.enum(['active', 'paused', 'hidden']).optional() });
 const submissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-f0-9]{32}$/), actorId, walletAddress: z.string().min(1).max(64), network: z.literal('testalbatross'), role: z.enum(['explorer', 'builder']), seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), challengeId: z.string().regex(/^[a-z0-9-]{1,80}$/), origin: z.string().url().max(256), campaignHash: z.string().regex(/^[a-f0-9]{64}$/), curriculumHash: z.string().regex(/^[a-f0-9]{64}$/), rulesetHash: z.string().regex(/^[a-f0-9]{64}$/), assistance: z.enum(['none', 'free-hint', 'purchased-hint', 'answer-reveal', 'debug']), actions: z.array(actionBody).max(20_000), claimedSnapshot: z.unknown(), replayHash: z.string().regex(/^[a-f0-9]{64}$/), auth: authProof });
+const blitzCityId = z.enum(['lagos', 'london', 'dubai']);
+const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
+const blitzTicketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), auth: authProof });
+const blitzSubmissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/), actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), seed: z.string().min(1).max(160), frames: z.array(z.object({ tick: z.number().int().min(0).max(3_000), input: blitzInputBody })).max(3_000), traceHash: z.string().regex(/^[a-f0-9]{64}$/), claimedScore: z.number().int().min(0).max(1_000_000), auth: authProof });
 function withoutAuth<T extends { auth: unknown }>(value: T): Omit<T, 'auth'> { const { auth: _auth, ...body } = value; return body; }
 
 function requiredNimiqAddress(value: unknown): string {

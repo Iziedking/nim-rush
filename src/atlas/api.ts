@@ -4,6 +4,8 @@ import type { AtlasCompetitiveTicket } from '../../shared/atlas/types';
 import type { AtlasWalletBinding, AtlasWalletBindingChallenge } from '../../shared/atlas/wallet-binding';
 import { authenticatedRequest, type ApiFetch, type ApiResult } from '../net/api';
 import { createAtlasCoreRunSubmission, type AtlasCoreRunRequest } from './competitive-run';
+import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
+import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 
 export type { AtlasCompetitiveTicket } from '../../shared/atlas/types';
 
@@ -145,6 +147,9 @@ export interface AtlasApiClient {
   getEchoes(): Promise<AtlasEchoSummary>;
   getCompetition(): Promise<AtlasCompetitionSummary[]>;
   getCompetitiveLeaderboard(seasonId: string, role: AtlasRole): Promise<AtlasLeaderboardRow[]>;
+  getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId): Promise<BlitzLeaderboardRow[]>;
+  issueBlitzTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<ApiResult<BlitzTicket>>;
+  submitBlitzRun(input: BlitzSubmissionInput): Promise<ApiResult<BlitzSubmitResult>>;
   issueCompetitiveTicket(input: { actorId: string; walletAddress: string; role: AtlasRole }): Promise<ApiResult<AtlasCompetitiveTicket>>;
   submitCompetitiveRun(input: AtlasCompetitiveRunInput): Promise<ApiResult<AtlasCompetitiveRunResult>>;
   submitCoreRun(input: AtlasCoreRunRequest): Promise<ApiResult<AtlasCompetitiveRunResult>>;
@@ -171,6 +176,9 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     getEchoes: () => requestData(fetchImpl, `${baseUrl}/atlas/api/echoes`, isEchoes),
     getCompetition: () => requestData(fetchImpl, `${baseUrl}/atlas/api/competition`, isCompetition),
     getCompetitiveLeaderboard: (seasonId, role) => requestData(fetchImpl, `${baseUrl}/atlas/api/competitive/leaderboard?seasonId=${encodeURIComponent(seasonId)}&role=${role}`, isLeaderboard),
+    getBlitzLeaderboard: (seasonId, cityId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}`, isBlitzLeaderboard),
+    issueBlitzTicket: (input) => authenticatedAtlasRequest<BlitzTicket>('/atlas/api/blitz/tickets', 'atlas.ticket.issue', input.actorId, input, isBlitzTicket, { apiBase: baseUrl, fetchImpl }),
+    submitBlitzRun: (input) => authenticatedAtlasRequest<BlitzSubmitResult>('/atlas/api/blitz/runs', 'atlas.run.submit', input.actorId, input, isBlitzSubmitResult, { apiBase: baseUrl, fetchImpl }),
     issueCompetitiveTicket: (input) => authenticatedRequest<AtlasCompetitiveTicket>('/atlas/api/competitive/tickets', 'atlas.ticket.issue', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
     submitCompetitiveRun: (input) => authenticatedRequest<AtlasCompetitiveRunResult>('/atlas/api/competitive/runs', 'atlas.run.submit', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
     submitCoreRun: async (input) => {
@@ -181,8 +189,8 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
         return { ok: false, error: error instanceof Error ? error.message : 'Atlas run could not be prepared.' };
       }
     },
-    issueWalletChallenge: (input) => authenticatedRequest<AtlasWalletBindingChallenge>('/atlas/api/wallet/challenge', 'atlas.wallet.challenge', input.actorId, input, { apiBase: baseUrl, fetchImpl }, isWalletBindingChallenge),
-    bindWallet: (input) => authenticatedRequest<AtlasWalletBinding>('/atlas/api/wallet/bind', 'atlas.wallet.bind', input.actorId, input, { apiBase: baseUrl, fetchImpl }, isWalletBinding),
+    issueWalletChallenge: (input) => authenticatedAtlasRequest<AtlasWalletBindingChallenge>('/atlas/api/wallet/challenge', 'atlas.wallet.challenge', input.actorId, input, isWalletBindingChallenge, { apiBase: baseUrl, fetchImpl }),
+    bindWallet: (input) => authenticatedAtlasRequest<AtlasWalletBinding>('/atlas/api/wallet/bind', 'atlas.wallet.bind', input.actorId, input, isWalletBinding, { apiBase: baseUrl, fetchImpl }),
     createOrder: (input) => requestOrder(fetchImpl, `${baseUrl}/atlas/api/orders`, { method: 'POST', body: input }),
     submitTransactionLookup: (orderId, lookup) => requestOrder(fetchImpl, `${baseUrl}/atlas/api/orders/${encodeURIComponent(orderId)}/transaction`, { method: 'POST', body: { lookup } }),
     reconcileOrder: (orderId) => requestOrder(fetchImpl, `${baseUrl}/atlas/api/orders/${encodeURIComponent(orderId)}/reconcile`, { method: 'POST' }),
@@ -249,6 +257,64 @@ function isLeaderboard(value: unknown): value is AtlasLeaderboardRow[] {
       && typeof row.prizeEligible === 'boolean'
       && typeof row.replayHash === 'string';
   });
+}
+
+function isBlitzLeaderboard(value: unknown): value is BlitzLeaderboardRow[] {
+  return Array.isArray(value) && value.every(isBlitzLeaderboardRow);
+}
+
+function isBlitzLeaderboardRow(value: unknown): value is BlitzLeaderboardRow {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.runId === 'string'
+    && typeof row.actorId === 'string'
+    && typeof row.walletAddress === 'string'
+    && typeof row.username === 'string'
+    && ['lagos', 'london', 'dubai'].includes(String(row.cityId))
+    && typeof row.seasonId === 'string'
+    && Number.isSafeInteger(row.score)
+    && Number.isSafeInteger(row.elapsedMs)
+    && Number.isSafeInteger(row.collisions)
+    && typeof row.traceHash === 'string'
+    && Number.isSafeInteger(row.verifiedAt)
+    && row.verified === true
+    && Number.isSafeInteger(row.rank);
+}
+
+function isBlitzTicket(value: unknown): value is BlitzTicket {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const ticket = value as Record<string, unknown>;
+  return typeof ticket.id === 'string'
+    && typeof ticket.actorId === 'string'
+    && typeof ticket.walletAddress === 'string'
+    && typeof ticket.username === 'string'
+    && ['lagos', 'london', 'dubai'].includes(String(ticket.cityId))
+    && typeof ticket.seasonId === 'string'
+    && typeof ticket.seed === 'string'
+    && Number.isSafeInteger(ticket.issuedAt)
+    && Number.isSafeInteger(ticket.expiresAt);
+}
+
+function isBlitzSubmitResult(value: unknown): value is BlitzSubmitResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const result = value as Record<string, unknown>;
+  return typeof result.duplicate === 'boolean' && isBlitzLeaderboardRow(result.row);
+}
+
+async function authenticatedAtlasRequest<T>(
+  path: string,
+  action: 'atlas.wallet.challenge' | 'atlas.wallet.bind' | 'atlas.ticket.issue' | 'atlas.run.submit',
+  actorId: string,
+  body: object,
+  guard: (value: unknown) => value is T,
+  transport: { apiBase: string; fetchImpl: AtlasFetch },
+): Promise<ApiResult<T>> {
+  const result = await authenticatedRequest<unknown>(path, action, actorId, body, transport);
+  if (!result.ok) return result;
+  const payload = result.value;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || (payload as { ok?: unknown }).ok !== true) return { ok: false, error: 'Atlas service returned invalid data.' };
+  const data = (payload as { data?: unknown }).data;
+  return guard(data) ? { ok: true, value: structuredClone(data) } : { ok: false, error: 'Atlas service returned invalid data.' };
 }
 
 async function requestOrder(fetchImpl: AtlasFetch, url: string, options: { method?: string; body?: unknown } = {}): Promise<AtlasOrderSummary> {
