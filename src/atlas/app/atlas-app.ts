@@ -1843,7 +1843,16 @@ export class AtlasApp {
     );
     const choices = element('div', 'atlas-daily-choices');
     for (const answer of dailyChallengeChoices(challenge)) {
-      const choice = actionButton(formatDailyChoice(answer), () => {
+      /*
+       * Ghosts, not signal.
+       *
+       * These were three full-width magenta lozenges, which is the exact thing
+       * this file already argues against on the landing screen: "Three
+       * identical orange buttons is not a hierarchy, it is three ways of
+       * saying 'maybe'." None of the three is the next thing to do - they are
+       * the options, and picking between them is the player's job.
+       */
+      const choice = ghostButton(formatDailyChoice(answer), () => {
         if (this.dailyCompletedDate === today) return;
         if (answer !== challenge.answer) {
           this.dailyNotice = dailyRetryHint(challenge);
