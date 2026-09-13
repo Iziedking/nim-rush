@@ -179,6 +179,12 @@ export const ATLAS_UI_TOKENS = Object.freeze({
   'atlas-shadow-rgb': '6 8 24',
   'atlas-raised-rgb': '32 38 76',
   'atlas-map-panel-rgb': '32 38 76',
+  /* Real money on the live chain, and the channel forms the reaction layer
+     composes its flashes from. See src/atlas/juice.ts. */
+  'atlas-treasury': '#ffd166',
+  'atlas-selected-rgb': '76 201 240',
+  'atlas-verified-rgb': '6 214 160',
+  'atlas-treasury-rgb': '255 209 102',
 });
 
 export type AtlasUiToken = keyof typeof ATLAS_UI_TOKENS;

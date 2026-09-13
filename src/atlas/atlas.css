@@ -25,9 +25,13 @@
   --atlas-verified: #06d6a0;
   --atlas-selected: #4cc9f0;
 
-  /* Real money on the live chain. Its own token rather than borrowing
-     --atlas-explorer: the two happen to share a gold today, but a path colour
-     and a treasury colour must be able to move apart. */
+  /* Real money on the live chain. Its own token rather than borrowing the
+     explorer gold. The two share a value today, but a path colour and a
+     treasury colour must be able to move apart.
+     Note: never write a token name followed by a colon inside a comment here.
+     atlas-palette.test.ts scans this block with a regex that does not skip
+     comments, so "--atlas-x:" in prose matches and its [^;]+ swallows the next
+     real declaration whole - which is exactly how this token went missing. */
   --atlas-treasury: #ffd166;
 
   /* The two paths, wherever they appear */
@@ -62,6 +66,12 @@
   --atlas-shadow-rgb: 6 8 24;
   --atlas-raised-rgb: 32 38 76;
   --atlas-map-panel-rgb: 32 38 76;
+  /* Channel forms for the reaction layer's flashes, which compose them with an
+     alpha at the use site. Same values as the selected, verified and treasury
+     tokens above; a stray rgba literal fails atlas-design-tokens.test.ts. */
+  --atlas-selected-rgb: 76 201 240;
+  --atlas-verified-rgb: 6 214 160;
+  --atlas-treasury-rgb: 255 209 102;
 
   /* Depth over a live world is glass and a soft glow, not a hard ink offset. */
   --atlas-glass-blur: blur(14px) saturate(1.3);
@@ -155,6 +165,45 @@ button { min-height: 44px; }
        with the card rather than floating over it. */
     box-shadow: 0 -16px 22px -2px rgb(var(--atlas-raised-rgb) / .99), var(--atlas-glow);
   }
+}
+/*
+ * The reaction layer. See src/atlas/juice.ts.
+ *
+ * Full-bleed, never interactive, and inert until a beat sets data-kind. The
+ * edges carry the colour rather than the centre, so a flash never washes out
+ * the thing the player is looking at.
+ */
+.atlas-juice { position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0; }
+.atlas-juice[data-kind] { animation: atlas-juice-flash 620ms ease-out both; }
+/*
+ * An inset edge glow, not a radial-gradient background.
+ *
+ * The first version used radial-gradient(120% 90% at 50% 50%, transparent 5x%,
+ * colour 100%). At that extent the gradient's 100% stop sits well outside the
+ * viewport, so the visible area never reaches the coloured end and the flash
+ * was invisible on the device even at opacity 1. An inset shadow is measured
+ * from the edges inward, so what it promises is what appears.
+ */
+.atlas-juice[data-kind='refused'] { box-shadow: inset 0 0 110px 26px rgb(var(--atlas-signal-rgb) / .62); }
+.atlas-juice[data-kind='evidence'] { box-shadow: inset 0 0 110px 26px rgb(var(--atlas-selected-rgb) / .58); }
+.atlas-juice[data-kind='repaired'] { box-shadow: inset 0 0 120px 30px rgb(var(--atlas-verified-rgb) / .62); }
+.atlas-juice[data-kind='complete'] { box-shadow: inset 0 0 130px 34px rgb(var(--atlas-treasury-rgb) / .7); }
+/* The shake is feel, not information, so reduced motion keeps the colour and
+   drops the movement. */
+.atlas-juice[data-kind][data-motion='full'] { animation: atlas-juice-flash 620ms ease-out both, atlas-juice-shake 260ms ease-in-out; }
+@keyframes atlas-juice-flash { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes atlas-juice-shake {
+  0%, 100% { translate: 0 0; }
+  22% { translate: -3px 2px; }
+  48% { translate: 3px -2px; }
+  74% { translate: -2px -1px; }
+}
+/* The thing that actually changed. */
+.atlas-punch { animation: atlas-punch-pop 420ms cubic-bezier(.2, 1.6, .35, 1) both; }
+@keyframes atlas-punch-pop { 0% { scale: 1; } 38% { scale: 1.07; } 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .atlas-juice[data-kind] { animation: atlas-juice-flash 620ms ease-out both; }
+  .atlas-punch { animation: none; }
 }
 .atlas-quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
 .atlas-quick-grid .atlas-primary { min-height: 54px; margin-top: 0; padding: 9px; font-size: 10px; }

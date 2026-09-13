@@ -4,6 +4,7 @@ import { createAtlasState } from '../../../shared/atlas/state';
 import { BEACON_SEALS, createRouteRun, recoverRouteRun, routeLesson, routeProgress, routeRestoration, routeTarget, routeWorld, stepRouteRun, type RouteAction, type RouteRun } from '../../../shared/atlas/adventures/route-rescue';
 import { createEvidenceChoices, createRouteCard } from '../ui/route-rescue';
 import { createAtlasUsageReporter } from '../usage';
+import { atlasJuiceForRoute, createAtlasJuice, type AtlasJuiceController } from '../juice';
 import { atlasFreePlayComplete } from '../../../shared/atlas/city/onboarding';
 import { AtlasRuntimeStats } from '../city/runtime-stats';
 import { projectLivingWorld } from '../../../shared/atlas/living-world';
@@ -94,6 +95,21 @@ export class AtlasApp {
   /* Anonymous participation counting. Reuses the session actor id above rather
    * than minting a second identifier; the server hashes it before storing. */
   private readonly usage = createAtlasUsageReporter({ session: this.sessionActorId, apiBase: import.meta.env.VITE_API_BASE ?? '' });
+  /*
+   * Hosted outside #ui, for the reason index.html already states about
+   * #chrome: "every screen mounts by replacing #ui wholesale". The overlay was
+   * appended to #ui first and the very next render removed it, so the reaction
+   * layer existed, reported healthy, and could never be seen. Probed on a
+   * Pixel 7 Pro: the controller was live, #ui held one child, and it was the
+   * welcome panel.
+   *
+   * A story beat also repaints, so anything that has to outlive a repaint
+   * belongs on the parent that #ui and the city stage share.
+   */
+  private readonly juice: AtlasJuiceController = createAtlasJuice({
+    host: this.ui.parentElement ?? this.ui,
+    reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+  });
   /*
    * Free play before the game asks anything of you.
    *
@@ -816,6 +832,15 @@ export class AtlasApp {
     if (this.routeFeed.length > 3) this.routeFeed.splice(0, this.routeFeed.length - 3);
     const refusal = action === 'try-signal' || action === 'follow-stale-trail' || action === 'trust-early-receipt' || action === 'trust-single-validator' || action === 'trust-browser' || action === 'rush-beacon' || action === 'weak-evidence' || action === 'reorg-evidence' || action === 'wrong-answer';
     this.audio.playWorldCue(refusal ? 'route-refused' : action === 'match-evidence' ? 'route-evidence' : action === 'install' ? 'route-repaired' : action === 'teach-back' ? 'route-complete' : 'city-interaction');
+    /*
+     * The same beat, seen as well as heard.
+     *
+     * These four story beats had a full audio vocabulary and nothing visual at
+     * all, so getting the central thing right produced a line of text and a
+     * sound. The flash names what happened in colour; the punch points at the
+     * card that changed because of it.
+     */
+    this.juice?.flash(atlasJuiceForRoute(action, refusal));
     if (action === 'install') {
       const chapter = next.chapter === 0 ? getAtlasStoryChapter('genesis-garden') : next.chapter === 1 ? getAtlasStoryChapter('light-forest') : next.chapter === 2 ? getAtlasStoryChapter('pay-harbor') : next.chapter === 3 ? getAtlasStoryChapter('albatross-causeway') : next.chapter === 4 ? getAtlasStoryChapter('validator-peaks') : next.chapter === 5 ? getAtlasStoryChapter('builder-city') : next.chapter === 6 ? getAtlasStoryChapter('beacon-core') : undefined;
       if (chapter) this.audio.narrateLine(chapter.voice.completion);
@@ -824,6 +849,9 @@ export class AtlasApp {
     this.evidenceOpen = false;
     this.input.clearJoystick();
     this.renderBeaconCommons();
+    // After the repaint, because renderBeaconCommons rebuilds the card and the
+    // class would otherwise be applied to an element already thrown away.
+    this.juice?.punch(this.routeCard);
     // A replaced button must not strand keyboard focus on the document body.
     this.routeCard?.querySelector<HTMLElement>('button, summary')?.focus({ preventScroll: true });
   };
