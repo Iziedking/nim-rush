@@ -10,6 +10,7 @@ import { createAtlasWalletBindingFlow } from '../wallet-binding';
 import { createAtlasAudio } from '../audio/atlas-audio';
 import { BlitzRenderer } from '../render/three/blitz-renderer';
 import { BlitzInputController } from './blitz-input';
+import { BlitzFrameGovernor } from './frame-governor';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
 const BLITZ_SEASON = 'cycle-2';
@@ -22,6 +23,7 @@ export class BlitzApp {
   private readonly walletBinding = createAtlasWalletBindingFlow({ api: this.api, wallet: this.wallet });
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly audio = createAtlasAudio();
+  private readonly frameGovernor = new BlitzFrameGovernor(60);
   private state: BlitzRunState | null = null;
   private frames: BlitzTraceFrame[] = [];
   private cityId: BlitzCityId = 'lagos';
@@ -41,6 +43,7 @@ export class BlitzApp {
   private pauseButton: HTMLButtonElement | null = null;
   private paused = false;
   private rankedTicket: BlitzTicket | null = null;
+  private rankedInterrupted = false;
 
   constructor(private readonly ui: HTMLElement, canvas: HTMLCanvasElement) {
     this.renderer = new BlitzRenderer(canvas);
@@ -57,9 +60,34 @@ export class BlitzApp {
       window.addEventListener('pointerdown', () => { this.audio.unlock(); this.audio.playTheme(); }, { once: true });
       window.addEventListener('resize', this.resize);
       document.addEventListener('visibilitychange', this.visibilityChanged);
-    } catch {
+    } catch (error) {
+      console.error('Beacon Blitz failed to start.', error);
       this.renderUnavailable();
     }
+  }
+
+  debugSnapshot(): object {
+    return {
+      screen: this.ui.querySelector('[data-blitz-screen]')?.getAttribute('data-blitz-screen') ?? null,
+      paused: this.paused,
+      state: this.state ? {
+        cityId: this.state.cityId,
+        phase: this.state.phase,
+        distanceMeters: this.state.distanceMeters,
+        laneOffset: this.state.laneOffset,
+        speedMps: this.state.speedMps,
+        boostEnergy: this.state.boostEnergy,
+        boostActive: this.state.boostActive,
+        driftActive: this.state.driftActive,
+        activeRelay: this.state.activeRelay?.missionIndex ?? null,
+      } : null,
+      renderer: this.renderer.debugSnapshot(),
+    };
+  }
+
+  async debugStartCity(cityId: BlitzCityId): Promise<void> {
+    if (!import.meta.env.DEV) return;
+    await this.startRun(cityId);
   }
 
   private renderIntro(): void {
@@ -83,6 +111,7 @@ export class BlitzApp {
   private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null): Promise<void> {
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
+    this.rankedInterrupted = false;
     const seed = rankedTicket?.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
     this.state = createBlitzRun({ cityId, seed });
     this.frames = [];
@@ -96,6 +125,7 @@ export class BlitzApp {
     this.renderRun();
     this.previousTimestamp = null;
     this.accumulator = 0;
+    this.frameGovernor.reset();
     if (this.frameHandle !== null) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = requestAnimationFrame(this.frame);
   }
@@ -110,8 +140,8 @@ export class BlitzApp {
     const cityName = node('div', 'blitz-city-name', city.circuit);
     this.timerNode = node('div', 'blitz-timer', '90.0');
     this.scoreNode = node('div', 'blitz-score', '000000');
-    this.pauseButton = button('II', 'blitz-pause', this.togglePause);
-    this.pauseButton.setAttribute('aria-label', 'Pause Beacon Blitz');
+    this.pauseButton = button(this.rankedTicket ? 'LIVE' : 'II', 'blitz-pause', this.togglePause);
+    this.pauseButton.setAttribute('aria-label', this.rankedTicket ? 'Ranked run cannot be paused' : 'Pause Beacon Blitz');
     top.append(cityName, this.timerNode, this.scoreNode, this.pauseButton);
 
     const speedBox = node('div', 'blitz-speed-box');
@@ -173,8 +203,10 @@ export class BlitzApp {
       steps += 1;
     }
     this.state = next;
-    this.renderer.render(next, this.input.sample().steer);
-    this.updateRunHud(next);
+    if (this.frameGovernor.shouldRender(timestamp)) {
+      this.renderer.render(next, this.input.sample().steer);
+      this.updateRunHud(next);
+    }
     if (next.phase === 'finished' || next.phase === 'timeout') {
       this.renderResult(next);
       return;
@@ -233,9 +265,18 @@ export class BlitzApp {
   }
 
   private togglePause = (): void => {
+    if (this.rankedTicket && !this.rankedInterrupted) {
+      if (this.feedbackNode) {
+        this.feedbackNode.textContent = 'RANKED RUNS STAY LIVE / KEEP RIDING';
+        this.feedbackNode.className = 'blitz-feedback is-wrong';
+      }
+      this.audio.playWorldCue('route-refused');
+      return;
+    }
     this.paused = !this.paused;
     this.previousTimestamp = null;
     this.accumulator = 0;
+    this.frameGovernor.reset();
     this.input.reset();
     if (this.pauseButton) {
       this.pauseButton.textContent = this.paused ? '▶' : 'II';
@@ -269,11 +310,18 @@ export class BlitzApp {
     const breakdown = node('div', 'blitz-breakdown');
     breakdown.append(stat(state.distanceScore.toLocaleString(), 'LINE'), stat(state.driftScore.toLocaleString(), 'DRIFT'), stat(state.relayScore.toLocaleString(), 'RELAYS'), stat(`-${state.penaltyScore.toLocaleString()}`, 'PENALTY'));
     screen.append(breakdown);
-    const competition = node('section', 'blitz-competition');
-    const rankStatus = node('p', 'blitz-rank-status', this.rankedTicket ? 'VERIFYING THIS RANKED RUN...' : 'GUEST SCORE / CONNECT ONCE TO START A VERIFIED RUN');
+    const reveal = node('section', 'blitz-next-city');
+    reveal.append(node('span', '', 'NEXT CIRCUIT'), node('h2', '', next.circuit), node('p', '', next.callout));
+    reveal.append(button(`Ride ${next.name}`, 'blitz-start blitz-next', () => void this.startRun(nextCityId)));
+    screen.append(reveal);
+    const competition = node('details', 'blitz-competition');
+    competition.open = Boolean(this.rankedTicket);
+    competition.append(node('summary', 'blitz-competition-summary', this.rankedTicket ? 'RANKED RUN STATUS' : 'RANK THIS CITY / LEADERBOARD'));
+    const rankStatus = node('p', 'blitz-rank-status', this.rankedTicket ? 'VERIFYING THIS RANKED RUN...' : 'CONNECT ONCE TO START A VERIFIED RUN. NO PAYMENT.');
     competition.append(rankStatus);
     if (this.rankedTicket) {
-      void this.submitRankedRun(state, rankStatus, competition);
+      if (this.rankedInterrupted) rankStatus.textContent = 'NOT VERIFIED / THIS RANKED RUN LEFT THE SCREEN.';
+      else void this.submitRankedRun(state, rankStatus, competition);
     } else {
       const username = node('input', 'blitz-username');
       username.type = 'text';
@@ -288,10 +336,7 @@ export class BlitzApp {
       void this.loadLeaderboard(state.cityId, competition);
     }
     screen.append(competition);
-    const reveal = node('section', 'blitz-next-city');
-    reveal.append(node('span', '', 'NEXT CIRCUIT'), node('h2', '', next.circuit), node('p', '', next.callout));
-    reveal.append(button(`Ride ${next.name}`, 'blitz-start blitz-next', () => void this.startRun(nextCityId)));
-    screen.append(reveal, button(`Ride ${city.name} again`, 'blitz-again', () => void this.startRun(state.cityId)));
+    screen.append(button(`Ride ${city.name} again`, 'blitz-again', () => void this.startRun(state.cityId)));
     this.ui.append(screen);
   }
 
@@ -377,6 +422,7 @@ export class BlitzApp {
 
   private visibilityChanged = (): void => {
     if (document.hidden) {
+      if (this.rankedTicket) this.rankedInterrupted = true;
       this.paused = true;
       this.previousTimestamp = null;
       this.accumulator = 0;
@@ -386,7 +432,10 @@ export class BlitzApp {
     }
   };
 
-  private resize = (): void => this.renderer.resize(window.innerWidth, window.innerHeight, Math.min(devicePixelRatio, 1.6));
+  private resize = (): void => {
+    this.renderer.resize(window.innerWidth, window.innerHeight, Math.min(devicePixelRatio, 1.6));
+    if (!this.state) this.renderer.renderPreview(this.cityId);
+  };
 }
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {

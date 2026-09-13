@@ -13,7 +13,14 @@ if (ui && canvas) {
   const app = searchParams.get('atlas') === 'legacy'
     ? new AtlasApp(ui, canvas)
     : new BlitzApp(ui, canvas);
-  app.boot();
+  const booted = app.boot();
+  if (import.meta.env.DEV && app instanceof BlitzApp) {
+    (window as unknown as { blitzDebug?: BlitzApp }).blitzDebug = app;
+    const previewCity = searchParams.get('blitz-city');
+    if (previewCity === 'lagos' || previewCity === 'london' || previewCity === 'dubai') {
+      void Promise.resolve(booted).then(() => app.debugStartCity(previewCity));
+    }
+  }
   /*
    * Screenshot capture hook, off unless asked for.
    *

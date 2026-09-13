@@ -20,6 +20,8 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain("data-blitz-screen', 'run'");
     expect(app).toContain('blitz-timer');
     expect(app).toContain('blitz-score');
+    expect(app).toContain('RANKED RUNS STAY LIVE / KEEP RIDING');
+    expect(app).toContain('NOT VERIFIED / THIS RANKED RUN LEFT THE SCREEN.');
     expect(app).toContain('blitz-boost-meter');
     expect(app).not.toContain('Passport');
     expect(app).not.toContain('Knowledge Book');
@@ -44,10 +46,30 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(renderer).toContain('createRelayGate');
     expect(renderer).toContain('atlas-blitz-bike');
     expect(renderer).toContain('atlas-blitz-rider-face');
+    expect(renderer).toContain('buildBlitzRoadRibbon');
+    expect(renderer).toContain('createRouteDistricts');
+    expect(renderer).toContain('createCityCrowd');
+    expect(renderer).toContain('updateCityCrowd');
+    expect(renderer).toContain('InstancedMesh');
+    expect(renderer).toContain('addStreetFrontage');
+    expect(renderer).toContain('createStreetLife');
+    expect(renderer).toContain('createRoadHazard');
+    expect(renderer).toContain('createLagosMarketStall');
+    expect(renderer).toContain('createLondonKiosk');
+    expect(renderer).toContain('createDubaiPalm');
+    expect(renderer).toContain("city.id === 'london' ? 0.3");
+  });
+
+  it('keeps the next city ahead of optional wallet setup on the result screen', () => {
+    expect(app.indexOf("screen.append(reveal)")).toBeGreaterThan(-1);
+    expect(app.indexOf("screen.append(reveal)")).toBeLessThan(app.indexOf("screen.append(competition)"));
+    expect(app).toContain('BlitzFrameGovernor');
+    expect(app).toContain('if (!this.state) this.renderer.renderPreview(this.cityId)');
   });
 
   it('keeps every mobile action at least 52px and honours reduced motion', () => {
     expect(css).toMatch(/\.blitz-control[^}]+min-height:\s*56px/s);
+    expect(css).toMatch(/\.blitz-pause[^}]+pointer-events:\s*auto/s);
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(app).toContain("matchMedia('(prefers-reduced-motion: reduce)')");
   });
