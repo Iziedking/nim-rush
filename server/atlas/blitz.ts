@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import type { AtlasIdentityService } from './identity';
 import type { AtlasStateStore } from './persistence';
+import type { AtlasDailyService } from './daily';
 import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
 import { hashBlitzTrace, replayBlitzTrace } from '../../shared/atlas/blitz/replay';
@@ -38,6 +39,15 @@ export function createAtlasBlitzService(options: {
   stateStore?: Pick<AtlasStateStore, 'load' | 'save'>;
   now?: () => number;
   randomId?: () => string;
+  /**
+   * The day's reward pool, when one is configured.
+   *
+   * A ranked run that the server re-simulated and agreed with is exactly the
+   * kind of thing the pool exists to pay for, so qualification happens here
+   * rather than on a client request: the player cannot ask to be eligible,
+   * only to be verified, and eligibility follows from that.
+   */
+  daily?: Pick<AtlasDailyService, 'qualifyVerifiedRun'>;
 }): AtlasBlitzService {
   const now = options.now ?? Date.now;
   const randomId = options.randomId ?? (() => randomBytes(16).toString('hex'));
@@ -118,6 +128,14 @@ export function createAtlasBlitzService(options: {
       const current = best.get(key);
       if (!current || compareRows(row, current) < 0) best.set(key, row);
       await persist();
+      /*
+       * Never fatal to the run. The score is verified and recorded either way;
+       * a reward pool that cannot be reached must not cost a player the place
+       * on the board they just earned.
+       */
+      try {
+        await options.daily?.qualifyVerifiedRun({ actorId: row.actorId, walletAddress: row.walletAddress, source: 'blitz-ranked' });
+      } catch { /* The board is the product; the pool is a bonus on top of it. */ }
       return { row: await rankedRow(row), duplicate: false };
     },
 

@@ -262,3 +262,64 @@ describe('what the treasury can actually pay', () => {
     expect(await daily.standing()).toMatchObject({ poolLuna: null, configuredPoolLuna: null, rewardsEnabled: false });
   });
 });
+
+/*
+ * A Beacon Blitz run is not a daily challenge: it has no answer to check and
+ * no guard that fits it. What it has is stronger - the server re-simulated the
+ * whole run from the player's input trace and got the same score. So
+ * eligibility is a consequence of that verification rather than a claim the
+ * client gets to make, which is why this path takes no payment, no answer and
+ * no assistance flag.
+ */
+describe('a run the server verified itself', () => {
+  const rider = { actorId: 'atlas-session-aaa', walletAddress: WALLET, source: 'blitz-ranked' as const };
+
+  it('earns a share of the day', async () => {
+    const daily = service({ dailyPoolLuna: 10_000 });
+    expect(await daily.qualifyVerifiedRun(rider)).toMatchObject({ accepted: true, eligible: true });
+    expect((await daily.standing()).eligibleCount).toBe(1);
+  });
+
+  it('still owes one share however many runs a wallet posts', async () => {
+    const daily = service({ dailyPoolLuna: 10_000 });
+    await daily.qualifyVerifiedRun(rider);
+    expect(await daily.qualifyVerifiedRun(rider)).toMatchObject({ duplicate: true });
+    await daily.qualifyVerifiedRun({ ...rider, actorId: 'atlas-session-bbb' });
+    expect((await daily.standing()).eligibleCount).toBe(1);
+  });
+
+  it('splits the pool between a rider and someone who answered today', async () => {
+    // One wallet rides, another answers. Both did something the server checked.
+    const daily = service({ dailyPoolLuna: 10_000 });
+    await daily.qualifyVerifiedRun(rider);
+    await daily.submit(submission({ actorId: 'atlas-session-bbb', walletAddress: OTHER_WALLET }));
+    const standing = await daily.standing();
+    expect(standing.eligibleCount).toBe(2);
+    expect(standing.shareLuna).toBe(5_000);
+  });
+
+  it('counts a wallet once even when it both rides and answers', async () => {
+    const daily = service({ dailyPoolLuna: 10_000 });
+    await daily.qualifyVerifiedRun(rider);
+    await daily.submit(submission());
+    expect((await daily.standing()).eligibleCount).toBe(1);
+  });
+
+  it('refuses to owe anything to nobody', async () => {
+    const daily = service({ dailyPoolLuna: 10_000 });
+    expect(await daily.qualifyVerifiedRun({ ...rider, walletAddress: '' })).toMatchObject({ accepted: false, reason: 'identity_required' });
+    expect((await daily.standing()).eligibleCount).toBe(0);
+  });
+
+  it('survives a restart, like every other way of qualifying', async () => {
+    const store: Record<string, unknown> = {};
+    const stateStore = {
+      load: async <T>(key: string, fallback: T) => (key in store ? (store[key] as T) : fallback),
+      save: async <T>(key: string, value: T) => { store[key] = value; },
+    };
+    await service({ stateStore }).qualifyVerifiedRun(rider);
+    const afterRestart = service({ stateStore });
+    expect((await afterRestart.standing()).eligibleCount).toBe(1);
+    expect(await afterRestart.qualifyVerifiedRun(rider)).toMatchObject({ duplicate: true });
+  });
+});

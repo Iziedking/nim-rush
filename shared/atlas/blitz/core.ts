@@ -5,8 +5,24 @@ import type { BlitzCityId, BlitzInput, BlitzMissionState, BlitzRoutePose, BlitzR
 export const BLITZ_TICK_RATE = 30;
 export const BLITZ_LIMIT_SECONDS = 90;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
-const RELAY_WINDOW_TICKS = BLITZ_TICK_RATE * 4;
+// Eight seconds gives a touch player time to read the Nimiq decision and
+// choose a route while the bike keeps moving at full pace.
+const RELAY_WINDOW_TICKS = BLITZ_TICK_RATE * 8;
 const GATE_FRACTIONS = [0.24, 0.51, 0.77] as const;
+/*
+ * The boost economy, per tick at 30 ticks a second.
+ *
+ * Net drain while boosting is 0.45 a tick, so a full tank is about four and a
+ * half seconds of boost and the 28 a run starts with is about two. Riding
+ * refills it in twenty seconds; drifting refills it in four and a half. That
+ * gap is the point: drift already carries risk, and this is what pays for it.
+ */
+const BOOST_MAX = 60;
+const BOOST_DRAIN = 0.55;
+const BOOST_IDLE_REGEN = 0.1;
+const BOOST_DRIFT_REGEN = 0.45;
+/** Charge needed to *start* a boost, so it cannot stutter on at empty. */
+const BOOST_ENGAGE_ENERGY = 9;
 
 export function createBlitzRun(input: { cityId: BlitzCityId; seed: string }): BlitzRunState {
   const city = blitzCity(input.cityId);
@@ -60,7 +76,16 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const elapsedMs = Math.round(elapsedTicks * 1_000 / BLITZ_TICK_RATE);
   const steer = input.steer;
   const driftActive = input.drift && Math.abs(steer) >= 0.2 && state.speedMps >= 8;
-  const boostActive = input.boost && state.boostEnergy > 0.25;
+  /*
+   * Boost needs a real charge to start, and only needs a spark to continue.
+   *
+   * The single threshold made boost stutter: at empty, idle regen crossed 0.25
+   * every few ticks, so holding the button flicked boost on for one tick, off
+   * for four, on for one - a visible judder and a speed line that never
+   * settled. Requiring a proper charge to engage, then letting it run to zero,
+   * makes a boost an event with a beginning and an end.
+   */
+  const boostActive = input.boost && (state.boostActive ? state.boostEnergy > 0.25 : state.boostEnergy >= BOOST_ENGAGE_ENERGY);
   const laneStep = steer * (driftActive ? 0.17 : 0.105);
   const laneOffset = clamp((state.laneOffset + laneStep) * (Math.abs(steer) < 0.04 ? 0.997 : 1), -city.roadWidth * 0.72, city.roadWidth * 0.72);
   const offRoad = Math.abs(laneOffset) > city.roadWidth * 0.5;
@@ -68,7 +93,16 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   // A bike should hook up immediately after GO. Keep the authoritative target
   // speed unchanged, but make the launch response feel responsive on touch.
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : 0.55);
-  let boostEnergy = clamp(state.boostEnergy + (driftActive ? 0.38 : 0.045) - (boostActive ? 1.05 : 0), 0, 100);
+  /*
+   * The old economy drained 1.05 a tick against a 28 charge: 31.5 a second, so
+   * a boost lasted 1.06 seconds and then never returned, because idle regen of
+   * 0.045 a tick needs ten minutes to refill. A 90 second run therefore sat at
+   * exactly base speed almost from end to end, and a racing game reads as fast
+   * because its speed *changes*. Boost is now about two and a half seconds,
+   * refills in roughly six while riding, and refills far faster if you drift
+   * for it - which makes drifting worth the risk it already carries.
+   */
+  let boostEnergy = clamp(state.boostEnergy + (driftActive ? BOOST_DRIFT_REGEN : BOOST_IDLE_REGEN) - (boostActive ? BOOST_DRAIN : 0), 0, BOOST_MAX);
   const distanceMeters = Math.min(city.lengthMeters, state.distanceMeters + speedMps / BLITZ_TICK_RATE);
   let distanceScore = Math.floor(distanceMeters * 10);
   let driftScore = state.driftScore + (driftActive ? Math.max(1, Math.round(Math.abs(steer) * speedMps * 0.16)) : 0);
@@ -113,7 +147,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     missions[activeRelay.missionIndex] = { ...mission, resolved: true, selectedChoice: input.relayChoice, correct };
     if (correct) {
       relayScore += 1_200;
-      boostEnergy = Math.min(100, boostEnergy + 24);
+      boostEnergy = Math.min(BOOST_MAX, boostEnergy + 24);
     } else {
       penaltyScore += 300;
       speedMps *= 0.78;

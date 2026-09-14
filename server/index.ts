@@ -289,6 +289,12 @@ const atlasLeaderboard = createAtlasLeaderboardService();
 const atlasBlitz = createAtlasBlitzService({
   identity: atlasIdentity,
   stateStore: ATLAS_PRODUCTION_GATE.durableRepository ? atlasStateStore : undefined,
+  /*
+   * A ranked run the server re-simulated and agreed with earns a share of the
+   * day's mainnet pool. Undefined when no treasury is configured, and the
+   * board works exactly the same without it.
+   */
+  daily: atlasDaily,
 });
 const atlasCompetitive = ATLAS_PRODUCTION_GATE.competitive && atlasBeacon && atlasEchoes
   ? createAtlasCompetitiveRuntime({ identity: atlasIdentity, tickets: atlasTickets, submissions: atlasSubmissions, leaderboard: atlasLeaderboard, beacon: atlasBeacon, echoes: atlasEchoes, stateStore: atlasStateStore, ticketPolicy: ATLAS_COMPETITIVE_POLICY! })

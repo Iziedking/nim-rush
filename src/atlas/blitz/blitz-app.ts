@@ -98,17 +98,37 @@ export class BlitzApp {
     const brand = node('div', 'blitz-brand', 'NIM ATLAS');
     const edition = node('span', 'blitz-edition', 'BEACON BLITZ');
     const title = node('h1', 'blitz-title', 'LAGOS\nPULSE');
-    const line = node('p', 'blitz-tagline', 'Ride the signal. Read the network. Own the line.');
+    const line = node('p', 'blitz-tagline', 'A payment is stuck. Ride it through Lagos. Bring it to finality.');
+    const brief = node('section', 'blitz-brief');
+    brief.append(node('span', 'blitz-brief-label', 'LAST LANTERN / PAYMENT RESCUE'));
+    brief.append(node('p', '', 'Make three checks at speed. The right call keeps the signal alive.'));
+    const verbs = node('div', 'blitz-brief-verbs');
+    verbs.append(briefVerb('01', 'CHECK', 'recipient'), briefVerb('02', 'APPROVE', 'fee'), briefVerb('03', 'CONFIRM', 'finality'));
+    brief.append(verbs);
     const city = blitzCity('lagos');
     const stats = node('div', 'blitz-intro-stats');
-    stats.append(stat('90 SEC', 'RUN'), stat('3', 'RELAYS'), stat('01 / 03', 'CITY'));
+    stats.append(stat('90 SEC', 'LIMIT'), stat('3', 'CHECKS'), stat('01 / 03', 'CITY'));
     const start = button('Ride Lagos', 'blitz-start', () => void this.startRun('lagos'));
-    const note = node('p', 'blitz-quiet', `${city.callout} Guest play starts instantly.`);
-    screen.append(brand, edition, title, line, stats, start, note);
+    const ranked = node('details', 'blitz-ranked-launch');
+    ranked.append(node('summary', 'blitz-ranked-label', 'WALLET VERIFIED / LEADERBOARD'));
+    const username = node('input', 'blitz-username');
+    username.type = 'text';
+    username.inputMode = 'text';
+    username.autocomplete = 'username';
+    username.maxLength = 18;
+    username.placeholder = 'Rider name';
+    username.setAttribute('aria-label', 'Ranked rider name');
+    try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
+    const rankedStatus = node('p', 'blitz-rank-status', 'Connect once. Your wallet signs identity, not a payment.');
+    const rankedButton = button('Connect wallet / rank Lagos', 'blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
+    ranked.append(username, rankedButton, rankedStatus);
+    const note = node('p', 'blitz-quiet', `${city.callout} Practice starts instantly. Ranked runs are replay-verified.`);
+    screen.append(brand, edition, title, line, brief, stats, start, ranked, note);
     this.ui.append(screen);
   }
 
   private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null): Promise<void> {
+    this.audio.unlock();
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
     this.rankedInterrupted = false;
@@ -122,6 +142,7 @@ export class BlitzApp {
     await this.renderer.loadCity(cityId);
     this.audio.stopTheme();
     this.audio.playCityAmbience();
+    this.audio.playBikeEngine(0);
     this.renderRun();
     this.previousTimestamp = null;
     this.accumulator = 0;
@@ -198,7 +219,9 @@ export class BlitzApp {
       this.pendingChoice = undefined;
       const frame: BlitzTraceFrame = { tick: this.frames.length, input };
       this.frames.push(frame);
+      const wasBoostActive = next.boostActive;
       next = stepBlitzRun(next, input);
+      if (!wasBoostActive && next.boostActive) this.audio.playWorldCue('bike-boost');
       this.accumulator -= STEP_MS;
       steps += 1;
     }
@@ -222,6 +245,7 @@ export class BlitzApp {
     if (this.speedNode) this.speedNode.textContent = Math.round(state.speedMps * 3.6).toString().padStart(3, '0');
     if (this.progressNode) this.progressNode.style.width = `${Math.min(100, state.distanceMeters / city.lengthMeters * 100)}%`;
     if (this.boostNode) this.boostNode.style.width = `${state.boostEnergy}%`;
+    this.audio.setBikeSpeed(state.speedMps);
     if (this.countdownNode) {
       this.countdownNode.textContent = state.phase === 'countdown' ? String(Math.max(1, Math.ceil(state.countdownTicks / BLITZ_TICK_RATE))) : 'GO';
       this.countdownNode.classList.toggle('is-live', state.phase === 'running');
@@ -278,6 +302,8 @@ export class BlitzApp {
     this.accumulator = 0;
     this.frameGovernor.reset();
     this.input.reset();
+    if (this.paused) this.audio.stopBikeEngine();
+    else this.audio.playBikeEngine(this.state?.speedMps ?? 0);
     if (this.pauseButton) {
       this.pauseButton.textContent = this.paused ? '▶' : 'II';
       this.pauseButton.setAttribute('aria-label', this.paused ? 'Resume Beacon Blitz' : 'Pause Beacon Blitz');
@@ -294,6 +320,7 @@ export class BlitzApp {
     this.input.reset();
     this.input.clearBindings();
     this.audio.stopCityAmbience();
+    this.audio.stopBikeEngine();
     this.audio.playTheme();
     if (state.phase === 'finished') this.audio.playWorldCue('route-complete');
     const city = blitzCity(state.cityId);
@@ -310,6 +337,15 @@ export class BlitzApp {
     const breakdown = node('div', 'blitz-breakdown');
     breakdown.append(stat(state.distanceScore.toLocaleString(), 'LINE'), stat(state.driftScore.toLocaleString(), 'DRIFT'), stat(state.relayScore.toLocaleString(), 'RELAYS'), stat(`-${state.penaltyScore.toLocaleString()}`, 'PENALTY'));
     screen.append(breakdown);
+    /*
+     * The day's pool, on the screen where a player has just earned a place in
+     * it. Appended empty and filled when the standing arrives, because the
+     * result screen must never wait on the network to paint.
+     */
+    const pool = node('section', 'blitz-pool');
+    pool.hidden = true;
+    screen.append(pool);
+    void this.presentDayPool(pool);
     const reveal = node('section', 'blitz-next-city');
     reveal.append(node('span', '', 'NEXT CIRCUIT'), node('h2', '', next.circuit), node('p', '', next.callout));
     reveal.append(button(`Ride ${next.name}`, 'blitz-start blitz-next', () => void this.startRun(nextCityId)));
@@ -340,6 +376,25 @@ export class BlitzApp {
     this.ui.append(screen);
   }
 
+  private async prepareRankedStart(cityId: BlitzCityId, usernameInput: HTMLInputElement, buttonNode: HTMLButtonElement, status: HTMLElement): Promise<void> {
+    const username = usernameInput.value.trim();
+    if (!/^[A-Za-z0-9_]{3,18}$/.test(username)) {
+      status.textContent = 'USE 3–18 LETTERS, NUMBERS, OR UNDERSCORES.';
+      return;
+    }
+    buttonNode.disabled = true;
+    status.textContent = 'OPENING NIMIQ WALLET / IDENTITY ONLY.';
+    try {
+      const ticket = await this.issueRankedTicket(cityId, username);
+      try { localStorage.setItem('nim-atlas:blitz:username', username); } catch { /* Storage is optional. */ }
+      status.textContent = 'IDENTITY VERIFIED. LOADING THE RANKED SEED...';
+      await this.startRun(cityId, ticket.value);
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message.toUpperCase() : 'RANKED MODE IS UNAVAILABLE.';
+      buttonNode.disabled = false;
+    }
+  }
+
   private async prepareRankedRun(cityId: BlitzCityId, usernameInput: HTMLInputElement, buttonNode: HTMLButtonElement, status: HTMLElement): Promise<void> {
     const username = usernameInput.value.trim();
     if (!/^[A-Za-z0-9_]{3,18}$/.test(username)) {
@@ -349,19 +404,49 @@ export class BlitzApp {
     buttonNode.disabled = true;
     status.textContent = 'OPENING NIMIQ WALLET FOR AN IDENTITY SIGNATURE. NO PAYMENT.';
     try {
-      const initialized = await this.wallet.initialize();
-      if (!initialized.ok) throw new Error(initialized.reason === 'timeout' ? 'Nimiq Wallet took too long. Try again.' : 'Nimiq Wallet is unavailable in this browser.');
-      const credential = await getOrCreateCredential();
-      const binding = await this.walletBinding.bind({ actorId: credential.playerId, seasonId: BLITZ_SEASON, network: 'testalbatross' });
-      if (!binding.ok) throw new Error(binding.error);
-      const ticket = await this.api.issueBlitzTicket({ actorId: credential.playerId, walletAddress: binding.value.address, username, cityId, seasonId: BLITZ_SEASON });
-      if (!ticket.ok) throw new Error(ticket.error);
+      const ticket = await this.issueRankedTicket(cityId, username);
       try { localStorage.setItem('nim-atlas:blitz:username', username); } catch { /* Storage is optional. */ }
       status.textContent = 'IDENTITY VERIFIED. LOADING THE RANKED SEED...';
       await this.startRun(cityId, ticket.value);
     } catch (error) {
       status.textContent = error instanceof Error ? error.message.toUpperCase() : 'RANKED MODE IS UNAVAILABLE.';
       buttonNode.disabled = false;
+    }
+  }
+
+  private async issueRankedTicket(cityId: BlitzCityId, username: string): Promise<{ value: BlitzTicket }> {
+    const initialized = await this.wallet.initialize();
+    if (!initialized.ok) throw new Error(initialized.reason === 'timeout' ? 'Nimiq Wallet took too long. Try again.' : 'Nimiq Wallet is unavailable in this browser.');
+    const credential = await getOrCreateCredential();
+    const binding = await this.walletBinding.bind({ actorId: credential.playerId, seasonId: BLITZ_SEASON, network: 'testalbatross' });
+    if (!binding.ok) throw new Error(binding.error);
+    const ticket = await this.api.issueBlitzTicket({ actorId: credential.playerId, walletAddress: binding.value.address, username, cityId, seasonId: BLITZ_SEASON });
+    if (!ticket.ok) throw new Error(ticket.error);
+    return ticket;
+  }
+
+  /**
+   * What a verified run is worth today, in real NIM.
+   *
+   * Silent on failure: a pool that cannot be read is not worth a broken result
+   * screen, and the score and the board are true regardless of it.
+   */
+  private async presentDayPool(host: HTMLElement): Promise<void> {
+    try {
+      const standing = await this.api.getDailyStanding();
+      if (!standing.rewardsEnabled || standing.poolLuna === null) return;
+      host.replaceChildren();
+      host.append(node('span', 'blitz-pool-label', "TODAY'S POOL / NIMIQ MAINNET"));
+      host.append(node('strong', 'blitz-pool-value', formatNim(standing.poolLuna)));
+      host.append(node('p', 'blitz-pool-note', standing.eligibleCount === 0
+        ? 'No rider has qualified yet today. Post a verified run and the pool is yours to share.'
+        : standing.shareLuna === null
+          ? `${standing.eligibleCount} riders qualified today.`
+          : `Split between ${standing.eligibleCount} qualified ${standing.eligibleCount === 1 ? 'rider' : 'riders'} — ${formatNim(standing.shareLuna)} each at the close of the day.`));
+      host.append(node('p', 'blitz-pool-note blitz-quiet', 'A share is paid to a wallet, so a ranked run is the only run that can earn one.'));
+      host.hidden = false;
+    } catch {
+      // Leave it hidden. The run still counted.
     }
   }
 
@@ -427,6 +512,7 @@ export class BlitzApp {
       this.previousTimestamp = null;
       this.accumulator = 0;
       this.input.reset();
+      this.audio.stopBikeEngine();
       if (this.pauseButton) { this.pauseButton.textContent = '▶'; this.pauseButton.setAttribute('aria-label', 'Resume Beacon Blitz'); }
       if (this.feedbackNode) { this.feedbackNode.textContent = 'PAUSED / TAP ▶ TO RIDE'; this.feedbackNode.className = 'blitz-feedback is-paused'; }
     }
@@ -456,6 +542,23 @@ function stat(value: string, label: string): HTMLElement {
   const item = node('div', 'blitz-stat');
   item.append(node('strong', '', value), node('span', '', label));
   return item;
+}
+
+function briefVerb(number: string, verb: string, detail: string): HTMLElement {
+  const item = node('div', 'blitz-brief-verb');
+  item.append(node('b', '', number), node('strong', '', verb), node('span', '', detail));
+  return item;
+}
+
+/**
+ * Luna is an integer unit; 1 NIM is 100,000 Luna.
+ *
+ * Both are shown because the pool is small in NIM terms and a bare Luna figure
+ * reads as larger than it is, while a bare NIM figure rounds the real amount
+ * away. Neither alone is honest.
+ */
+function formatNim(luna: number): string {
+  return `${luna.toLocaleString('en-US')} Luna (${(luna / 100_000).toLocaleString('en-US', { maximumFractionDigits: 5 })} NIM)`;
 }
 
 function shortWallet(address: string): string {

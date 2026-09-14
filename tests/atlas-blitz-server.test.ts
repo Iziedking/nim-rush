@@ -84,3 +84,46 @@ describe('Beacon Blitz verified competition service', () => {
     })).rejects.toThrow(/two minutes/i);
   });
 });
+
+/*
+ * The board is the product; the pool is a bonus on top of it. A treasury that
+ * cannot be reached must never cost a player the place they just earned, so
+ * qualification is attempted after the run is recorded and its failure is
+ * swallowed.
+ */
+describe('a verified run and the day pool', () => {
+  async function rankedRun(daily?: { qualifyVerifiedRun: (input: { actorId: string; walletAddress: string; source: string }) => Promise<unknown> }) {
+    const service = createAtlasBlitzService({
+      identity: identity({ 'season-1:actor-a': walletA }),
+      now: () => 9_000,
+      randomId: () => 'ticket-pool',
+      daily: daily as never,
+    });
+    const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
+    const trace = await completeTrace('lagos', ticket.seed);
+    const result = await service.submit({
+      runId: 'run-pool', ticketId: ticket.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface',
+      cityId: 'lagos', seasonId: 'season-1', seed: ticket.seed, frames: trace.frames, traceHash: trace.hash, claimedScore: trace.score,
+    });
+    return result;
+  }
+
+  it('qualifies the rider once the server agrees with the score', async () => {
+    const qualified: Array<{ walletAddress: string; source: string }> = [];
+    const result = await rankedRun({ qualifyVerifiedRun: async (input) => { qualified.push(input); return { accepted: true, eligible: true, date: '2026-09-14' }; } });
+    expect(result.row.verified).toBe(true);
+    expect(qualified).toHaveLength(1);
+    expect(qualified[0]!.source).toBe('blitz-ranked');
+    expect(qualified[0]!.walletAddress).toBe(result.row.walletAddress);
+  });
+
+  it('still records the run when the pool refuses', async () => {
+    const result = await rankedRun({ qualifyVerifiedRun: async () => { throw new Error('treasury unreachable'); } });
+    expect(result.row.verified).toBe(true);
+    expect(result.row.rank).toBe(1);
+  });
+
+  it('runs the board normally with no pool configured at all', async () => {
+    expect((await rankedRun()).row.verified).toBe(true);
+  });
+});

@@ -1,4 +1,5 @@
 import {
+  ACESFilmicToneMapping,
   AmbientLight,
   BoxGeometry,
   BufferGeometry,
@@ -14,10 +15,12 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   PlaneGeometry,
+  PCFShadowMap,
   PointLight,
   Scene,
   SphereGeometry,
@@ -34,6 +37,7 @@ import type { BlitzCityId, BlitzRunState } from '../../../../shared/atlas/blitz/
 interface BikeRig {
   readonly root: Group;
   readonly body: Group;
+  readonly rider: Group;
   readonly wheels: readonly Mesh[];
   readonly trail: readonly Mesh[];
   readonly motionStreaks: readonly Mesh[];
@@ -49,6 +53,17 @@ interface CrowdMember {
   readonly scale: number;
 }
 
+interface FeaturedCitizen {
+  readonly root: Group;
+  readonly arms: readonly Group[];
+  readonly legs: readonly Group[];
+  readonly distanceMeters: number;
+  readonly side: -1 | 1;
+  readonly direction: -1 | 1;
+  readonly speedMps: number;
+  readonly phase: number;
+}
+
 interface CityCrowd {
   readonly city: BlitzCityDefinition;
   readonly members: readonly CrowdMember[];
@@ -58,6 +73,7 @@ interface CityCrowd {
   readonly arms: InstancedMesh;
   readonly legs: InstancedMesh;
   readonly umbrellas: InstancedMesh | null;
+  readonly featured: readonly FeaturedCitizen[];
   readonly dummy: Object3D;
 }
 
@@ -67,6 +83,7 @@ export class BlitzRenderer {
   private readonly renderer: WebGLRenderer;
   private cityRoot: Group | null = null;
   private bike: BikeRig | null = null;
+  private speedMarkers: Mesh[] = [];
   private relayGates: Group[] = [];
   private crowd: CityCrowd | null = null;
   private activeCity: BlitzCityId | null = null;
@@ -77,6 +94,9 @@ export class BlitzRenderer {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFShadowMap;
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.outputColorSpace = 'srgb';
   }
 
@@ -105,9 +125,12 @@ export class BlitzRenderer {
     this.scene.fog = new Fog(city.fog, 24, 68);
     this.cityRoot = createCity(city);
     this.scene.add(this.cityRoot);
+    this.speedMarkers = createSpeedMarkers(city);
+    this.cityRoot.add(...this.speedMarkers);
     this.crowd = createCityCrowd(city);
     this.cityRoot.add(this.crowd.torso, this.crowd.head, this.crowd.hair, this.crowd.arms, this.crowd.legs);
     if (this.crowd.umbrellas) this.cityRoot.add(this.crowd.umbrellas);
+    for (const citizen of this.crowd.featured) this.cityRoot.add(citizen.root);
     this.bike = createBikeAndRider(city);
     this.cityRoot.add(this.bike.root);
     this.relayGates = [0.24, 0.51, 0.77].map((distance01, index) => {
@@ -175,6 +198,9 @@ export class BlitzRenderer {
     bike.root.rotation.y = pose.headingRadians;
     const targetLean = this.reducedMotion ? 0 : MathUtils.clamp(-steer * (state.driftActive ? 0.38 : 0.2) - pose.bend * 0.035, -0.46, 0.46);
     bike.body.rotation.z = MathUtils.lerp(bike.body.rotation.z, targetLean, 0.18);
+    bike.rider.rotation.z = MathUtils.lerp(bike.rider.rotation.z, targetLean * 0.48, 0.2);
+    bike.rider.rotation.y = MathUtils.lerp(bike.rider.rotation.y, steer * 0.075, 0.16);
+    bike.rider.position.x = MathUtils.lerp(bike.rider.position.x, -steer * 0.035, 0.18);
     const travelled = Math.max(0, state.distanceMeters - this.previousDistance);
     this.previousDistance = state.distanceMeters;
     for (const wheel of bike.wheels) wheel.rotation.x -= travelled / 0.34;
@@ -182,16 +208,45 @@ export class BlitzRenderer {
       trail.visible = state.boostActive;
       trail.scale.z = state.boostActive ? 1 + Math.sin(state.tick * 0.7) * 0.22 : 0.1;
     }
-    const speedEffect = MathUtils.clamp((state.speedMps - 13) / 14, 0, 1);
+    /*
+     * Speed cues scaled across the speed the game actually runs at.
+     *
+     * This was clamp((speed - 13) / 14), which saturates at 27 m/s. A run
+     * cruises at ~30 and boosts to ~38.5, so every cue - streaks, road
+     * markers, bike bob - sat pinned at maximum for the whole ride and boost
+     * changed nothing you could see. That is why 108 km/h did not feel like
+     * 108 km/h: the picture stopped responding before the bike got going.
+     *
+     * 12 m/s is a crawl, 40 m/s is boosted top speed. `rush` is the same
+     * curve biased to the top end, for the cues that should only scream when
+     * the bike is genuinely flying.
+     */
+    const speedEffect = MathUtils.clamp((state.speedMps - 12) / 26, 0, 1);
+    const rush = speedEffect * speedEffect;
     bike.body.position.y = Math.sin(state.tick * 0.22) * speedEffect * 0.026;
     bike.body.rotation.x = Math.sin(state.tick * 0.34) * speedEffect * 0.018;
+    bike.rider.position.y = 0.012 + Math.sin(state.tick * 0.22 + 0.8) * speedEffect * 0.014;
     bike.motionStreaks.forEach((streak, index) => {
       const material = streak.material as MeshBasicMaterial;
       const visible = speedEffect > 0.08;
       streak.visible = visible;
-      streak.position.z = -1.35 - ((state.tick * (0.28 + speedEffect * 0.28) + index * 0.82) % 5.9);
-      streak.scale.z = 0.45 + speedEffect * (1.05 + (index % 3) * 0.32);
-      material.opacity = speedEffect * (state.boostActive ? 0.86 : 0.5);
+      streak.position.z = -1.35 - ((state.tick * (0.26 + speedEffect * 0.95) + index * 0.82) % 5.9);
+      streak.scale.z = 0.45 + speedEffect * (1.05 + (index % 3) * 0.32) + rush * 1.5;
+      material.opacity = speedEffect * (state.boostActive ? 0.92 : 0.55);
+    });
+    const forward = new Vector3(Math.sin(pose.headingRadians), 0, Math.cos(pose.headingRadians));
+    const right = new Vector3(forward.z, 0, -forward.x);
+    const roadFlow = state.tick * (0.16 + speedEffect * 1.15);
+    this.speedMarkers.forEach((marker, index) => {
+      const distanceFromBike = 4.8 - ((roadFlow + index * 0.84) % 8.6);
+      const lane = ((index % 5) - 2) * 0.64;
+      marker.position.copy(new Vector3(pose.x, 0.102, pose.z))
+        .addScaledVector(forward, distanceFromBike)
+        .addScaledVector(right, lane);
+      marker.rotation.y = pose.headingRadians;
+      marker.scale.z = 0.5 + speedEffect * (0.8 + (index % 3) * 0.24) + rush * 0.9;
+      marker.visible = speedEffect > 0.06;
+      (marker.material as MeshBasicMaterial).opacity = speedEffect * (state.boostActive ? 0.72 : 0.44);
     });
     bike.headlight.intensity = state.boostActive ? 9 : 5;
     this.relayGates.forEach((gate, index) => {
@@ -202,23 +257,41 @@ export class BlitzRenderer {
     });
     if (this.crowd) updateCityCrowd(this.crowd, state.tick);
 
-    const forward = new Vector3(Math.sin(pose.headingRadians), 0, Math.cos(pose.headingRadians));
-    const right = new Vector3(forward.z, 0, -forward.x);
     const portrait = this.camera.aspect < 0.8;
-    const speedLookahead = Math.min(1.1, state.speedMps / 24);
+    const speedLookahead = Math.min(1.45, state.speedMps / 20);
     const focus = new Vector3(pose.x, portrait ? 1.9 : 1.18, pose.z).addScaledVector(forward, (portrait ? 1.9 : 2.1) + speedLookahead);
-    const desired = new Vector3(pose.x, portrait ? 3.4 : 3.5, pose.z)
-      .addScaledVector(forward, portrait ? -7.2 : -7.8)
+    /*
+     * Lower and closer than it was (3.5 m up, 7.8 m back).
+     *
+     * Speed is read from what passes near the camera, so a high, distant
+     * chase view flattens it however fast the bike is actually going. Dropping
+     * the eye toward the road and pulling in puts the tarmac and the kerb in
+     * the near field where they streak.
+     */
+    const desired = new Vector3(pose.x, portrait ? 2.62 : 2.72, pose.z)
+      .addScaledVector(forward, portrait ? -6.1 : -6.55)
       .addScaledVector(right, this.reducedMotion ? 0 : -pose.bend * 0.16);
     if (!this.cameraReady) {
       this.camera.position.copy(desired);
       this.cameraReady = true;
     } else {
-      this.camera.position.lerp(desired, this.reducedMotion ? 0.22 : state.boostActive ? 0.13 : 0.17);
+      /*
+       * Tighter than it was (0.125, and 0.085 on boost). A heavily smoothed
+       * chase camera lags the bike, which damps exactly the relative motion
+       * that reads as speed - and it was slowest precisely when boosting.
+       * Boost now tightens the follow rather than loosening it.
+       */
+      this.camera.position.lerp(desired, this.reducedMotion ? 0.22 : state.boostActive ? 0.2 : 0.17);
     }
     this.camera.lookAt(focus);
-    const desiredFov = this.reducedMotion ? 58 : state.boostActive ? 71 : 60 + Math.min(6, state.speedMps / 6.5);
-    this.camera.fov = MathUtils.lerp(this.camera.fov, desiredFov, 0.12);
+    this.camera.rotation.z = MathUtils.lerp(this.camera.rotation.z, this.reducedMotion ? 0 : -targetLean * 0.08, 0.14);
+    /*
+     * FOV is the strongest speed cue a racing game has, and this was barely
+     * using it: 60 to 64.6 across the whole normal range. It now opens with
+     * real speed and kicks again on boost.
+     */
+    const desiredFov = this.reducedMotion ? 58 : 58 + speedEffect * 12 + (state.boostActive ? 7 : 0);
+    this.camera.fov = MathUtils.lerp(this.camera.fov, desiredFov, state.boostActive ? 0.16 : 0.12);
     this.camera.updateProjectionMatrix();
   }
 }
@@ -236,6 +309,7 @@ function createCity(city: BlitzCityDefinition): Group {
   createSkyline(root, city);
   createCityLandmarks(root, city);
   createStreetLife(root, city);
+  createRoadsideDetails(root, city);
   createBeacon(root, city);
   for (const obstacle of city.obstacles) {
     const pose = sampleBlitzRoute(city.id, city.lengthMeters * obstacle.distance01, obstacle.lane);
@@ -277,6 +351,18 @@ function createRoadRibbon(city: BlitzCityDefinition, width: number, material: Me
   geometry.setIndex([...ribbon.indices]);
   geometry.computeVertexNormals();
   return new Mesh(geometry, material);
+}
+
+function createSpeedMarkers(city: BlitzCityDefinition): Mesh[] {
+  return Array.from({ length: 13 }, (_, index) => {
+    const marker = new Mesh(
+      new BoxGeometry(index % 3 === 0 ? 0.08 : 0.045, 0.018, 1.1),
+      new MeshBasicMaterial({ color: index % 2 === 0 ? city.signal : 0xf7f9ff, transparent: true, opacity: 0 }),
+    );
+    marker.name = `atlas-blitz-speed-marker-${index}`;
+    marker.visible = false;
+    return marker;
+  });
 }
 
 function createRouteDistricts(root: Group, city: BlitzCityDefinition): void {
@@ -323,9 +409,14 @@ function addStreetFrontage(building: Mesh, width: number, depth: number, height:
   const windowColor = city.id === 'lagos' && index % 2 === 0 ? city.accent : city.signal;
   const material = new MeshBasicMaterial({ color: windowColor, transparent: true, opacity: city.id === 'london' ? 0.74 : 0.9 });
   for (let floor = 0; floor < floors; floor += 1) {
-    const windows = new Mesh(new BoxGeometry(width * 0.62, 0.11, 0.045), material);
-    windows.position.set(0, -height / 2 + 2.05 + floor * 1.28, -depth / 2 - 0.03);
-    building.add(windows);
+    for (let column = -1; column <= 1; column += 1) {
+      const windows = new Mesh(new BoxGeometry(width * 0.15, 0.13, 0.045), material);
+      windows.position.set(column * width * 0.22, -height / 2 + 2.05 + floor * 1.28, -depth / 2 - 0.03);
+      building.add(windows);
+    }
+    const sill = new Mesh(new BoxGeometry(width * 0.74, 0.035, 0.06), new MeshStandardMaterial({ color: city.id === 'london' ? 0x8995a6 : 0x504557, roughness: 0.78 }));
+    sill.position.set(0, -height / 2 + 1.83 + floor * 1.28, -depth / 2 - 0.04);
+    building.add(sill);
   }
   if (city.id === 'dubai') {
     for (const x of [-width * 0.32, width * 0.32]) {
@@ -384,7 +475,7 @@ function createCityCrowd(city: BlitzCityDefinition): CityCrowd {
   head.instanceColor!.needsUpdate = true;
   arms.instanceColor!.needsUpdate = true;
   if (umbrellas?.instanceColor) umbrellas.instanceColor.needsUpdate = true;
-  const crowd = { city, members, torso, head, hair, arms, legs, umbrellas, dummy: new Object3D() };
+  const crowd = { city, members, torso, head, hair, arms, legs, umbrellas, featured: createFeaturedCitizens(city), dummy: new Object3D() };
   updateCityCrowd(crowd, 0);
   return crowd;
 }
@@ -414,6 +505,118 @@ function updateCityCrowd(crowd: CityCrowd, tick: number): void {
   crowd.arms.instanceMatrix.needsUpdate = true;
   crowd.legs.instanceMatrix.needsUpdate = true;
   if (crowd.umbrellas) crowd.umbrellas.instanceMatrix.needsUpdate = true;
+  for (const citizen of crowd.featured) {
+    const distance = (citizen.distanceMeters + citizen.speedMps * elapsedSeconds * citizen.direction + crowd.city.lengthMeters) % crowd.city.lengthMeters;
+    const pose = sampleBlitzRoute(crowd.city.id, distance, citizen.side * (crowd.city.roadWidth / 2 + 1.65));
+    citizen.root.position.set(pose.x, 0, pose.z);
+    citizen.root.rotation.y = pose.headingRadians + Math.PI;
+    const stride = Math.sin(elapsedSeconds * (citizen.speedMps > 0 ? 7.2 : 1.5) + citizen.phase) * (citizen.speedMps > 0 ? 0.32 : 0.035);
+    citizen.arms[0]!.rotation.x = stride;
+    citizen.arms[1]!.rotation.x = -stride;
+    citizen.legs[0]!.rotation.x = -stride * 0.72;
+    citizen.legs[1]!.rotation.x = stride * 0.72;
+    citizen.root.position.y = Math.max(0, Math.abs(stride) * 0.012);
+  }
+}
+
+function createFeaturedCitizens(city: BlitzCityDefinition): FeaturedCitizen[] {
+  const random = seeded(`${city.id}-featured-citizens`);
+  const outfits = city.id === 'lagos'
+    ? [0xffa51f, 0x0f9f91, 0xe94b62, 0x4c72b8, 0xf4e7d0, 0x7d4e38]
+    : city.id === 'london'
+      ? [0x263653, 0xa62d4d, 0x8b99ad, 0xe9dfd0, 0x376b8b, 0x453858]
+      : [0xf4ead9, 0xd9ae5f, 0x31527d, 0x2a9c8a, 0xf0c4a4, 0x7e5b8a];
+  const skins = [0x3b2119, 0x633b2d, 0x87563f, 0xb77757, 0xd59b78, 0xe6b99a];
+  const hairColors = [0x110d12, 0x21161a, 0x3a2119, 0x5b3a2a];
+  return Array.from({ length: 6 }, (_, index) => {
+    const outfit = new MeshPhysicalMaterial({ color: outfits[index % outfits.length]!, roughness: 0.74, metalness: 0.03, clearcoat: 0.08, clearcoatRoughness: 0.66 });
+    const trouser = new MeshPhysicalMaterial({ color: index % 2 === 0 ? 0x202338 : 0x3b3540, roughness: 0.88, metalness: 0.02 });
+    const skin = new MeshPhysicalMaterial({ color: skins[(index * 2) % skins.length]!, roughness: 0.72, metalness: 0, clearcoat: 0.04, clearcoatRoughness: 0.75 });
+    const hair = new MeshPhysicalMaterial({ color: hairColors[index % hairColors.length]!, roughness: 0.9, metalness: 0 });
+    const eye = new MeshBasicMaterial({ color: 0xf7f2e8 });
+    const pupil = new MeshBasicMaterial({ color: 0x15111a });
+    const mouth = new MeshBasicMaterial({ color: 0x542b32 });
+    const root = new Group();
+    root.name = `atlas-blitz-${city.id}-featured-citizen-${index + 1}`;
+    const torso = new Mesh(new SphereGeometry(0.27, 14, 10), outfit);
+    torso.scale.set(0.95, 1.35, 0.68);
+    torso.position.set(0, 1.03, 0);
+    const chest = new Mesh(new SphereGeometry(0.22, 12, 8), outfit);
+    chest.scale.set(1.12, 0.7, 0.72);
+    chest.position.set(0, 1.27, 0.03);
+    const pelvis = new Mesh(new SphereGeometry(0.23, 12, 8), trouser);
+    pelvis.scale.set(1.05, 0.62, 0.72);
+    pelvis.position.set(0, 0.78, 0);
+    const neck = new Mesh(new CylinderGeometry(0.075, 0.09, 0.16, 10), skin);
+    neck.position.set(0, 1.55, 0);
+    const head = new Mesh(new SphereGeometry(0.205, 16, 12), skin);
+    head.scale.set(0.86, 1.08, 0.84);
+    head.position.set(0, 1.76, 0.02);
+    const hairCap = new Mesh(new SphereGeometry(0.211, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), hair);
+    hairCap.scale.set(0.99, 1.02, 0.98);
+    hairCap.position.set(0, 1.83, -0.015);
+    const nose = new Mesh(new SphereGeometry(0.032, 8, 6), skin);
+    nose.scale.set(0.8, 1.2, 1.25);
+    nose.position.set(0, 1.75, 0.198);
+    const smile = new Mesh(new BoxGeometry(0.075, 0.018, 0.012), mouth);
+    smile.position.set(0, 1.68, 0.196);
+    root.add(torso, chest, pelvis, neck, head, hairCap, nose, smile);
+    for (const x of [-0.072, 0.072]) {
+      const eyeWhite = new Mesh(new SphereGeometry(0.028, 8, 6), eye);
+      eyeWhite.scale.set(1, 0.72, 0.42);
+      eyeWhite.position.set(x, 1.80, 0.185);
+      const pupilDot = new Mesh(new SphereGeometry(0.012, 7, 5), pupil);
+      pupilDot.position.set(x, 1.80, 0.207);
+      const brow = new Mesh(new BoxGeometry(0.06, 0.012, 0.015), hair);
+      brow.position.set(x, 1.855, 0.19);
+      brow.rotation.z = x < 0 ? -0.08 : 0.08;
+      root.add(eyeWhite, pupilDot, brow);
+    }
+    for (const x of [-0.205, 0.205]) {
+      const ear = new Mesh(new SphereGeometry(0.055, 8, 6), skin);
+      ear.scale.set(0.52, 0.9, 0.6);
+      ear.position.set(x, 1.76, 0.005);
+      root.add(ear);
+    }
+    const arms = [-1, 1].map((side) => {
+      const arm = new Group();
+      arm.position.set(side * 0.27, 1.3, 0);
+      arm.add(
+        limb(new Vector3(0, 0, 0), new Vector3(side * 0.05, -0.31, 0.015), 0.078, outfit),
+        limb(new Vector3(side * 0.05, -0.31, 0.015), new Vector3(side * 0.07, -0.6, 0.04), 0.064, skin),
+      );
+      const hand = new Mesh(new SphereGeometry(0.07, 8, 6), skin);
+      hand.position.set(side * 0.07, -0.63, 0.04);
+      arm.add(hand);
+      root.add(arm);
+      return arm;
+    });
+    const legs = [-1, 1].map((side) => {
+      const leg = new Group();
+      leg.position.set(side * 0.12, 0.74, 0);
+      leg.add(
+        limb(new Vector3(0, 0, 0), new Vector3(side * 0.03, -0.36, 0.01), 0.092, trouser),
+        limb(new Vector3(side * 0.03, -0.36, 0.01), new Vector3(side * 0.04, -0.68, 0.1), 0.074, trouser),
+      );
+      const shoe = new Mesh(new SphereGeometry(0.12, 10, 7), new MeshStandardMaterial({ color: 0x11131f, roughness: 0.92 }));
+      shoe.scale.set(0.85, 0.55, 1.35);
+      shoe.position.set(side * 0.04, -0.73, 0.13);
+      leg.add(shoe);
+      root.add(leg);
+      return leg;
+    });
+    root.traverse((object) => { if (object instanceof Mesh) object.castShadow = true; });
+    return {
+      root,
+      arms,
+      legs,
+      distanceMeters: city.lengthMeters * ((index + 0.16 + random() * 0.12) / 6),
+      side: index % 2 === 0 ? -1 : 1,
+      direction: index % 3 === 0 ? -1 : 1,
+      speedMps: 0.22 + random() * 0.5,
+      phase: random() * Math.PI * 2,
+    };
+  });
 }
 
 function setCrowdPart(mesh: InstancedMesh, index: number, dummy: Object3D, x: number, z: number, heading: number, offsetX: number, y: number, offsetZ: number, pitch: number, scale: number): void {
@@ -477,6 +680,48 @@ function createSkyline(root: Group, city: BlitzCityDefinition): void {
       building.add(window);
     }
   }
+}
+
+function createRoadsideDetails(root: Group, city: BlitzCityDefinition): void {
+  const roadside = new Group();
+  roadside.name = `atlas-blitz-roadside-details-${city.id}`;
+  const stops = city.id === 'lagos' ? 10 : 8;
+  const poleMaterial = new MeshStandardMaterial({ color: city.id === 'london' ? 0x1a2030 : 0x28263a, roughness: 0.72, metalness: 0.18 });
+  const glowMaterial = new MeshBasicMaterial({ color: city.signal });
+  for (let index = 0; index < stops; index += 1) {
+    const distance01 = (index + 0.42) / stops;
+    const side = index % 2 === 0 ? -1 : 1;
+    const pose = sampleBlitzRoute(city.id, city.lengthMeters * distance01, side * (city.roadWidth / 2 + 2.7));
+    const pole = new Group();
+    pole.position.set(pose.x, 0, pose.z);
+    pole.rotation.y = pose.headingRadians + (side < 0 ? Math.PI : 0);
+    const stem = new Mesh(new CylinderGeometry(0.045, 0.075, 2.7, 8), poleMaterial);
+    stem.position.y = 1.35;
+    const arm = new Mesh(new BoxGeometry(0.48, 0.045, 0.045), poleMaterial);
+    arm.position.set(side < 0 ? 0.2 : -0.2, 2.64, 0);
+    const lamp = new Mesh(new SphereGeometry(0.095, 8, 6), glowMaterial);
+    lamp.position.set(side < 0 ? 0.39 : -0.39, 2.58, 0);
+    pole.add(stem, arm, lamp);
+    roadside.add(pole);
+    if (city.id !== 'london' && index % 2 === 0) {
+      const tree = new Group();
+      tree.position.set(pose.x + (side < 0 ? -0.65 : 0.65), 0, pose.z);
+      const trunk = new Mesh(new CylinderGeometry(0.09, 0.14, city.id === 'dubai' ? 2.2 : 1.7, 8), new MeshStandardMaterial({ color: city.id === 'dubai' ? 0x9c7045 : 0x563d32, roughness: 0.94 }));
+      trunk.position.y = city.id === 'dubai' ? 1.1 : 0.85;
+      const crown = new Mesh(new SphereGeometry(city.id === 'dubai' ? 0.74 : 0.62, 10, 8), new MeshStandardMaterial({ color: city.id === 'dubai' ? 0x238b6e : 0x2f765e, roughness: 0.9 }));
+      crown.scale.set(1, city.id === 'dubai' ? 0.68 : 0.88, 1);
+      crown.position.y = city.id === 'dubai' ? 2.35 : 1.72;
+      tree.add(trunk, crown);
+      roadside.add(tree);
+    }
+    if (index % 3 === 1) {
+      const sign = new Mesh(new BoxGeometry(0.6, 0.32, 0.045), new MeshBasicMaterial({ color: index % 2 === 0 ? city.accent : city.signal }));
+      sign.position.set(pose.x + (side < 0 ? -0.28 : 0.28), 1.45, pose.z);
+      sign.rotation.y = pose.headingRadians + Math.PI / 2;
+      roadside.add(sign);
+    }
+  }
+  root.add(roadside);
 }
 
 function createCityLandmarks(root: Group, city: BlitzCityDefinition): void {
@@ -696,10 +941,11 @@ function createBikeAndRider(city: BlitzCityDefinition): BikeRig {
   const root = new Group();
   root.name = 'atlas-blitz-bike';
   const body = new Group();
+  const rider = createHumanRider(city);
   root.add(body);
-  const dark = new MeshStandardMaterial({ color: 0x0c1026, roughness: 0.64, metalness: 0.38 });
-  const frame = new MeshStandardMaterial({ color: city.accent, roughness: 0.42, metalness: 0.48 });
-  const chrome = new MeshStandardMaterial({ color: 0xb8c7e8, roughness: 0.3, metalness: 0.74 });
+  const dark = new MeshPhysicalMaterial({ color: 0x0c1026, roughness: 0.5, metalness: 0.58, clearcoat: 0.34, clearcoatRoughness: 0.26 });
+  const frame = new MeshPhysicalMaterial({ color: city.accent, roughness: 0.32, metalness: 0.62, clearcoat: 0.72, clearcoatRoughness: 0.18 });
+  const chrome = new MeshPhysicalMaterial({ color: 0xb8c7e8, roughness: 0.2, metalness: 0.88, clearcoat: 0.4, clearcoatRoughness: 0.14 });
   const wheels: Mesh[] = [];
   for (const z of [-0.88, 0.92]) {
     const wheel = new Mesh(new TorusGeometry(0.34, 0.085, 10, 22), dark);
@@ -707,11 +953,21 @@ function createBikeAndRider(city: BlitzCityDefinition): BikeRig {
     wheel.position.set(0, 0.34, z);
     wheel.castShadow = true;
     body.add(wheel);
+    const disc = new Mesh(new TorusGeometry(0.19, 0.014, 7, 18), chrome);
+    disc.rotation.y = Math.PI / 2;
+    disc.position.set(0, 0.34, z);
+    body.add(disc);
+    const hub = new Mesh(new CylinderGeometry(0.055, 0.055, 0.16, 10), chrome);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(0, 0.34, z);
+    body.add(hub);
     wheels.push(wheel);
   }
   body.add(cylinderBetween(new Vector3(0, 0.4, -0.82), new Vector3(0, 0.74, 0.05), 0.055, frame));
   body.add(cylinderBetween(new Vector3(0, 0.4, 0.86), new Vector3(0, 0.74, 0.05), 0.055, frame));
   body.add(cylinderBetween(new Vector3(0, 0.4, -0.82), new Vector3(0, 0.42, 0.86), 0.04, chrome));
+  body.add(cylinderBetween(new Vector3(-0.16, 0.48, 0.72), new Vector3(-0.14, 0.94, 0.76), 0.035, chrome));
+  body.add(cylinderBetween(new Vector3(0.16, 0.48, 0.72), new Vector3(0.14, 0.94, 0.76), 0.035, chrome));
   const tank = new Mesh(new SphereGeometry(0.28, 12, 8), frame);
   tank.scale.set(1.25, 0.72, 1.5);
   tank.position.set(0, 0.78, 0.24);
@@ -723,12 +979,18 @@ function createBikeAndRider(city: BlitzCityDefinition): BikeRig {
   const fairing = new Mesh(new BoxGeometry(0.46, 0.4, 0.48), frame);
   fairing.position.set(0, 0.79, 0.68);
   fairing.rotation.x = -0.18;
+  const windscreen = new Mesh(new BoxGeometry(0.3, 0.22, 0.06), new MeshPhysicalMaterial({ color: 0x8ed8ef, roughness: 0.12, metalness: 0.15, transmission: 0.18, transparent: true, opacity: 0.76 }));
+  windscreen.position.set(0, 1.01, 0.76);
+  windscreen.rotation.x = -0.38;
+  const dashboard = new Mesh(new CylinderGeometry(0.09, 0.09, 0.025, 12), new MeshBasicMaterial({ color: city.signal }));
+  dashboard.rotation.x = Math.PI / 2;
+  dashboard.position.set(0, 1.025, 0.63);
   const exhaust = new Mesh(new CylinderGeometry(0.07, 0.085, 0.78, 10), chrome);
   exhaust.rotation.x = Math.PI / 2;
   exhaust.position.set(0.27, 0.42, -0.35);
   const tail = new Mesh(new BoxGeometry(0.22, 0.12, 0.07), new MeshBasicMaterial({ color: 0xff477e }));
   tail.position.set(0, 0.72, -0.75);
-  body.add(tank, seat, handle, fairing, exhaust, tail, createHumanRider(city));
+  body.add(tank, seat, handle, fairing, windscreen, dashboard, exhaust, tail, rider);
   const headlight = new PointLight(0xcff8ff, 5, 10, 2);
   headlight.position.set(0, 0.88, 0.95);
   body.add(headlight);
@@ -749,7 +1011,7 @@ function createBikeAndRider(city: BlitzCityDefinition): BikeRig {
     body.add(streak);
     return streak;
   });
-  return { root, body, wheels, trail, motionStreaks, headlight };
+  return { root, body, rider, wheels, trail, motionStreaks, headlight };
 }
 
 function createHumanRider(city: BlitzCityDefinition): Group {
@@ -779,13 +1041,26 @@ function createHumanRider(city: BlitzCityDefinition): Group {
   const hairBack = new Mesh(new SphereGeometry(0.145, 10, 7), hair);
   hairBack.scale.set(0.82, 1.18, 0.58);
   hairBack.position.set(0, 1.77, 0.08);
+  const helmetShell = new Mesh(new SphereGeometry(0.205, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.56), new MeshPhysicalMaterial({ color: city.accent, roughness: 0.24, metalness: 0.46, clearcoat: 0.8, clearcoatRoughness: 0.14 }));
+  helmetShell.scale.set(1.03, 1.02, 1.03);
+  helmetShell.position.set(0, 1.91, 0.16);
+  const visor = new Mesh(new SphereGeometry(0.13, 12, 7, 0, Math.PI * 2, 0.1, Math.PI * 0.22), new MeshPhysicalMaterial({ color: 0x151c34, roughness: 0.1, metalness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.12, transparent: true, opacity: 0.84 }));
+  visor.scale.set(1.05, 0.54, 0.34);
+  visor.position.set(0, 1.86, 0.345);
+  const mouth = new Mesh(new BoxGeometry(0.06, 0.014, 0.012), new MeshBasicMaterial({ color: 0x4b2931 }));
+  mouth.position.set(0, 1.72, 0.373);
   const nose = new Mesh(new SphereGeometry(0.028, 7, 5), skin);
   nose.position.set(0, 1.83, 0.375);
   for (const x of [-0.055, 0.055]) {
     const eye = new Mesh(new SphereGeometry(0.013, 6, 4), new MeshBasicMaterial({ color: 0x11121e }));
     eye.position.set(x, 1.87, 0.365);
     rider.add(eye);
+    const brow = new Mesh(new BoxGeometry(0.052, 0.01, 0.012), hair);
+    brow.position.set(x, 1.91, 0.354);
+    brow.rotation.z = x < 0 ? -0.08 : 0.08;
+    rider.add(brow);
   }
+  rider.add(helmetShell, visor, mouth);
   const shoulderLeft = new Vector3(-0.23, 1.57, 0.04);
   const shoulderRight = new Vector3(0.23, 1.57, 0.04);
   const elbowLeft = new Vector3(-0.34, 1.31, 0.35);

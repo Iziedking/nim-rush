@@ -16,6 +16,19 @@ describe('Beacon Blitz public arcade experience', () => {
 
   it('launches Lagos from one dominant action and keeps the run HUD lean', () => {
     expect(app).toContain('Ride Lagos');
+    expect(app).toContain('A payment is stuck. Ride it through Lagos. Bring it to finality.');
+    expect(app).toContain('LAST LANTERN / PAYMENT RESCUE');
+    expect(app).toContain('CHECK');
+    expect(app).toContain('APPROVE');
+    expect(app).toContain('CONFIRM');
+    expect(app).toContain('Connect wallet / rank Lagos');
+    expect(app).toContain('prepareRankedStart');
+    expect(app).toContain('issueRankedTicket');
+    expect(app).toContain('wallet signs identity, not a payment');
+    expect(app).toContain('playBikeEngine');
+    expect(app).toContain('setBikeSpeed');
+    expect(app).toContain("playWorldCue('bike-boost')");
+    expect(app).toContain("playWorldCue('route-complete')");
     expect(app).toContain("data-blitz-screen', 'intro'");
     expect(app).toContain("data-blitz-screen', 'run'");
     expect(app).toContain('blitz-timer');
@@ -58,6 +71,13 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(renderer).toContain('createRoadHazard');
     expect(renderer).toContain('createLagosMarketStall');
     expect(renderer).toContain('createLondonKiosk');
+    expect(renderer).toContain('createFeaturedCitizens');
+    expect(renderer).toContain('FeaturedCitizen');
+    expect(renderer).toContain('MeshPhysicalMaterial');
+    expect(renderer).toContain('ACESFilmicToneMapping');
+    expect(renderer).toContain('PCFShadowMap');
+    expect(renderer).toContain('createRoadsideDetails');
+    expect(renderer).toContain('featured-citizen-${index + 1}');
     expect(renderer).toContain('createDubaiPalm');
     expect(renderer).toContain("city.id === 'london' ? 0.3");
   });

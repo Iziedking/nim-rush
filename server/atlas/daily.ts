@@ -42,12 +42,32 @@ export interface AtlasDailyStanding {
 
 export interface AtlasDailyService {
   submit(input: DailySubmitInput): Promise<DailySubmitResult>;
+  /**
+   * Make a wallet eligible for today's pool because the server itself verified
+   * something, rather than because a client said so.
+   *
+   * A Beacon Blitz run is not a daily challenge and must not be pushed through
+   * `submit`: it has no answer to check and no guard that fits it. What it
+   * does have is something stronger - the server re-simulated the whole run
+   * from the player's input trace and got the same score. Eligibility is the
+   * consequence of that verification, which is why this takes no claim from
+   * the caller beyond who it was.
+   */
+  qualifyVerifiedRun(input: { actorId: string; walletAddress: string; source: AtlasDailyQualifierSource }): Promise<DailySubmitResult>;
   estimateShare(eligibleCount: number): number | null;
   pendingObligation(input: { actorId: string; walletAddress: string; challengeId: string }): Promise<DailyObligation>;
   standing(): Promise<AtlasDailyStanding>;
   /** Wallets that qualified on a date, for the close that pays them. */
   eligibleWallets(date?: string): Promise<readonly string[]>;
 }
+
+/**
+ * Things the server can verify by itself, that earn a share of the day.
+ *
+ * Kept as a closed union rather than a free string so a new qualifier is a
+ * deliberate decision recorded here, next to the pool it draws from.
+ */
+export type AtlasDailyQualifierSource = 'blitz-ranked';
 
 /**
  * What a qualifying payment has to look like.
@@ -205,6 +225,23 @@ export function createAtlasDailyService(options: {
     /* The configured ceiling, not the payable pot: it is synchronous and so
      * cannot consult the treasury. standing() and pendingObligation() are the
      * numbers shown to players. */
+    async qualifyVerifiedRun(input) {
+      return serialise(async () => {
+        const date = options.date();
+        if (!input.actorId || !input.walletAddress) return rejected(date, 'identity_required');
+        /*
+         * Scoped by source so a wallet that both rides and answers today keeps
+         * one key per thing it did. distinctWallets still counts it once, which
+         * is what the pool is split by.
+         */
+        const key = keyFor(input.actorId, input.walletAddress, input.source);
+        const today = (days[date] ??= new Set());
+        if (today.has(key)) return { accepted: true, eligible: true, duplicate: true, date };
+        today.add(key);
+        return { accepted: true, eligible: true, date };
+      }, true);
+    },
+
     estimateShare(eligibleCount) {
       if (configuredPoolLuna === null) return null;
       if (!Number.isSafeInteger(eligibleCount) || eligibleCount <= 0) return null;

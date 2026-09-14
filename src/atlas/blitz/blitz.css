@@ -25,6 +25,14 @@
 .blitz-edition { width: max-content; margin-top: 9px; padding: 7px 10px; border: 1px solid rgb(var(--atlas-ink-rgb) / .3); border-radius: var(--atlas-radius-pill); background: rgb(var(--atlas-paper-rgb) / .9); color: var(--atlas-selected); font: 800 10px/1 ui-monospace, monospace; letter-spacing: .16em; }
 .blitz-title { max-width: 7ch; margin: 12px 0 0; white-space: pre-line; font: 400 clamp(58px, 18vw, 92px)/.77 AtlasDisplay, Impact, sans-serif; letter-spacing: -.025em; text-shadow: 0 5px 0 rgb(var(--atlas-shadow-rgb) / .7); }
 .blitz-tagline { max-width: 32ch; margin: 15px 0 0; color: var(--atlas-label); font-size: 15px; font-weight: 700; line-height: 1.35; }
+.blitz-brief { margin-top: 11px; padding: 10px 11px; border-left: 3px solid var(--atlas-signal); border-radius: 10px; background: rgb(var(--atlas-paper-rgb) / .88); }
+.blitz-brief-label { color: var(--atlas-selected); font: 900 8px/1 ui-monospace, monospace; letter-spacing: .14em; }
+.blitz-brief p { margin: 6px 0 0; color: var(--atlas-label); font-size: 11px; line-height: 1.25; }
+.blitz-brief-verbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+.blitz-brief-verb { min-width: 0; padding: 6px; border: 1px solid rgb(var(--atlas-ink-rgb) / .15); border-radius: 8px; background: rgb(var(--atlas-paper-rgb) / .6); }
+.blitz-brief-verb b { display: block; color: var(--atlas-label-dim); font: 800 8px/1 ui-monospace, monospace; }
+.blitz-brief-verb strong { display: block; margin-top: 4px; color: var(--atlas-ink); font: 900 10px/1 ui-monospace, monospace; }
+.blitz-brief-verb span { display: block; margin-top: 3px; overflow: hidden; color: var(--atlas-label-dim); font: 800 8px/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .blitz-intro-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 18px; }
 .blitz-stat { min-width: 0; padding: 10px 9px; border: 1px solid rgb(var(--atlas-ink-rgb) / .18); border-radius: 13px; background: rgb(var(--atlas-paper-rgb) / .9); }
 .blitz-stat strong { display: block; overflow: hidden; color: var(--atlas-ink); font: 900 17px/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -93,6 +101,15 @@
 .blitz-rank-status { margin: 0; color: var(--atlas-label); font: 800 9px/1.35 ui-monospace, monospace; letter-spacing: .08em; }
 .blitz-username { width: 100%; min-height: 48px; margin-top: 10px; padding: 0 13px; border: 1px solid rgb(var(--atlas-ink-rgb) / .24); border-radius: 12px; outline: none; background: rgb(var(--atlas-paper-rgb) / .86); color: var(--atlas-ink); font: 800 14px/1 ui-monospace, monospace; }
 .blitz-username:focus { border-color: var(--atlas-selected); box-shadow: 0 0 0 3px rgb(var(--atlas-selected-rgb) / .18); }
+.blitz-ranked-launch { margin-top: 8px; border: 1px solid rgb(var(--atlas-ink-rgb) / .18); border-radius: 12px; background: rgb(var(--atlas-paper-rgb) / .84); }
+.blitz-ranked-label { min-height: 44px; display: flex; align-items: center; padding: 0 12px; color: var(--atlas-verified); cursor: pointer; font: 900 9px/1 ui-monospace, monospace; letter-spacing: .1em; list-style: none; }
+.blitz-ranked-label::-webkit-details-marker { display: none; }
+.blitz-ranked-label::after { content: '+'; margin-left: auto; color: var(--atlas-selected); font-size: 18px; }
+.blitz-ranked-launch[open] .blitz-ranked-label::after { content: '−'; }
+.blitz-ranked-launch .blitz-username, .blitz-ranked-launch .blitz-ranked-button, .blitz-ranked-launch .blitz-rank-status { width: calc(100% - 20px); margin-right: 10px; margin-left: 10px; }
+.blitz-ranked-launch .blitz-username { margin-top: 0; }
+.blitz-ranked-button { min-height: 48px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--atlas-verified) !important; border-radius: 12px; background: rgb(var(--atlas-verified-rgb) / .1); color: var(--atlas-verified) !important; font: 900 10px/1.15 ui-monospace, monospace; text-transform: uppercase; }
+.blitz-ranked-launch .blitz-rank-status { margin-top: 8px; margin-bottom: 10px; }
 .blitz-leaderboard { display: grid; gap: 5px; margin-top: 12px; padding-top: 11px; border-top: 1px solid rgb(var(--atlas-ink-rgb) / .14); }
 .blitz-leaderboard h3 { margin: 0 0 4px; color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .13em; }
 .blitz-leaderboard p { margin: 0; color: var(--atlas-label-dim); font-size: 11px; line-height: 1.35; }
@@ -124,5 +141,14 @@
   .blitz-quiet { grid-area: quiet; }
 }
 @media (max-height: 670px) { .blitz-intro-stats { margin-top: 10px; } .blitz-title { font-size: clamp(48px, 15vw, 72px); } .blitz-tagline { margin-top: 10px; } .blitz-controls { bottom: max(8px, env(safe-area-inset-bottom)); } .blitz-result { padding-top: 14px; padding-bottom: 14px; } .blitz-result-kicker { margin-top: 14px; } .blitz-result-score { font-size: 54px; } }
+@media (max-width: 390px) { .blitz-brief { margin-top: 8px; padding: 8px 9px; } .blitz-brief p { margin-top: 5px; font-size: 10px; } .blitz-brief-verbs { margin-top: 6px; } .blitz-brief-verb { padding: 5px; } .blitz-brief-verb strong { margin-top: 3px; font-size: 9px; } .blitz-brief-verb span { margin-top: 2px; font-size: 7px; } .blitz-intro-stats { margin-top: 10px; } .blitz-stat { padding: 8px 7px; } .blitz-stat strong { font-size: 15px; } .blitz-stat span { margin-top: 4px; font-size: 8px; } .blitz-start { min-height: 54px; margin-top: 9px; } .blitz-quiet { margin-top: 7px; font-size: 10px; } }
 @media (max-width: 390px) { .blitz-hud { gap: 5px; } .blitz-city-name { padding: 0 8px; font-size: 9px; } .blitz-timer { min-width: 62px; font-size: 18px; } .blitz-score { min-width: 64px; font-size: 12px; } .blitz-pause { min-width: 38px; } }
 @media (prefers-reduced-motion: reduce) { .blitz-countdown.is-live, .blitz-relay-card { animation: none; } .blitz-progress-fill, .blitz-steer-thumb { transition: none; } .blitz-start:active, .blitz-control:active { transform: none; } }
+
+/* The day's pool on the result screen: the only real money in Beacon Blitz,
+   so it gets its own surface rather than sitting in the score breakdown. */
+.blitz-pool { display: grid; gap: 6px; margin-top: 16px; padding: 14px 16px; border: 2px solid rgb(255 255 255 / .14); border-left: 5px solid #ffd166; border-radius: 14px; background: rgb(12 16 34 / .78); }
+.blitz-pool-label { color: #9fb0d8; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-pool-value { color: #ffd166; font: 800 19px/1.15 system-ui, sans-serif; }
+.blitz-pool-note { margin: 0; max-width: 46ch; color: #e8ecf8; font: 600 13px/1.4 system-ui, sans-serif; }
+.blitz-pool-note.blitz-quiet { color: #9fb0d8; font-size: 12px; }

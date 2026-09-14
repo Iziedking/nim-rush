@@ -12,13 +12,14 @@ export const ATLAS_NARRATION_LOCALE = 'en-US';
 export type AtlasVoiceProfile = 'mara' | 'atlas' | 'nia' | 'oren' | 'tala' | 'ivo' | 'ada';
 
 export type AtlasAudioBus = 'ambience' | 'events' | 'interface' | 'voice';
-export type AtlasAudioCue = 'atlas-theme' | 'city-ambience' | 'harbor-waiting-ambience' | 'harbor-restored-ambience' | 'payment-pending' | 'payment-confirmed' | 'beacon-confirmation' | 'city-footstep' | 'city-interaction' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete';
+export type AtlasAudioCue = 'atlas-theme' | 'city-ambience' | 'harbor-waiting-ambience' | 'harbor-restored-ambience' | 'payment-pending' | 'payment-confirmed' | 'beacon-confirmation' | 'city-footstep' | 'city-interaction' | 'bike-engine' | 'bike-boost' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete';
 
 export interface AtlasAudioBackend {
   unlock(): void;
   play(cue: AtlasAudioCue, bus: AtlasAudioBus, loop: boolean): void;
   stop(cue: AtlasAudioCue): void;
   setVolume(bus: AtlasAudioBus, value: number): void;
+  setEngineSpeed?(speedMps: number): void;
   visualCue(cue: AtlasAudioCue): void;
   narrate?(text: string, locale: string, speaker?: AtlasVoiceProfile): void;
   destroy(): void;
@@ -104,6 +105,21 @@ export class AtlasAudio {
     this.stopCue('city-ambience');
   }
 
+  playBikeEngine(speedMps = 0): void {
+    if (!this.unlocked) return;
+    this.playCue('bike-engine', 'events', true);
+    this.backend.setEngineSpeed?.(speedMps);
+  }
+
+  setBikeSpeed(speedMps: number): void {
+    if (!this.unlocked) return;
+    this.backend.setEngineSpeed?.(speedMps);
+  }
+
+  stopBikeEngine(): void {
+    this.stopCue('bike-engine');
+  }
+
   /** Start a loop, or remember to start it the moment a gesture unlocks audio. */
   private requestLoop(cue: AtlasAudioCue, bus: AtlasAudioBus): void {
     if (!this.unlocked) {
@@ -113,7 +129,7 @@ export class AtlasAudio {
     this.playCue(cue, bus, true);
   }
 
-  playWorldCue(cue: 'city-footstep' | 'city-interaction' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete'): void {
+  playWorldCue(cue: 'city-footstep' | 'city-interaction' | 'bike-boost' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete'): void {
     if (!this.unlocked) return;
     this.playCue(cue, cue === 'city-footstep' ? 'interface' : 'events', false);
   }
@@ -130,7 +146,7 @@ export class AtlasAudio {
   }
 
   destroy(): void {
-    for (const cue of ['atlas-theme', 'city-ambience', 'harbor-waiting-ambience', 'payment-pending', 'harbor-restored-ambience'] as const) this.stopCue(cue);
+    for (const cue of ['atlas-theme', 'city-ambience', 'harbor-waiting-ambience', 'payment-pending', 'harbor-restored-ambience', 'bike-engine'] as const) this.stopCue(cue);
     this.backend.destroy();
     this.current = null;
     this.unlocked = false;
@@ -212,6 +228,8 @@ const TONES: Record<AtlasAudioCue, ToneRecipe> = {
   'beacon-confirmation': { from: 660, to: 990, duration: 0.35 },
   'city-footstep': { from: 105, to: 78, duration: 0.08 },
   'city-interaction': { from: 330, to: 520, duration: 0.18 },
+  'bike-engine': { from: 55, to: 120, duration: 0.12 },
+  'bike-boost': { from: 180, to: 640, duration: 0.28 },
 };
 
 const VOICE_PROFILES: Record<AtlasVoiceProfile, { readonly rate: number; readonly pitch: number }> = {
@@ -243,6 +261,11 @@ function createWebAudioBackend(): AtlasAudioBackend {
   const playing = new Map<AtlasAudioCue, AudioBufferSourceNode>();
   const loading = new Set<AtlasAudioCue>();
   const wanted = new Set<AtlasAudioCue>();
+  let engineOscillator: OscillatorNode | null = null;
+  let engineHarmonic: OscillatorNode | null = null;
+  let engineFilter: BiquadFilterNode | null = null;
+  let engineGain: GainNode | null = null;
+  let engineSpeed = 0;
   let pendingNarration: { text: string; locale: string; speaker: AtlasVoiceProfile } | null = null;
   let voiceListenerInstalled = false;
 
@@ -320,6 +343,48 @@ function createWebAudioBackend(): AtlasAudioBackend {
       });
   }
 
+  function setEngineSpeed(speedMps: number): void {
+    engineSpeed = Math.max(0, Math.min(32, Number.isFinite(speedMps) ? speedMps : 0));
+    if (!context || !engineOscillator || !engineHarmonic || !engineFilter || !engineGain) return;
+    const normalized = Math.min(1, engineSpeed / 30);
+    const now = context.currentTime;
+    engineOscillator.frequency.setTargetAtTime(52 + normalized * 82, now, 0.045);
+    engineHarmonic.frequency.setTargetAtTime(104 + normalized * 164, now, 0.045);
+    engineFilter.frequency.setTargetAtTime(220 + normalized * 1_160, now, 0.06);
+    engineGain.gain.setTargetAtTime(0.012 + normalized * 0.075, now, 0.08);
+  }
+
+  function startEngine(): void {
+    if (!context || engineOscillator) return;
+    const output = buses.get('events');
+    if (!output) return;
+    engineOscillator = context.createOscillator();
+    engineHarmonic = context.createOscillator();
+    engineFilter = context.createBiquadFilter();
+    engineGain = context.createGain();
+    engineOscillator.type = 'sawtooth';
+    engineHarmonic.type = 'square';
+    engineFilter.type = 'lowpass';
+    engineFilter.Q.value = 1.1;
+    engineGain.gain.value = 0.0001;
+    engineOscillator.connect(engineFilter);
+    engineHarmonic.connect(engineFilter);
+    engineFilter.connect(engineGain);
+    engineGain.connect(output);
+    engineOscillator.start();
+    engineHarmonic.start();
+    setEngineSpeed(engineSpeed);
+  }
+
+  function stopEngine(): void {
+    engineOscillator?.stop();
+    engineHarmonic?.stop();
+    engineOscillator = null;
+    engineHarmonic = null;
+    engineFilter = null;
+    engineGain = null;
+  }
+
   return {
     unlock: () => {
       if (context) return;
@@ -337,6 +402,10 @@ function createWebAudioBackend(): AtlasAudioBackend {
       if (!context) return;
       const output = buses.get(bus);
       if (!output) return;
+      if (cue === 'bike-engine') {
+        startEngine();
+        return;
+      }
       const sample = SAMPLES[cue];
       if (sample) {
         playSampled(cue, sample, bus, loop);
@@ -357,6 +426,11 @@ function createWebAudioBackend(): AtlasAudioBackend {
       oscillator.stop(now + recipe.duration + 0.02);
     },
     stop: (cue) => {
+      if (cue === 'bike-engine') {
+        wanted.delete(cue);
+        stopEngine();
+        return;
+      }
       wanted.delete(cue);
       const source = playing.get(cue);
       if (!source) return;
@@ -385,6 +459,7 @@ function createWebAudioBackend(): AtlasAudioBackend {
     visualCue: () => undefined,
     destroy: () => {
       wanted.clear();
+      stopEngine();
       for (const source of playing.values()) source.stop();
       playing.clear();
       decoded.clear();

@@ -9,6 +9,7 @@ function fakeBackend() {
     play: (cue, bus, loop) => { events.push({ type: 'play', cue, bus, loop }); },
     stop: (cue) => { events.push({ type: 'stop', cue }); },
     setVolume: (bus, value) => { events.push({ type: 'volume', bus, value }); },
+    setEngineSpeed: (value) => { events.push({ type: 'engine-speed', value }); },
     visualCue: (cue) => { events.push({ type: 'visual', cue }); },
     narrate: (text, locale, speaker) => { events.push({ type: 'narrate', text, locale, speaker }); },
     destroy: () => { events.push({ type: 'destroy' }); },
@@ -50,6 +51,18 @@ describe('NIM Atlas adaptive audio', () => {
     audio.unlock();
     audio.playCityAmbience();
     expect(fake.events).toContainEqual({ type: 'play', cue: 'city-ambience', bus: 'ambience', loop: true });
+  });
+
+  it('keeps a continuous bike engine responsive to speed and stops it cleanly', () => {
+    const fake = fakeBackend();
+    const audio = createAtlasAudio(fake.backend);
+    audio.unlock();
+    audio.playBikeEngine(8);
+    audio.setBikeSpeed(20);
+    audio.stopBikeEngine();
+    expect(fake.events).toContainEqual({ type: 'play', cue: 'bike-engine', bus: 'events', loop: true });
+    expect(fake.events.filter((event) => event.type === 'engine-speed').map((event) => event.value)).toEqual([8, 20]);
+    expect(fake.events).toContainEqual({ type: 'stop', cue: 'bike-engine' });
   });
 
   it('does not emit audio before a user gesture unlocks the backend', () => {
