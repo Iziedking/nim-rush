@@ -17,10 +17,21 @@ describe('Beacon Blitz public arcade experience', () => {
   it('launches Lagos from one dominant action and keeps the run HUD lean', () => {
     expect(app).toContain('Ride Lagos');
     expect(app).toContain('A payment is stuck. Ride it through Lagos. Bring it to finality.');
-    expect(app).toContain('LAST LANTERN / PAYMENT RESCUE');
-    expect(app).toContain('CHECK');
-    expect(app).toContain('APPROVE');
-    expect(app).toContain('CONFIRM');
+    /*
+     * check / approve / confirm used to be taught in a brief block on this
+     * screen, which is the opposite of "one dominant action": it put a label,
+     * a sentence and three cards between a new player and the only button that
+     * matters. The opening teaches it now, one idea per screen, so the
+     * assertion follows it there.
+     */
+    const onboarding = readFileSync(new URL('../src/atlas/blitz/blitz-onboarding.ts', import.meta.url), 'utf8');
+    expect(onboarding).toContain('THE JOB');
+    expect(onboarding).toContain('THE RIDE');
+    expect(onboarding).toContain('THE CHECKS');
+    expect(app).toContain('renderOnboarding');
+    expect(app).toContain('blitzOnboardingSeen');
+    // The landing says what it costs to try, before anything is asked for.
+    expect(app).toContain('No wallet needed to play');
     expect(app).toContain('Connect wallet / rank Lagos');
     expect(app).toContain('prepareRankedStart');
     expect(app).toContain('issueRankedTicket');
@@ -94,5 +105,53 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(css).toMatch(/\.blitz-pause[^}]+pointer-events:\s*auto/s);
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(app).toContain("matchMedia('(prefers-reduced-motion: reduce)')");
+  });
+});
+
+/*
+ * The opening.
+ *
+ * Beacon Blitz used to start on a wall of panels over a live city at full
+ * brightness, and a player who had never seen it could not tell what the game
+ * was, let alone what to press.
+ */
+describe('the Beacon Blitz opening', () => {
+  const onboarding = readFileSync(new URL('../src/atlas/blitz/blitz-onboarding.ts', import.meta.url), 'utf8');
+
+  it('is three beats, in the order a person needs them', () => {
+    const order = ['THE JOB', 'THE RIDE', 'THE CHECKS'].map((kicker) => onboarding.indexOf(kicker));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect([...order]).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('draws its own pictures rather than shipping generated art', () => {
+    // Authored geometry, in the game's own flat-shape language. Every beat is
+    // an inline SVG in this module; nothing loads an image.
+    expect(onboarding).not.toMatch(/<img|\.png|\.jpg|\.jpeg|\.webp/);
+    expect((onboarding.match(/<svg /g) ?? []).length).toBe(3);
+  });
+
+  it('can always be left, and is only shown once', () => {
+    expect(app).toContain("button('Skip'");
+    expect(app).toContain('markBlitzOnboardingSeen');
+    expect(onboarding).toContain('nim-atlas:blitz:onboarded:v1');
+  });
+
+  /*
+   * A storage read that throws must cost a returning player three taps at
+   * most, never trap them in an introduction they have already read.
+   */
+  it('treats unreadable storage as already seen', () => {
+    expect(onboarding).toMatch(/blitzOnboardingSeen[\s\S]{0,320}catch[\s\S]{0,60}return true/);
+  });
+
+  it('ends by riding, not by returning to the menu', () => {
+    expect(app).toMatch(/finishOnboarding\(true\)/);
+    expect(app).toMatch(/finishOnboarding\(ride = false\)[\s\S]{0,220}startRun\('lagos'\)/);
+  });
+
+  it('every beat carries a described picture for a screen reader', () => {
+    expect((onboarding.match(/role="img"/g) ?? []).length).toBe(3);
+    expect((onboarding.match(/aria-label="[^"]{12,}"/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 });

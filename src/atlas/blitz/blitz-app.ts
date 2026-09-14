@@ -11,6 +11,7 @@ import { createAtlasAudio } from '../audio/atlas-audio';
 import { BlitzRenderer } from '../render/three/blitz-renderer';
 import { BlitzInputController } from './blitz-input';
 import { BlitzFrameGovernor } from './frame-governor';
+import { BLITZ_ONBOARDING_BEATS, blitzOnboardingSeen, markBlitzOnboardingSeen } from './blitz-onboarding';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
 const BLITZ_SEASON = 'cycle-2';
@@ -56,7 +57,8 @@ export class BlitzApp {
       await this.renderer.loadCity('lagos');
       this.resize();
       this.renderer.renderPreview('lagos');
-      this.renderIntro();
+      if (blitzOnboardingSeen(safeLocalStorage())) this.renderIntro();
+      else this.renderOnboarding(0);
       window.addEventListener('pointerdown', () => { this.audio.unlock(); this.audio.playTheme(); }, { once: true });
       window.addEventListener('resize', this.resize);
       document.addEventListener('visibilitychange', this.visibilityChanged);
@@ -90,6 +92,63 @@ export class BlitzApp {
     await this.startRun(cityId);
   }
 
+  /**
+   * The opening: three beats, one sentence and one picture each.
+   *
+   * Shown once per device, skippable from every beat, and it never blocks
+   * play - the last beat starts the ride rather than returning to a menu the
+   * player has already decided to leave.
+   */
+  private renderOnboarding(index: number): void {
+    const beat = BLITZ_ONBOARDING_BEATS[index];
+    if (!beat) {
+      this.finishOnboarding();
+      return;
+    }
+    this.input.clearBindings();
+    this.ui.replaceChildren();
+    const screen = node('main', 'blitz-onboarding');
+    screen.setAttribute('data-blitz-screen', 'onboarding');
+    screen.append(node('div', 'blitz-brand', 'NIM ATLAS / BEACON BLITZ'));
+
+    const art = node('div', 'blitz-onboarding-art');
+    // Authored SVG from blitz-onboarding.ts, not player input.
+    art.innerHTML = beat.art;
+    screen.append(art);
+
+    const copy = node('section', 'blitz-onboarding-copy');
+    copy.append(node('span', 'blitz-onboarding-kicker', beat.kicker));
+    copy.append(node('h1', 'blitz-onboarding-title', beat.title));
+    copy.append(node('p', 'blitz-onboarding-body', beat.body));
+    screen.append(copy);
+
+    const dots = node('div', 'blitz-onboarding-dots');
+    dots.setAttribute('aria-hidden', 'true');
+    for (const [position] of BLITZ_ONBOARDING_BEATS.entries()) {
+      const dot = node('span', 'blitz-onboarding-dot');
+      if (position === index) dot.classList.add('is-current');
+      dots.append(dot);
+    }
+    screen.append(dots);
+
+    const last = index === BLITZ_ONBOARDING_BEATS.length - 1;
+    const next = button(last ? 'Ride Lagos' : 'Next', 'blitz-start', () => {
+      this.audio.unlock();
+      if (last) this.finishOnboarding(true);
+      else this.renderOnboarding(index + 1);
+    });
+    screen.append(next);
+    screen.append(button('Skip', 'blitz-onboarding-skip', () => this.finishOnboarding()));
+    screen.setAttribute('aria-live', 'polite');
+    this.ui.append(screen);
+  }
+
+  private finishOnboarding(ride = false): void {
+    markBlitzOnboardingSeen(safeLocalStorage());
+    if (ride) void this.startRun('lagos');
+    else this.renderIntro();
+  }
+
   private renderIntro(): void {
     this.input.clearBindings();
     this.ui.replaceChildren();
@@ -99,13 +158,14 @@ export class BlitzApp {
     const edition = node('span', 'blitz-edition', 'BEACON BLITZ');
     const title = node('h1', 'blitz-title', 'LAGOS\nPULSE');
     const line = node('p', 'blitz-tagline', 'A payment is stuck. Ride it through Lagos. Bring it to finality.');
-    const brief = node('section', 'blitz-brief');
-    brief.append(node('span', 'blitz-brief-label', 'LAST LANTERN / PAYMENT RESCUE'));
-    brief.append(node('p', '', 'Make three checks at speed. The right call keeps the signal alive.'));
-    const verbs = node('div', 'blitz-brief-verbs');
-    verbs.append(briefVerb('01', 'CHECK', 'recipient'), briefVerb('02', 'APPROVE', 'fee'), briefVerb('03', 'CONFIRM', 'finality'));
-    brief.append(verbs);
-    const city = blitzCity('lagos');
+    /*
+     * The three-verb brief that used to sit here is gone. It taught check,
+     * approve and confirm on the screen a player is trying to leave, next to a
+     * title, a tagline, a stat strip, a leaderboard and a note - and the
+     * opening now teaches the same thing properly, one idea at a time. A
+     * landing page's job is to be understood in a glance and then get out of
+     * the way.
+     */
     const stats = node('div', 'blitz-intro-stats');
     stats.append(stat('90 SEC', 'LIMIT'), stat('3', 'CHECKS'), stat('01 / 03', 'CITY'));
     const start = button('Ride Lagos', 'blitz-start', () => void this.startRun('lagos'));
@@ -122,8 +182,13 @@ export class BlitzApp {
     const rankedStatus = node('p', 'blitz-rank-status', 'Connect once. Your wallet signs identity, not a payment.');
     const rankedButton = button('Connect wallet / rank Lagos', 'blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
     ranked.append(username, rankedButton, rankedStatus);
-    const note = node('p', 'blitz-quiet', `${city.callout} Practice starts instantly. Ranked runs are replay-verified.`);
-    screen.append(brand, edition, title, line, brief, stats, start, ranked, note);
+    /*
+     * Discovery first, stated plainly. A player should know before they tap
+     * that nothing is being asked of them - the wallet belongs to the ranked
+     * path and nowhere else.
+     */
+    const note = node('p', 'blitz-quiet', 'No wallet needed to play. Ranked runs are replay-verified.');
+    screen.append(brand, edition, title, line, stats, start, note, ranked);
     this.ui.append(screen);
   }
 
@@ -531,6 +596,21 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', tex
   return element;
 }
 
+/**
+ * localStorage, or null where it is unavailable.
+ *
+ * A private window or blocked site data makes the accessor itself throw, so
+ * even reaching for it has to be guarded. The game is fully playable without
+ * it; only the "seen the opening" flag is lost.
+ */
+function safeLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function button(label: string, className: string, action: () => void): HTMLButtonElement {
   const element = node('button', className, label);
   element.type = 'button';
@@ -541,12 +621,6 @@ function button(label: string, className: string, action: () => void): HTMLButto
 function stat(value: string, label: string): HTMLElement {
   const item = node('div', 'blitz-stat');
   item.append(node('strong', '', value), node('span', '', label));
-  return item;
-}
-
-function briefVerb(number: string, verb: string, detail: string): HTMLElement {
-  const item = node('div', 'blitz-brief-verb');
-  item.append(node('b', '', number), node('strong', '', verb), node('span', '', detail));
   return item;
 }
 

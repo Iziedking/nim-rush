@@ -21,7 +21,16 @@
   pointer-events: auto;
 }
 
-.blitz-intro::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, transparent 18%, rgb(var(--atlas-shadow-rgb) / .12) 42%, rgb(var(--atlas-shadow-rgb) / .92) 100%); pointer-events: none; }
+/*
+ * A ground for the copy.
+ *
+ * This used to be transparent down to 18% and only .12 at the middle, so the
+ * tagline, the stat row and the note all sat directly on a full-brightness 3D
+ * city and several of them were unreadable. The city is the backdrop on this
+ * screen, not the content: it keeps its colour and gives up enough light for
+ * text to win.
+ */
+.blitz-intro::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgb(var(--atlas-shadow-rgb) / .58) 0%, rgb(var(--atlas-shadow-rgb) / .74) 46%, rgb(var(--atlas-shadow-rgb) / .95) 100%); pointer-events: none; }
 .blitz-edition { width: max-content; margin-top: 9px; padding: 7px 10px; border: 1px solid rgb(var(--atlas-ink-rgb) / .3); border-radius: var(--atlas-radius-pill); background: rgb(var(--atlas-paper-rgb) / .9); color: var(--atlas-selected); font: 800 10px/1 ui-monospace, monospace; letter-spacing: .16em; }
 .blitz-title { max-width: 7ch; margin: 12px 0 0; white-space: pre-line; font: 400 clamp(58px, 18vw, 92px)/.77 AtlasDisplay, Impact, sans-serif; letter-spacing: -.025em; text-shadow: 0 5px 0 rgb(var(--atlas-shadow-rgb) / .7); }
 .blitz-tagline { max-width: 32ch; margin: 15px 0 0; color: var(--atlas-label); font-size: 15px; font-weight: 700; line-height: 1.35; }
@@ -152,3 +161,78 @@
 .blitz-pool-value { color: #ffd166; font: 800 19px/1.15 system-ui, sans-serif; }
 .blitz-pool-note { margin: 0; max-width: 46ch; color: #e8ecf8; font: 600 13px/1.4 system-ui, sans-serif; }
 .blitz-pool-note.blitz-quiet { color: #9fb0d8; font-size: 12px; }
+
+/*
+ * The opening. See src/atlas/blitz/blitz-onboarding.ts.
+ *
+ * One picture and one sentence per screen, centred, with the live city pushed
+ * right back behind it. A menu is the one place a blurred backdrop is correct:
+ * the city is decoration here, not the thing being played, and the earlier
+ * mistake was dimming it during *play*, where it is the content.
+ */
+.blitz-onboarding {
+  width: min(100%, 560px);
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: auto;
+  text-align: center;
+}
+/*
+ * A painted ground, not a backdrop-filter.
+ *
+ * The filtered version tiled the whole frame in headless capture and would be
+ * an expensive full-screen blur on a phone for no gain: the city behind is
+ * already out of focus at this size, and what the copy actually needs is
+ * contrast. A near-opaque gradient gives that for the cost of a paint.
+ */
+.blitz-onboarding::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(var(--atlas-shadow-rgb) / .9), rgb(var(--atlas-shadow-rgb) / .97));
+  pointer-events: none;
+}
+.blitz-onboarding .blitz-brand { align-self: center; opacity: .72; }
+.blitz-onboarding-art { margin: 14px auto 0; width: min(100%, 360px); }
+.blitz-onboarding-art svg { display: block; width: 100%; height: auto; }
+.blitz-onboarding-kicker { display: block; color: var(--atlas-selected); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .22em; }
+.blitz-onboarding-title { margin: 10px 0 0; color: var(--atlas-ink); font: 400 clamp(30px, 8vw, 44px)/1 AtlasDisplay, Impact, sans-serif; letter-spacing: -.02em; }
+.blitz-onboarding-body { margin: 12px auto 0; max-width: 36ch; color: var(--atlas-label); font: 600 15px/1.45 system-ui, sans-serif; }
+.blitz-onboarding-dots { display: flex; justify-content: center; gap: 7px; margin-top: 18px; }
+.blitz-onboarding-dot { width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--atlas-ink-rgb) / .26); }
+.blitz-onboarding-dot.is-current { width: 22px; border-radius: 4px; background: var(--atlas-signal); }
+.blitz-onboarding .blitz-start { margin-top: 18px; }
+.blitz-onboarding-skip { margin-top: 10px; padding: 10px; background: transparent; color: var(--atlas-label-dim) !important; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
+
+/* Short landscape: the picture yields first, since the sentence is the part
+   that has to survive. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .blitz-onboarding { width: min(100%, 860px); display: grid; grid-template-columns: minmax(200px, 1fr) minmax(260px, 1.1fr); grid-template-areas: 'brand brand' 'art copy' 'art dots' 'art cta' 'art skip'; align-content: center; column-gap: 28px; text-align: left; }
+  .blitz-onboarding .blitz-brand { grid-area: brand; justify-self: start; }
+  .blitz-onboarding-art { grid-area: art; align-self: center; margin: 0; width: 100%; }
+  .blitz-onboarding-copy { grid-area: copy; align-self: end; }
+  .blitz-onboarding-body { margin-left: 0; }
+  .blitz-onboarding-dots { grid-area: dots; justify-content: flex-start; margin-top: 12px; }
+  .blitz-onboarding .blitz-start { grid-area: cta; margin-top: 12px; }
+  .blitz-onboarding-skip { grid-area: skip; justify-self: start; margin-top: 4px; }
+  .blitz-onboarding-title { font-size: clamp(26px, 6vh, 38px); }
+}
+/*
+ * Movement only, never opacity.
+ *
+ * The first version faded in from opacity 0 with `both` fill, and a run that
+ * never progressed left the art and the copy permanently invisible - measured
+ * at opacity 0 eight seconds after load. Nothing a player needs to read should
+ * depend on an animation completing, so the entrance moves and the content is
+ * legible from the first frame whatever the animation does.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .blitz-onboarding-art, .blitz-onboarding-copy { animation: blitz-onboarding-rise 320ms cubic-bezier(.2, .8, .3, 1) both; }
+  .blitz-onboarding-copy { animation-delay: 60ms; }
+}
+@keyframes blitz-onboarding-rise { from { transform: translateY(10px); } to { transform: none; } }
