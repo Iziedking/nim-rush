@@ -1,6 +1,6 @@
 import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
 import { blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
-import type { BlitzChoice, BlitzCityId, BlitzRunState, BlitzTraceFrame } from '../../../shared/atlas/blitz/types';
+import type { BlitzCityId, BlitzDifficulty, BlitzRunState, BlitzTraceFrame } from '../../../shared/atlas/blitz/types';
 import type { BlitzTicket } from '../../../shared/atlas/blitz/competition';
 import { getBlitzDailyChallenge } from '../../../shared/atlas/blitz/daily';
 import { hashBlitzTrace } from '../../../shared/atlas/blitz/replay';
@@ -26,25 +26,28 @@ export class BlitzApp {
   private readonly walletBinding = createAtlasWalletBindingFlow({ api: this.api, wallet: this.wallet });
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly audio = createAtlasAudio();
+  private audioScene: 'menu' | 'riding' | 'paused' = 'menu';
+  private audioMuted = false;
   private readonly frameGovernor = new BlitzFrameGovernor(60);
   private readonly pendingRunStore: BlitzPendingRunStore;
   private state: BlitzRunState | null = null;
+  private previousRenderState: BlitzRunState | null = null;
   private frames: BlitzTraceFrame[] = [];
   private cityId: BlitzCityId = 'lagos';
-  private pendingChoice: BlitzChoice | undefined;
+  private difficulty: BlitzDifficulty = 'rookie';
   private frameHandle: number | null = null;
   private previousTimestamp: number | null = null;
   private accumulator = 0;
-  private shownRelay = -1;
   private lastPhysicsAudioTick = -1;
   private scoreNode: HTMLElement | null = null;
   private timerNode: HTMLElement | null = null;
   private speedNode: HTMLElement | null = null;
   private progressNode: HTMLElement | null = null;
   private boostNode: HTMLElement | null = null;
-  private relayHost: HTMLElement | null = null;
+  private missionHost: HTMLElement | null = null;
   private countdownNode: HTMLElement | null = null;
   private feedbackNode: HTMLElement | null = null;
+  private pauseOverlay: HTMLElement | null = null;
   private pauseButton: HTMLButtonElement | null = null;
   private paused = false;
   private rankedTicket: BlitzTicket | null = null;
@@ -53,6 +56,7 @@ export class BlitzApp {
   constructor(private readonly ui: HTMLElement, canvas: HTMLCanvasElement) {
     this.renderer = new BlitzRenderer(canvas);
     this.pendingRunStore = createBlitzPendingRunStore(safeLocalStorage());
+    try { this.audioMuted = safeLocalStorage()?.getItem('nim-rush:muted') === 'true'; } catch { /* Sound remains optional. */ }
   }
 
   async boot(): Promise<void> {
@@ -62,9 +66,12 @@ export class BlitzApp {
       await this.renderer.loadCity('lagos');
       this.resize();
       this.renderer.renderPreview('lagos');
-      if (blitzOnboardingSeen(safeLocalStorage())) this.renderIntro();
-      else this.renderOnboarding(0);
-      window.addEventListener('pointerdown', () => { this.audio.unlock(); this.audio.playTheme(); }, { once: true });
+      this.renderIntro();
+      // Launch can play on hosts that permit it. Suspended contexts retry on
+      // gestures, but the current scene alone decides which loops may play.
+      this.audioGesture();
+      window.addEventListener('pointerdown', this.audioGesture);
+      window.addEventListener('keydown', this.audioGesture);
       window.addEventListener('resize', this.resize);
       document.addEventListener('visibilitychange', this.visibilityChanged);
     } catch (error) {
@@ -85,15 +92,19 @@ export class BlitzApp {
         lateralVelocityMps: this.state.lateralVelocityMps,
         heightMeters: this.state.heightMeters,
         airborne: this.state.airborne,
+        collisions: this.state.collisions,
         surface: this.state.surface,
         lastEvent: this.state.lastEvent?.type ?? null,
         speedMps: this.state.speedMps,
         boostEnergy: this.state.boostEnergy,
         boostActive: this.state.boostActive,
         driftActive: this.state.driftActive,
-        activeRelay: this.state.activeRelay?.missionIndex ?? null,
+        difficulty: this.state.difficulty,
+        activeMission: this.state.activeMission?.missionIndex ?? null,
+        missionStatuses: this.state.missions.map((mission) => mission.status),
       } : null,
       renderer: this.renderer.debugSnapshot(),
+      audio: this.audio.debugSnapshot(),
     };
   }
 
@@ -160,14 +171,15 @@ export class BlitzApp {
   }
 
   private renderIntro(): void {
+    this.setAudioScene('menu');
     this.input.clearBindings();
     this.ui.replaceChildren();
     const screen = node('main', 'blitz-intro');
     screen.setAttribute('data-blitz-screen', 'intro');
-    const brand = node('div', 'blitz-brand', 'NIM ATLAS');
-    const edition = node('span', 'blitz-edition', 'BEACON BLITZ');
-    const title = node('h1', 'blitz-title', 'LAGOS\nPULSE');
-    const line = node('p', 'blitz-tagline', 'A payment is stuck. Ride it through Lagos. Bring it to finality.');
+    const brand = node('div', 'blitz-brand', 'NIM RUSH');
+    const edition = node('span', 'blitz-edition', 'DAILY DESCENT');
+    const title = node('h1', 'blitz-title', 'RIDGE\nRUN');
+    const line = node('p', 'blitz-tagline', 'Find your line. Ride the ridge. Prove your run.');
     const daily = getBlitzDailyChallenge({ now: Date.now(), cityId: 'lagos', seasonId: BLITZ_SEASON });
     const dailyMeta = node('p', 'blitz-daily-meta', `TODAY'S VERIFIED RUN / ${daily.date} / RESET ${formatUtcTime(daily.expiresAt)}`);
     /*
@@ -179,8 +191,15 @@ export class BlitzApp {
      * the way.
      */
     const stats = node('div', 'blitz-intro-stats');
-    stats.append(stat('90 SEC', 'LIMIT'), stat('3', 'CHECKS'), stat('01 / 03', 'CITY'));
-    const start = button('Ride Lagos', 'blitz-start', () => void this.startRun('lagos'));
+    stats.append(stat('1.9 KM', 'TRAIL'), stat('90 SEC', 'LIMIT'), stat('110 M', 'DESCENT'));
+    const difficultyChooser = node('fieldset', 'blitz-difficulty');
+    difficultyChooser.append(node('legend', '', 'RIDE RULES'));
+    const rookie = button('Rookie / learn the line', `blitz-difficulty-option${this.difficulty === 'rookie' ? ' is-selected' : ''}`, () => { this.difficulty = 'rookie'; this.renderIntro(); });
+    const pro = button('Pro / tighter gates', `blitz-difficulty-option${this.difficulty === 'pro' ? ' is-selected' : ''}`, () => { this.difficulty = 'pro'; this.renderIntro(); });
+    rookie.setAttribute('aria-pressed', String(this.difficulty === 'rookie'));
+    pro.setAttribute('aria-pressed', String(this.difficulty === 'pro'));
+    difficultyChooser.append(rookie, pro);
+    const start = button('Ride now', 'blitz-start', () => void this.startRun('lagos'));
     const ranked = node('details', 'blitz-ranked-launch');
     ranked.append(node('summary', 'blitz-ranked-label', 'WALLET VERIFIED / LEADERBOARD'));
     const username = node('input', 'blitz-username');
@@ -192,7 +211,7 @@ export class BlitzApp {
     username.setAttribute('aria-label', 'Ranked rider name');
     try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
     const rankedStatus = node('p', 'blitz-rank-status', 'Connect once. Your wallet signs identity, not a payment.');
-    const rankedButton = button('Connect wallet / rank Lagos', 'blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
+    const rankedButton = button('Verify identity / ride ranked', 'blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
     ranked.append(username, rankedButton, rankedStatus);
     /*
      * Discovery first, stated plainly. A player should know before they tap
@@ -200,7 +219,9 @@ export class BlitzApp {
      * path and nowhere else.
      */
     const note = node('p', 'blitz-quiet', 'No wallet needed to play. Ranked runs are replay-verified.');
-    screen.append(brand, edition, title, line, dailyMeta, stats, start, note, ranked);
+    screen.append(brand, edition, title, line, dailyMeta, stats, difficultyChooser, start, note, ranked);
+    screen.append(button('How to ride', 'blitz-help', () => this.renderOnboarding(blitzOnboardingSeen(safeLocalStorage()) ? 1 : 0)));
+    screen.append(this.soundControl());
     const pending = this.pendingRunStore.read();
     if (pending) {
       const recovery = node('section', 'blitz-pending-run');
@@ -214,22 +235,22 @@ export class BlitzApp {
   }
 
   private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null): Promise<void> {
+    this.setAudioScene('paused');
     this.audio.unlock();
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
     this.rankedInterrupted = false;
     const seed = rankedTicket?.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
-    this.state = createBlitzRun({ cityId, seed });
+    // Ranked keeps one visible, equal loadout and the shared Rookie ruleset
+    // until the server ticket contract carries Pro as an explicit version.
+    this.state = createBlitzRun({ cityId, seed, difficulty: rankedTicket ? 'rookie' : this.difficulty });
+    this.previousRenderState = null;
     this.frames = [];
-    this.pendingChoice = undefined;
-    this.shownRelay = -1;
     this.lastPhysicsAudioTick = -1;
     this.paused = false;
     this.input.reset();
     await this.renderer.loadCity(cityId);
-    this.audio.stopTheme();
-    this.audio.playCityAmbience();
-    this.audio.playBikeEngine(0);
+    this.setAudioScene(this.paused ? 'paused' : 'riding');
     this.renderRun();
     this.previousTimestamp = null;
     this.accumulator = 0;
@@ -245,7 +266,7 @@ export class BlitzApp {
     const screen = node('main', 'blitz-run');
     screen.setAttribute('data-blitz-screen', 'run');
     const top = node('header', 'blitz-hud');
-    const cityName = node('div', 'blitz-city-name', city.circuit);
+    const cityName = node('div', 'blitz-city-name', `${city.circuit} / ${this.difficulty.toUpperCase()}`);
     this.timerNode = node('div', 'blitz-timer', '90.0');
     this.scoreNode = node('div', 'blitz-score', '000000');
     this.pauseButton = button(this.rankedTicket ? 'LIVE' : 'II', 'blitz-pause', this.togglePause);
@@ -265,11 +286,21 @@ export class BlitzApp {
     boostTrack.append(this.boostNode);
     boost.append(boostTrack);
 
-    this.relayHost = node('section', 'blitz-relay-host');
-    this.relayHost.setAttribute('aria-live', 'polite');
+    this.missionHost = node('section', 'blitz-mission-hud');
+    this.missionHost.setAttribute('aria-label', 'Physical mission contracts');
+    this.renderMissionHud(this.state!);
     this.feedbackNode = node('div', 'blitz-feedback');
     this.feedbackNode.setAttribute('aria-live', 'polite');
     this.countdownNode = node('div', 'blitz-countdown', '3');
+
+    this.pauseOverlay = node('section', 'blitz-pause-overlay');
+    this.pauseOverlay.hidden = true;
+    this.pauseOverlay.append(
+      node('strong', 'blitz-pause-title', 'RUN PAUSED'),
+      node('p', 'blitz-pause-copy', 'Your course position is safe. Resume when the trail is clear.'),
+      button('Resume', 'blitz-start blitz-resume', this.togglePause),
+      button('Restart run', 'blitz-again blitz-restart', () => void this.startRun(this.cityId)),
+    );
 
     const controls = node('section', 'blitz-controls');
     const steerZone = node('div', 'blitz-control blitz-steer-zone');
@@ -289,7 +320,7 @@ export class BlitzApp {
     this.input.bindHold(brake, 'brake');
     this.input.bindHold(boostButton, 'boost');
 
-    screen.append(top, speedBox, progress, boost, this.relayHost, this.feedbackNode, this.countdownNode, controls);
+    screen.append(top, speedBox, progress, boost, this.missionHost, this.feedbackNode, this.countdownNode, this.pauseOverlay, controls);
     this.ui.append(screen);
   }
 
@@ -304,12 +335,11 @@ export class BlitzApp {
     let steps = 0;
     while (this.accumulator >= STEP_MS && steps < 8 && next.phase !== 'finished' && next.phase !== 'timeout') {
       const sampled = this.input.sample();
-      const input = { ...sampled, ...(this.pendingChoice ? { relayChoice: this.pendingChoice } : {}) };
-      this.pendingChoice = undefined;
-      const frame: BlitzTraceFrame = { tick: this.frames.length, input };
+      const frame: BlitzTraceFrame = { tick: this.frames.length, input: sampled };
       this.frames.push(frame);
       const wasBoostActive = next.boostActive;
-      next = stepBlitzRun(next, input);
+      this.previousRenderState = next;
+      next = stepBlitzRun(next, sampled);
       if (!wasBoostActive && next.boostActive) this.audio.playWorldCue('bike-boost');
       if (next.lastEvent && next.lastEvent.tick !== this.lastPhysicsAudioTick && next.lastEvent.type !== 'boost-start' && next.lastEvent.type !== 'boost-end') {
         this.audio.playPhysicsCue(next.lastEvent);
@@ -319,8 +349,9 @@ export class BlitzApp {
       steps += 1;
     }
     this.state = next;
+    this.audio.setBikeContact(next.surface, next.airborne || this.paused, next.lateralVelocityMps);
     if (this.frameGovernor.shouldRender(timestamp)) {
-      this.renderer.render(next, this.input.sample().steer);
+      this.renderer.render(next, this.input.sample().steer, this.previousRenderState, this.accumulator / STEP_MS);
       this.updateRunHud(next);
     }
     if (next.phase === 'finished' || next.phase === 'timeout') {
@@ -343,42 +374,45 @@ export class BlitzApp {
       this.countdownNode.textContent = state.phase === 'countdown' ? String(Math.max(1, Math.ceil(state.countdownTicks / BLITZ_TICK_RATE))) : 'GO';
       this.countdownNode.classList.toggle('is-live', state.phase === 'running');
     }
-    const relayIndex = state.activeRelay?.missionIndex ?? -1;
-    if (relayIndex !== this.shownRelay) {
-      this.shownRelay = relayIndex;
-      this.renderRelay(state);
+    this.updateMissionHud(state);
+  }
+
+  private renderMissionHud(state: BlitzRunState): void {
+    if (!this.missionHost) return;
+    this.missionHost.replaceChildren();
+    const heading = node('div', 'blitz-mission-heading', 'TODAY / THREE CONTRACTS');
+    this.missionHost.append(heading);
+    for (const mission of state.missions) {
+      const card = node('article', 'blitz-mission-card');
+      card.dataset.missionId = mission.id;
+      const top = node('div', 'blitz-mission-top');
+      top.append(node('strong', 'blitz-mission-label', mission.label), node('span', 'blitz-mission-status', 'READY'));
+      const progress = node('span', 'blitz-mission-progress', `0/${mission.target}`);
+      progress.dataset.missionProgress = mission.id;
+      const meter = node('i', 'blitz-mission-meter-fill');
+      meter.dataset.missionMeter = mission.id;
+      const meterTrack = node('span', 'blitz-mission-meter');
+      meterTrack.append(meter);
+      card.append(top, node('p', 'blitz-mission-verb', mission.verb), progress, meterTrack);
+      this.missionHost.append(card);
     }
   }
 
-  private renderRelay(state: BlitzRunState): void {
-    if (!this.relayHost) return;
-    this.relayHost.replaceChildren();
-    if (!state.activeRelay) return;
-    const mission = state.missions[state.activeRelay.missionIndex]!;
-    const card = node('div', 'blitz-relay-card');
-    card.append(node('span', 'blitz-relay-label', mission.label), node('h2', '', mission.prompt));
-    const choices = node('div', 'blitz-relay-choices');
-    choices.append(
-      button(mission.left, 'blitz-relay-choice', () => this.chooseRelay('left')),
-      button(mission.right, 'blitz-relay-choice', () => this.chooseRelay('right')),
-    );
-    card.append(choices);
-    this.relayHost.append(card);
-  }
-
-  private chooseRelay(choice: BlitzChoice): void {
-    const relay = this.state?.activeRelay;
-    const mission = relay === undefined || relay === null ? null : this.state?.missions[relay.missionIndex];
-    if (mission && this.feedbackNode) {
-      const correct = choice === mission.correctChoice;
-      this.feedbackNode.textContent = `${correct ? 'SYNCED +1200' : 'MISSED'} / ${mission.explanation}`;
-      this.feedbackNode.className = `blitz-feedback ${correct ? 'is-correct' : 'is-wrong'}`;
-      this.audio.playWorldCue(correct ? 'route-evidence' : 'route-refused');
-      window.setTimeout(() => {
-        if (this.feedbackNode) this.feedbackNode.className = 'blitz-feedback';
-      }, 1_900);
+  private updateMissionHud(state: BlitzRunState): void {
+    if (!this.missionHost) return;
+    for (const mission of state.missions) {
+      const card = this.missionHost.querySelector(`[data-mission-id="${mission.id}"]`);
+      if (!(card instanceof HTMLElement)) continue;
+      const status = card.querySelector('.blitz-mission-status');
+      if (status) status.textContent = mission.status === 'complete' ? 'DONE' : mission.status === 'failed' ? 'MISSED' : mission.status === 'active' ? 'LIVE' : 'READY';
+      const progress = card.querySelector(`[data-mission-progress="${mission.id}"]`);
+      if (progress) progress.textContent = `${Math.min(mission.progress, mission.target)}/${mission.target}`;
+      const meter = card.querySelector(`[data-mission-meter="${mission.id}"]`);
+      if (meter instanceof HTMLElement) meter.style.width = `${Math.min(100, mission.progress / mission.target * 100)}%`;
+      card.classList.toggle('is-active', mission.status === 'active');
+      card.classList.toggle('is-complete', mission.status === 'complete');
+      card.classList.toggle('is-failed', mission.status === 'failed');
     }
-    this.pendingChoice = choice;
   }
 
   private togglePause = (): void => {
@@ -395,14 +429,14 @@ export class BlitzApp {
     this.accumulator = 0;
     this.frameGovernor.reset();
     this.input.reset();
-    if (this.paused) this.audio.stopBikeEngine();
-    else this.audio.playBikeEngine(this.state?.speedMps ?? 0);
+    this.setAudioScene(this.paused ? 'paused' : 'riding');
+    if (this.pauseOverlay) this.pauseOverlay.hidden = !this.paused;
     if (this.pauseButton) {
       this.pauseButton.textContent = this.paused ? '▶' : 'II';
       this.pauseButton.setAttribute('aria-label', this.paused ? 'Resume Beacon Blitz' : 'Pause Beacon Blitz');
     }
     if (this.feedbackNode) {
-      this.feedbackNode.textContent = this.paused ? 'PAUSED / TAP ▶ TO RIDE' : '';
+      this.feedbackNode.textContent = this.paused ? 'RUN SAFE / RESUME WHEN READY' : '';
       this.feedbackNode.className = this.paused ? 'blitz-feedback is-paused' : 'blitz-feedback';
     }
   };
@@ -412,24 +446,37 @@ export class BlitzApp {
     this.frameHandle = null;
     this.input.reset();
     this.input.clearBindings();
-    this.audio.stopCityAmbience();
-    this.audio.stopBikeEngine();
-    this.audio.playTheme();
+    this.setAudioScene('menu');
     if (state.phase === 'finished') this.audio.playWorldCue('route-complete');
     const city = blitzCity(state.cityId);
     const nextCityId = nextBlitzCity(state.cityId);
     const next = blitzCity(nextCityId);
     const best = this.saveBest(state);
+    this.recordSkillUnlock(state);
+    const nextUnlocked = this.isCityUnlocked(nextCityId);
     this.ui.replaceChildren();
     const screen = node('main', 'blitz-result');
     screen.setAttribute('data-blitz-screen', 'result');
-    screen.append(node('div', 'blitz-brand', 'NIM ATLAS / BEACON BLITZ'));
-    screen.append(node('p', 'blitz-result-kicker', state.phase === 'finished' ? `${city.name.toUpperCase()} CLEARED` : 'SIGNAL LOST'));
+    screen.append(node('div', 'blitz-brand', 'NIM RUSH / DAILY DESCENT'));
+    screen.append(node('p', 'blitz-result-kicker', state.phase === 'finished' ? `${city.circuit.toUpperCase()} CLEARED` : 'RUN ENDED'));
     screen.append(node('h1', 'blitz-result-score', state.score.toLocaleString()));
+    screen.append(node('p', 'blitz-result-time', `${(state.elapsedMs / 1_000).toFixed(1)} SEC / ${state.collisions} CONTACTS / ${state.missions.filter((mission) => mission.status === 'complete').length}/3 CONTRACTS`));
     screen.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
     const breakdown = node('div', 'blitz-breakdown');
-    breakdown.append(stat(state.distanceScore.toLocaleString(), 'LINE'), stat(state.driftScore.toLocaleString(), 'DRIFT'), stat(state.relayScore.toLocaleString(), 'RELAYS'), stat(`-${state.penaltyScore.toLocaleString()}`, 'PENALTY'));
+    const score = state.scoreBreakdown;
+    breakdown.append(
+      stat(`+${score.finishTime.toLocaleString()}`, 'FINISH TIME'),
+      stat(`+${score.racingLine.toLocaleString()}`, 'RACING LINE'),
+      stat(`+${score.control.toLocaleString()}`, 'BRAKING / CONTROL'),
+      stat(`+${score.airtime.toLocaleString()}`, 'AIRTIME / LANDING'),
+      stat(`+${score.missions.toLocaleString()}`, 'MISSION COMPLETION'),
+      stat(`+${score.drift.toLocaleString()}`, 'DRIFT / CONTROL'),
+      stat(`-${score.collisionPenalties.toLocaleString()}`, 'COLLISION PENALTIES'),
+      stat(`-${score.missedGatePenalties.toLocaleString()}`, 'MISSED-GATE PENALTIES'),
+    );
     screen.append(breakdown);
+    screen.append(button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)));
+    screen.append(this.soundControl());
     /*
      * The day's pool, on the screen where a player has just earned a place in
      * it. Appended empty and filled when the standing arrives, because the
@@ -440,9 +487,10 @@ export class BlitzApp {
     screen.append(pool);
     void this.presentDayPool(pool);
     const reveal = node('section', 'blitz-next-city');
-    reveal.append(node('span', '', 'NEXT CIRCUIT'), node('h2', '', next.circuit), node('p', '', next.callout));
-    reveal.append(button(`Ride ${next.name}`, 'blitz-start blitz-next', () => void this.startRun(nextCityId)));
-    screen.append(reveal);
+    reveal.append(node('span', '', nextUnlocked ? 'NEXT CIRCUIT' : 'SKILL UNLOCK'), node('h2', '', next.circuit), node('p', '', nextUnlocked ? next.callout : `Finish this run with two missions and no more than two contacts to unlock ${next.name}.`));
+    const nextButton = button(nextUnlocked ? `Ride ${next.name}` : `Unlock ${next.name}`, 'blitz-again blitz-next', () => void this.startRun(nextCityId));
+    nextButton.disabled = !nextUnlocked;
+    reveal.append(nextButton);
     const competition = node('details', 'blitz-competition');
     competition.open = Boolean(this.rankedTicket);
     competition.append(node('summary', 'blitz-competition-summary', this.rankedTicket ? 'RANKED RUN STATUS' : 'RANK THIS CITY / LEADERBOARD'));
@@ -465,7 +513,9 @@ export class BlitzApp {
       void this.loadLeaderboard(state.cityId, competition);
     }
     screen.append(competition);
-    screen.append(button(`Ride ${city.name} again`, 'blitz-again', () => void this.startRun(state.cityId)));
+    const otherCourses = node('details', 'blitz-competition');
+    otherCourses.append(node('summary', 'blitz-competition-summary', 'OTHER CIRCUITS'), reveal);
+    screen.append(otherCourses);
     this.ui.append(screen);
   }
 
@@ -605,12 +655,25 @@ export class BlitzApp {
   }
 
   private saveBest(state: BlitzRunState): number {
-    const key = `nim-atlas:blitz:best:${state.cityId}`;
+    const key = `nim-atlas:blitz:best:${state.rulesetVersion}:${state.cityId}`;
     let previous = 0;
     try { previous = Number(localStorage.getItem(key) ?? 0); } catch { /* Private storage can be unavailable. */ }
-    const best = Math.max(previous, state.score);
+    const best = Math.max(Number.isFinite(previous) && previous >= 0 ? previous : 0, state.score);
     try { localStorage.setItem(key, String(best)); } catch { /* The run remains playable without storage. */ }
     return best;
+  }
+
+  private recordSkillUnlock(state: BlitzRunState): void {
+    if (state.phase !== 'finished') return;
+    const completed = state.missions.filter((mission) => mission.status === 'complete').length;
+    const unlocked = state.cityId === 'lagos' && completed >= 2 && state.collisions <= 2 ? 'london' : state.cityId === 'london' && completed >= 2 && state.collisions <= 1 ? 'dubai' : null;
+    if (!unlocked) return;
+    try { safeLocalStorage()?.setItem(`nim-rush:unlock:${unlocked}`, state.rulesetVersion); } catch { /* Progress remains playable without storage. */ }
+  }
+
+  private isCityUnlocked(cityId: BlitzCityId): boolean {
+    if (cityId === 'lagos') return true;
+    try { return safeLocalStorage()?.getItem(`nim-rush:unlock:${cityId}`) !== null; } catch { return false; }
   }
 
   private renderUnavailable(): void {
@@ -623,17 +686,56 @@ export class BlitzApp {
   }
 
   private visibilityChanged = (): void => {
-    if (document.hidden) {
+    if (document.hidden && this.audioScene !== 'menu') {
       if (this.rankedTicket) this.rankedInterrupted = true;
       this.paused = true;
       this.previousTimestamp = null;
       this.accumulator = 0;
       this.input.reset();
-      this.audio.stopBikeEngine();
+      this.setAudioScene('paused');
       if (this.pauseButton) { this.pauseButton.textContent = '▶'; this.pauseButton.setAttribute('aria-label', 'Resume Beacon Blitz'); }
-      if (this.feedbackNode) { this.feedbackNode.textContent = 'PAUSED / TAP ▶ TO RIDE'; this.feedbackNode.className = 'blitz-feedback is-paused'; }
+      if (this.pauseOverlay) {
+        this.pauseOverlay.hidden = false;
+        const copy = this.pauseOverlay.querySelector('.blitz-pause-copy');
+        if (copy) copy.textContent = this.rankedInterrupted
+          ? 'The screen was interrupted. This ranked attempt will not submit. Restart a free run to try again.'
+          : 'The course is paused. Resume when the trail is clear.';
+      }
+      if (this.feedbackNode) { this.feedbackNode.textContent = 'RUN PAUSED / RECOVERY READY'; this.feedbackNode.className = 'blitz-feedback is-paused'; }
     }
+    this.syncAudioScene();
   };
+
+  private setAudioScene(scene: 'menu' | 'riding' | 'paused'): void {
+    this.audioScene = scene;
+    this.syncAudioScene();
+  }
+
+  private syncAudioScene(): void {
+    const silent = document.hidden || this.audioMuted;
+    for (const [bus, level] of [['ambience', .25], ['events', .7], ['interface', .5], ['voice', .85]] as const) this.audio.setVolume(bus, silent ? 0 : level);
+    this.audio.setRideScene(silent ? 'silent' : this.audioScene, this.state?.speedMps ?? 0);
+  }
+
+  private audioGesture = (): void => {
+    if (this.audioMuted || document.hidden) return;
+    this.audio.unlock();
+    this.syncAudioScene();
+  };
+
+  private soundControl(): HTMLButtonElement {
+    const control = button(this.audioMuted ? 'Enable sound' : 'Mute sound', 'blitz-help blitz-sound', () => {
+      this.audioMuted = !this.audioMuted;
+      try { safeLocalStorage()?.setItem('nim-rush:muted', String(this.audioMuted)); } catch { /* Playback does not need storage. */ }
+      this.syncAudioScene();
+      this.audioGesture();
+      control.textContent = this.audioMuted ? 'Enable sound' : 'Mute sound';
+      control.setAttribute('aria-pressed', String(this.audioMuted));
+    });
+    control.setAttribute('aria-pressed', String(this.audioMuted));
+    control.title = 'Music in menus. Tyres, wind and impacts while riding. Audio may need a first touch.';
+    return control;
+  }
 
   private resize = (): void => {
     this.renderer.resize(window.innerWidth, window.innerHeight, Math.min(devicePixelRatio, 1.25));

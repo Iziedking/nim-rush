@@ -1,4 +1,9 @@
 .blitz-ui {
+  --atlas-signal: #e9bd6b;
+  --atlas-signal-rgb: 233 189 107;
+  --atlas-selected: #e9bd6b;
+  --atlas-selected-rgb: 233 189 107;
+  --atlas-on-accent: #17201c;
   position: relative;
   z-index: 2;
   width: 100%;
@@ -49,6 +54,8 @@
 .blitz-start { min-height: 58px; margin-top: 13px; padding: 0 20px; border-radius: 16px; background: var(--atlas-signal); color: var(--atlas-on-accent) !important; box-shadow: 0 12px 32px rgb(var(--atlas-signal-rgb) / .34); font: 900 18px/1 ui-monospace, monospace; letter-spacing: .03em; text-transform: uppercase; }
 .blitz-start:active { transform: translateY(2px) scale(.99); }
 .blitz-quiet { margin: 10px 3px 0; color: var(--atlas-label-dim); font-size: 11px; line-height: 1.35; }
+.blitz-help { min-height: 44px; margin-top: 4px; background: transparent; font: 800 11px/1 ui-monospace, monospace; }
+.blitz-rematch { width: 100%; }
 
 .blitz-run { position: absolute; inset: 0; pointer-events: none; }
 .blitz-hud { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 7px; align-items: center; }
@@ -165,6 +172,7 @@
    so it gets its own surface rather than sitting in the score breakdown. */
 .blitz-pool { display: grid; gap: 6px; margin-top: 16px; padding: 14px 16px; border: 2px solid rgb(255 255 255 / .14); border-left: 5px solid #ffd166; border-radius: 14px; background: rgb(12 16 34 / .78); }
 .blitz-pool-label { color: #9fb0d8; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-pool[hidden] { display: none; }
 .blitz-pool-value { color: #ffd166; font: 800 19px/1.15 system-ui, sans-serif; }
 .blitz-pool-note { margin: 0; max-width: 46ch; color: #e8ecf8; font: 600 13px/1.4 system-ui, sans-serif; }
 .blitz-pool-note.blitz-quiet { color: #9fb0d8; font-size: 12px; }
@@ -243,3 +251,39 @@
   .blitz-onboarding-copy { animation-delay: 60ms; }
 }
 @keyframes blitz-onboarding-rise { from { transform: translateY(10px); } to { transform: none; } }
+
+/* The mission surface is a race instrument, not a modal. It stays in the
+ * player's peripheral vision while the physical gates do the teaching. */
+.blitz-mission-hud { position: absolute; top: max(112px, calc(env(safe-area-inset-top) + 98px)); left: max(14px, env(safe-area-inset-left)); z-index: 3; display: grid; gap: 6px; width: min(218px, calc(100% - 28px)); pointer-events: none; text-shadow: 0 1px 7px rgb(7 12 28 / .55); }
+.blitz-mission-heading { color: rgb(255 255 255 / .84); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-mission-card { min-height: 44px; padding: 7px 9px 6px; border-left: 3px solid rgb(255 255 255 / .38); border-radius: 8px; background: rgb(7 12 28 / .62); color: white; transition: border-color .14s ease, background-color .14s ease; }
+.blitz-mission-card.is-active { border-left-color: var(--atlas-selected); background: rgb(7 12 28 / .82); }
+.blitz-mission-card.is-complete { border-left-color: var(--atlas-verified); }
+.blitz-mission-card.is-failed { border-left-color: var(--atlas-warn); opacity: .78; }
+.blitz-mission-top { display: flex; align-items: center; gap: 8px; }
+.blitz-mission-label { overflow: hidden; color: rgb(255 255 255 / .95); font: 900 9px/1.1 ui-monospace, monospace; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-mission-status { margin-left: auto; color: var(--atlas-selected); font: 900 8px/1 ui-monospace, monospace; letter-spacing: .1em; }
+.is-complete .blitz-mission-status { color: var(--atlas-verified); }
+.is-failed .blitz-mission-status { color: var(--atlas-warn); }
+.blitz-mission-verb { margin: 4px 0 5px; overflow: hidden; color: rgb(255 255 255 / .76); font: 600 10px/1.1 system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-mission-progress { display: block; color: rgb(255 255 255 / .68); font: 800 8px/1 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-mission-meter { display: block; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 3px; background: rgb(255 255 255 / .2); }
+.blitz-mission-meter-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--atlas-selected); transition: width .12s linear; }
+.is-complete .blitz-mission-meter-fill { background: var(--atlas-verified); }
+.is-failed .blitz-mission-meter-fill { background: var(--atlas-warn); }
+.blitz-pause-overlay { position: absolute; inset: 0; z-index: 8; display: grid; place-content: center; justify-items: center; gap: 9px; padding: 24px; background: rgb(7 12 28 / .72); text-align: center; pointer-events: auto; }
+.blitz-pause-overlay[hidden] { display: none; }
+.blitz-pause-title { color: white; font: 400 clamp(38px, 11vw, 68px)/.9 AtlasDisplay, Impact, sans-serif; letter-spacing: .04em; }
+.blitz-pause-copy { max-width: 34ch; margin: 0; color: rgb(255 255 255 / .82); font: 600 14px/1.35 system-ui, sans-serif; }
+.blitz-pause-overlay .blitz-start, .blitz-pause-overlay .blitz-again { width: min(280px, 100%); margin-top: 4px; }
+.blitz-difficulty { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 14px 0 0; padding: 0; border: 0; }
+.blitz-difficulty legend { grid-column: 1 / -1; margin-bottom: 1px; color: var(--atlas-label-dim); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .17em; }
+.blitz-difficulty-option { min-height: 44px; padding: 7px 8px; border: 1px solid rgb(var(--atlas-ink-rgb) / .2) !important; border-radius: 11px; background: var(--atlas-raised); color: var(--atlas-label); font: 800 9px/1.2 ui-monospace, monospace; }
+.blitz-difficulty-option.is-selected { border-color: var(--atlas-selected) !important; background: rgb(var(--atlas-selected-rgb) / .12); color: var(--atlas-selected); }
+.blitz-result-time { margin: 8px 0 0; color: var(--atlas-label); font: 900 10px/1.2 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-breakdown { grid-template-columns: repeat(2, 1fr); }
+.blitz-breakdown .blitz-stat { min-height: 48px; display: grid; align-content: center; border: 1px solid rgb(var(--atlas-ink-rgb) / .1); border-radius: 8px; background: rgb(var(--atlas-raised-rgb) / .55); }
+.blitz-breakdown .blitz-stat strong { font-variant-numeric: tabular-nums; }
+button:disabled { cursor: not-allowed; opacity: .48; }
+@media (max-width: 390px) { .blitz-mission-hud { top: max(106px, calc(env(safe-area-inset-top) + 92px)); width: min(198px, calc(100% - 28px)); } .blitz-mission-card { padding: 6px 8px 5px; } .blitz-mission-verb { margin: 3px 0 4px; font-size: 9px; } }
+@media (prefers-reduced-motion: reduce) { .blitz-mission-card, .blitz-mission-meter-fill { transition: none; } }

@@ -5,6 +5,8 @@ const main = readFileSync(new URL('../src/atlas/main.ts', import.meta.url), 'utf
 const app = readFileSync(new URL('../src/atlas/blitz/blitz-app.ts', import.meta.url), 'utf8');
 const input = readFileSync(new URL('../src/atlas/blitz/blitz-input.ts', import.meta.url), 'utf8');
 const renderer = readFileSync(new URL('../src/atlas/render/three/blitz-renderer.ts', import.meta.url), 'utf8');
+const bike = readFileSync(new URL('../src/atlas/render/three/rush-bike.ts', import.meta.url), 'utf8');
+const course = readFileSync(new URL('../src/atlas/render/three/rush-course.ts', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/atlas/blitz/blitz.css', import.meta.url), 'utf8');
 
 describe('Beacon Blitz public arcade experience', () => {
@@ -15,8 +17,9 @@ describe('Beacon Blitz public arcade experience', () => {
   });
 
   it('launches Lagos from one dominant action and keeps the run HUD lean', () => {
-    expect(app).toContain('Ride Lagos');
-    expect(app).toContain('A payment is stuck. Ride it through Lagos. Bring it to finality.');
+    expect(app).toContain('Ride now');
+    expect(app).toContain('Find your line. Ride the ridge. Prove your run.');
+    expect(app).toContain("'NIM RUSH'");
     /*
      * check / approve / confirm used to be taught in a brief block on this
      * screen, which is the opposite of "one dominant action": it put a label,
@@ -32,11 +35,12 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain('blitzOnboardingSeen');
     // The landing says what it costs to try, before anything is asked for.
     expect(app).toContain('No wallet needed to play');
-    expect(app).toContain('Connect wallet / rank Lagos');
+    expect(app).toContain('Verify identity / ride ranked');
     expect(app).toContain('prepareRankedStart');
     expect(app).toContain('issueRankedTicket');
     expect(app).toContain('wallet signs identity, not a payment');
-    expect(app).toContain('playBikeEngine');
+    expect(app).toContain("this.setAudioScene(this.paused ? 'paused' : 'riding')");
+    expect(app).not.toContain('this.audio.playTheme()');
     expect(app).toContain('setBikeSpeed');
     expect(app).toContain("playWorldCue('bike-boost')");
     expect(app).toContain("playWorldCue('route-complete')");
@@ -51,7 +55,7 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).not.toContain('Knowledge Book');
   });
 
-  it('offers touch and keyboard steering, drift, boost and two relay choices', () => {
+  it('offers touch and keyboard steering, drift, boost and persistent mission contracts', () => {
     expect(input).toContain("'ArrowLeft'");
     expect(input).toContain("'ArrowRight'");
     expect(input).toContain("'ArrowDown'");
@@ -62,18 +66,22 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain('blitz-drift');
     expect(app).toContain('blitz-brake');
     expect(app).toContain('blitz-boost');
-    expect(app).toContain('chooseRelay(\'left\')');
-    expect(app).toContain('chooseRelay(\'right\')');
+    expect(app).toContain('blitz-mission-hud');
+    expect(app).toContain('Physical mission contracts');
+    expect(app).toContain('blitz-pause-overlay');
+    expect(app).toContain('Restart run');
   });
 
   it('renders an actual bike, human rider, city landmarks and readable relay gates', () => {
-    expect(renderer).toContain('createBikeAndRider');
-    expect(renderer).toContain('createHumanRider');
+    expect(renderer).toContain('new RushBike()');
+    expect(course).toContain('createRushCourse');
     expect(renderer).toContain('createCityLandmarks');
     expect(renderer).toContain('createRelayGate');
-    expect(renderer).toContain('atlas-blitz-bike');
-    expect(renderer).toContain('atlas-blitz-rider-face');
-    expect(renderer).toContain('motionStreaks');
+    expect(bike).toContain('nim-rush-mountain-bike');
+    expect(bike).toContain('courseGroundLift');
+    expect(bike).toContain('this.compressionSpeed');
+    expect(bike).toContain('this.limbs.instanceMatrix.needsUpdate');
+    expect(bike).toContain('this.particles');
     expect(renderer).toContain('speedLookahead');
     expect(renderer).toContain('buildBlitzRoadRibbon');
     expect(renderer).toContain('createRouteDistricts');
@@ -96,9 +104,11 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(renderer).toContain("city.id === 'london' ? 0.3");
   });
 
-  it('keeps the next city ahead of optional wallet setup on the result screen', () => {
-    expect(app.indexOf("screen.append(reveal)")).toBeGreaterThan(-1);
-    expect(app.indexOf("screen.append(reveal)")).toBeLessThan(app.indexOf("screen.append(competition)"));
+  it('keeps same-course rematch ahead of wallet setup and optional circuits', () => {
+    expect(app.indexOf("button('Ride again'")).toBeGreaterThan(-1);
+    expect(app.indexOf("button('Ride again'")).toBeLessThan(app.indexOf("screen.append(competition)"));
+    expect(app).toContain('best:${state.rulesetVersion}:${state.cityId}');
+    expect(css).toContain('.blitz-pool[hidden] { display: none; }');
     expect(app).toContain('BlitzFrameGovernor');
     expect(app).toContain('if (!this.state) this.renderer.renderPreview(this.cityId)');
   });
