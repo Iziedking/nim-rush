@@ -20,6 +20,26 @@ function fakeBackend() {
 const state = (phase: AtlasAudioState['phase'], evidenceSource?: AtlasAudioState['evidenceSource']): AtlasAudioState => ({ phase, evidenceSource });
 
 describe('NIM Atlas adaptive audio', () => {
+  it('never restarts menu music from a late gesture while riding or paused', () => {
+    const fake = fakeBackend(), audio = createAtlasAudio(fake.backend);
+    audio.setRideScene('menu');
+    audio.setRideScene('riding');
+    audio.unlock();
+    audio.playTheme();
+    audio.setRideScene('paused');
+    audio.unlock();
+    audio.playTheme();
+    expect(fake.events.some(e => e.type === 'play' && e.cue === 'atlas-theme')).toBe(false);
+    audio.setRideScene('menu');
+    expect(fake.events.some(e => e.type === 'play' && e.cue === 'atlas-theme')).toBe(true);
+  });
+
+  it('retries backend resume after an initial autoplay attempt without replaying queued loops', () => {
+    const fake = fakeBackend(), audio = createAtlasAudio(fake.backend);
+    audio.playTheme(); audio.unlock(); audio.unlock();
+    expect(fake.events.filter(e => e.type === 'unlock')).toHaveLength(2);
+    expect(fake.events.filter(e => e.type === 'play' && e.cue === 'atlas-theme')).toHaveLength(1);
+  });
   /*
    * A phone play test reported the city as silent apart from footsteps.
    * Entering the city asks for the ambience loop immediately, before the

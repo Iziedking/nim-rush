@@ -1,5 +1,5 @@
 import type { LanternEvidenceSource, LanternPhase } from '../../../shared/atlas/adventures/last-lantern';
-import type { BlitzPhysicsEvent } from '../../../shared/atlas/blitz/types';
+import type { BlitzPhysicsEvent, BlitzSurface } from '../../../shared/atlas/blitz/types';
 
 /*
  * The game is written in English and narrated by the browser's speech synthesis.
@@ -16,11 +16,14 @@ export type AtlasAudioBus = 'ambience' | 'events' | 'interface' | 'voice';
 export type AtlasAudioCue = 'atlas-theme' | 'city-ambience' | 'harbor-waiting-ambience' | 'harbor-restored-ambience' | 'payment-pending' | 'payment-confirmed' | 'beacon-confirmation' | 'city-footstep' | 'city-interaction' | 'bike-engine' | 'bike-boost' | 'bike-skid' | 'bike-impact' | 'bike-landing' | 'bike-surface-change' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete';
 
 export interface AtlasAudioBackend {
+  debugSnapshot?(): { context: string; samples: string[]; bike: boolean };
   unlock(): void;
   play(cue: AtlasAudioCue, bus: AtlasAudioBus, loop: boolean): void;
   stop(cue: AtlasAudioCue): void;
   setVolume(bus: AtlasAudioBus, value: number): void;
   setEngineSpeed?(speedMps: number): void;
+  setBikeContact?(surface: BlitzSurface, airborne: boolean, slip: number): void;
+  physicsContact?(event: BlitzPhysicsEvent): void;
   visualCue(cue: AtlasAudioCue): void;
   narrate?(text: string, locale: string, speaker?: AtlasVoiceProfile): void;
   destroy(): void;
@@ -39,6 +42,7 @@ export function createAtlasAudio(backend: AtlasAudioBackend = createWebAudioBack
 
 export class AtlasAudio {
   private unlocked = false;
+  private rideScene: 'menu' | 'riding' | 'paused' | 'silent' | null = null;
   private current: AtlasAudioState | null = null;
   /*
    * Looping cues asked for before the unlock gesture.
@@ -57,9 +61,9 @@ export class AtlasAudio {
   constructor(private readonly backend: AtlasAudioBackend) {}
 
   unlock(): void {
-    if (this.unlocked) return;
     try {
       this.backend.unlock();
+      if (this.unlocked) return;
       this.unlocked = true;
       if (this.current) this.sync(null, this.current);
       for (const [cue, bus] of this.pendingLoops) this.playCue(cue, bus, true);
@@ -89,7 +93,25 @@ export class AtlasAudio {
    * require and also what keeps a 1.4 MB download off first paint.
    */
   playTheme(): void {
+    if (this.rideScene !== null && this.rideScene !== 'menu') return;
     this.requestLoop('atlas-theme', 'ambience');
+  }
+
+  setRideScene(scene: 'menu' | 'riding' | 'paused' | 'silent', speedMps = 0): void {
+    this.rideScene = scene;
+    this.stopCityAmbience();
+    if (scene === 'menu') {
+      this.stopBikeEngine();
+      this.playTheme();
+    } else {
+      this.stopTheme();
+      if (scene === 'riding') this.playBikeEngine(speedMps);
+      else this.stopBikeEngine();
+    }
+  }
+
+  debugSnapshot(): object {
+    return { scene: this.rideScene, ...this.backend.debugSnapshot?.() };
   }
 
   stopTheme(): void {
@@ -119,6 +141,7 @@ export class AtlasAudio {
 
   playPhysicsCue(event: BlitzPhysicsEvent): void {
     if (!this.unlocked) return;
+    if (this.backend.physicsContact) { this.backend.physicsContact(event); return; }
     let cue: Extract<AtlasAudioCue, `bike-${string}`>;
     switch (event.type) {
       case 'skid': cue = 'bike-skid'; break;
@@ -135,6 +158,10 @@ export class AtlasAudio {
 
   stopBikeEngine(): void {
     this.stopCue('bike-engine');
+  }
+
+  setBikeContact(surface: BlitzSurface, airborne: boolean, slip: number): void {
+    this.backend.setBikeContact?.(surface, airborne, slip);
   }
 
   /** Start a loop, or remember to start it the moment a gesture unlocks audio. */
@@ -163,6 +190,7 @@ export class AtlasAudio {
   }
 
   destroy(): void {
+    this.pendingLoops.clear();
     for (const cue of ['atlas-theme', 'city-ambience', 'harbor-waiting-ambience', 'payment-pending', 'harbor-restored-ambience', 'bike-engine'] as const) this.stopCue(cue);
     this.backend.destroy();
     this.current = null;
@@ -294,6 +322,13 @@ function createWebAudioBackend(): AtlasAudioBackend {
   let windFilter: BiquadFilterNode | null = null;
   let windGain: GainNode | null = null;
   let engineSpeed = 0;
+  let rollingSource: AudioBufferSourceNode | null = null;
+  let rollingFilter: BiquadFilterNode | null = null;
+  let rollingGain: GainNode | null = null;
+  let bikeSurface: BlitzSurface = 'dirt';
+  let bikeAirborne = false;
+  let bikeSlip = 0;
+  let impactAt = -1;
   let pendingNarration: { text: string; locale: string; speaker: AtlasVoiceProfile } | null = null;
   let voiceListenerInstalled = false;
 
@@ -372,17 +407,20 @@ function createWebAudioBackend(): AtlasAudioBackend {
   }
 
   function setEngineSpeed(speedMps: number): void {
-    engineSpeed = Math.max(0, Math.min(32, Number.isFinite(speedMps) ? speedMps : 0));
+    engineSpeed = Math.max(0, Math.min(42, Number.isFinite(speedMps) ? speedMps : 0));
     if (!context || !engineOscillator || !engineHarmonic || !engineFilter || !engineGain) return;
-    const normalized = Math.min(1, engineSpeed / 30);
+    const normalized = Math.min(1, engineSpeed / 40);
     const now = context.currentTime;
     engineOscillator.frequency.setTargetAtTime(52 + normalized * 82, now, 0.045);
     engineHarmonic.frequency.setTargetAtTime(104 + normalized * 164, now, 0.045);
     engineFilter.frequency.setTargetAtTime(220 + normalized * 1_160, now, 0.06);
-    engineGain.gain.setTargetAtTime(0.012 + normalized * 0.075, now, 0.08);
+    engineGain.gain.setTargetAtTime(normalized * .0015, now, 0.08);
     windFilter?.frequency.setTargetAtTime(380 + normalized * 2_400, now, 0.12);
     windFilter?.Q.setTargetAtTime(0.4 + normalized * 0.9, now, 0.12);
-    windGain?.gain.setTargetAtTime(0.0002 + normalized * 0.028, now, 0.16);
+    windGain?.gain.setTargetAtTime(normalized * normalized * .075, now, .16);
+    rollingFilter?.frequency.setTargetAtTime(bikeSurface === 'grass' ? 430 : bikeSurface === 'gravel' ? 2100 : bikeSurface === 'wood' ? 330 : bikeSurface === 'pavement' ? 650 : 1200, now, .08);
+    rollingGain?.gain.setTargetAtTime(bikeAirborne ? 0 : normalized * (.045 + Math.min(1, bikeSlip / 8) * .045) * (bikeSurface === 'grass' ? .55 : 1), now, .045);
+    rollingSource?.playbackRate.setTargetAtTime(.65 + normalized * .6, now, .08);
   }
 
   function startEngine(): void {
@@ -393,8 +431,8 @@ function createWebAudioBackend(): AtlasAudioBackend {
     engineHarmonic = context.createOscillator();
     engineFilter = context.createBiquadFilter();
     engineGain = context.createGain();
-    engineOscillator.type = 'sawtooth';
-    engineHarmonic.type = 'square';
+    engineOscillator.type = 'sine';
+    engineHarmonic.type = 'sine';
     engineFilter.type = 'lowpass';
     engineFilter.Q.value = 1.1;
     engineGain.gain.value = 0.0001;
@@ -422,6 +460,12 @@ function createWebAudioBackend(): AtlasAudioBackend {
     windFilter.connect(windGain);
     windGain.connect(output);
     windSource.start();
+    rollingSource = context.createBufferSource();
+    rollingSource.buffer = windBuffer; rollingSource.loop = true;
+    rollingFilter = context.createBiquadFilter(); rollingFilter.type = 'lowpass';
+    rollingGain = context.createGain(); rollingGain.gain.value = 0;
+    rollingSource.connect(rollingFilter); rollingFilter.connect(rollingGain); rollingGain.connect(output);
+    rollingSource.start(0, .73);
     setEngineSpeed(engineSpeed);
   }
 
@@ -436,11 +480,37 @@ function createWebAudioBackend(): AtlasAudioBackend {
     windSource = null;
     windFilter = null;
     windGain = null;
+    rollingSource?.stop(); rollingSource = null; rollingFilter = null; rollingGain = null;
   }
 
   return {
+    debugSnapshot: () => ({ context: context?.state ?? 'unavailable', samples: [...playing.keys()], bike: engineOscillator !== null }),
+    setBikeContact: (surface, airborne, slip) => { bikeSurface = surface; bikeAirborne = airborne; bikeSlip = Math.abs(slip); },
+    physicsContact: (event) => {
+      if (!context || !windSource?.buffer || (event.type !== 'impact' && event.type !== 'landing')) return;
+      const now = context.currentTime;
+      if (now - impactAt < .14) return;
+      impactAt = now;
+      const output = buses.get('events');
+      if (!output) return;
+      const source = context.createBufferSource(), filter = context.createBiquadFilter(), gain = context.createGain();
+      source.buffer = windSource.buffer;
+      filter.type = 'lowpass'; filter.frequency.value = event.type === 'landing' ? 340 : 1100;
+      const duration = .08 + event.intensity * .17;
+      gain.gain.setValueAtTime(.04 + event.intensity * .32, now);
+      gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+      source.connect(filter); filter.connect(gain); gain.connect(output);
+      source.start(now, (event.tick % 40) / 40); source.stop(now + duration);
+      source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    },
     unlock: () => {
-      if (context) return;
+      // Native Web Audio, MDN best practices read 2026-09-15. Autoplay may
+      // suspend an existing context; subsequent gestures must retry resume.
+      // https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices
+      if (context) {
+        if (context.state === 'suspended') void context.resume().catch(() => undefined);
+        return;
+      }
       const Constructor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Constructor) return;
       context = new Constructor();

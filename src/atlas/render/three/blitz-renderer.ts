@@ -21,11 +21,13 @@ import {
   Object3D,
   PerspectiveCamera,
   PlaneGeometry,
-  PCFShadowMap,
   PointLight,
+  Points,
+  PCFShadowMap,
   Scene,
   SphereGeometry,
   TorusGeometry,
+  Texture,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -34,18 +36,10 @@ import { blitzCity, type BlitzCityDefinition } from '../../../../shared/atlas/bl
 import { sampleBlitzRoute } from '../../../../shared/atlas/blitz/core';
 import { buildBlitzRoadRibbon } from '../../../../shared/atlas/blitz/road-ribbon';
 import type { BlitzCityId, BlitzRunState } from '../../../../shared/atlas/blitz/types';
-
-interface BikeRig {
-  readonly root: Group;
-  readonly body: Group;
-  readonly rider: Group;
-  readonly wheels: readonly Mesh[];
-  readonly trail: readonly Mesh[];
-  readonly motionStreaks: readonly Mesh[];
-  readonly dust: readonly Mesh[];
-  readonly impactRings: readonly Mesh[];
-  readonly headlight: PointLight;
-}
+import { createBlitzRun } from '../../../../shared/atlas/blitz/core';
+import { courseTerrainHeight } from '../../../../shared/atlas/blitz/course';
+import { RushBike } from './rush-bike';
+import { createRushCourse, updateRushCourse } from './rush-course';
 
 interface CrowdMember {
   readonly distanceMeters: number;
@@ -82,25 +76,29 @@ interface CityCrowd {
 
 export class BlitzRenderer {
   private readonly scene = new Scene();
-  private readonly camera = new PerspectiveCamera(58, 1, 0.1, 140);
+  private readonly camera = new PerspectiveCamera(58, 1, 0.1, 450);
   private readonly renderer: WebGLRenderer;
   private cityRoot: Group | null = null;
-  private bike: BikeRig | null = null;
-  private speedMarkers: Mesh[] = [];
+  private bike: RushBike | null = null;
   private relayGates: Group[] = [];
   private crowd: CityCrowd | null = null;
   private activeCity: BlitzCityId | null = null;
   private reducedMotion = false;
   private cameraReady = false;
   private previousDistance = 0;
-  private previousSpeedMps = 0;
+  private renderTimestamp = 0;
+  private readonly previousBikePosition = new Vector3();
+  private readonly cameraTarget = new Vector3();
+  private readonly cameraFocus = new Vector3();
+  private readonly forward = new Vector3();
+  private readonly sun = new DirectionalLight(0xffe9c9, 2.3);
 
   constructor(canvas: HTMLCanvasElement) {
     // The game is judged on a phone first. MSAA plus a large dynamic shadow
     // map made the primitive-heavy hero scene look acceptable in a desktop
     // screenshot while starving the actual controls on mobile.
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.12;
@@ -114,10 +112,15 @@ export class BlitzRenderer {
     const sky = new HemisphereLight(0xcfe6ff, 0x19142c, 1.55);
     sky.position.set(0, 30, 0);
     this.scene.add(sky);
-    const sun = new DirectionalLight(0xffe1b6, 2.2);
+    const sun = this.sun;
     sun.position.set(-12, 24, 10);
-    sun.castShadow = false;
-    this.scene.add(sun);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(512, 512);
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -9;
+    sun.shadow.camera.right = sun.shadow.camera.top = 9;
+    sun.shadow.camera.near = 1; sun.shadow.camera.far = 70;
+    sun.shadow.normalBias = .025; sun.shadow.bias = -.0001;
+    this.scene.add(sun, sun.target);
   }
 
   async loadCity(cityId: BlitzCityId): Promise<void> {
@@ -128,17 +131,17 @@ export class BlitzRenderer {
     }
     const city = blitzCity(cityId);
     this.scene.background = new Color(city.sky);
-    this.scene.fog = new Fog(city.fog, 24, 68);
+    this.scene.fog = new Fog(city.fog, 65, 225);
     this.cityRoot = createCity(city);
     this.scene.add(this.cityRoot);
-    this.speedMarkers = createSpeedMarkers(city);
-    this.cityRoot.add(...this.speedMarkers);
-    this.crowd = createCityCrowd(city);
-    this.cityRoot.add(this.crowd.torso, this.crowd.head, this.crowd.hair, this.crowd.arms, this.crowd.legs);
-    if (this.crowd.umbrellas) this.cityRoot.add(this.crowd.umbrellas);
-    for (const citizen of this.crowd.featured) this.cityRoot.add(citizen.root);
-    this.bike = createBikeAndRider(city);
-    this.cityRoot.add(this.bike.root);
+    this.crowd = cityId === 'lagos' ? null : createCityCrowd(city);
+    if (this.crowd) {
+      this.cityRoot.add(this.crowd.torso, this.crowd.head, this.crowd.hair, this.crowd.arms, this.crowd.legs);
+      if (this.crowd.umbrellas) this.cityRoot.add(this.crowd.umbrellas);
+      for (const citizen of this.crowd.featured) this.cityRoot.add(citizen.root);
+    }
+    this.bike = new RushBike();
+    this.cityRoot.add(this.bike.root, this.bike.particles, this.bike.shadow);
     this.relayGates = [0.24, 0.51, 0.77].map((distance01, index) => {
       const gate = createRelayGate(city, index);
       const pose = sampleBlitzRoute(city.id, city.lengthMeters * distance01);
@@ -150,20 +153,26 @@ export class BlitzRenderer {
     this.activeCity = cityId;
     this.cameraReady = false;
     this.previousDistance = 0;
-    this.previousSpeedMps = 0;
   }
 
   renderPreview(cityId: BlitzCityId): void {
     if (!this.bike || this.activeCity !== cityId) return;
     const city = blitzCity(cityId);
-    const state = { cityId, tick: 0, distanceMeters: city.lengthMeters * 0.08, laneOffset: 0, speedMps: 0, heightMeters: 0, driftActive: false, boostActive: false, missions: [], lastEvent: null } as unknown as BlitzRunState;
+    const state = { ...createBlitzRun({ cityId, seed: 'preview' }), distanceMeters: city.lengthMeters * 0.015 };
     this.present(state, 0);
     this.renderer.render(this.scene, this.camera);
   }
 
-  render(state: BlitzRunState, steer: number): void {
+  render(state: BlitzRunState, steer: number, previous: BlitzRunState | null = null, alpha = 1): void {
     if (!this.bike || this.activeCity !== state.cityId) return;
-    this.present(state, steer);
+    const blend = MathUtils.clamp(alpha, 0, 1);
+    const visibleState = previous && previous.cityId === state.cityId ? {
+      ...state,
+      distanceMeters: MathUtils.lerp(previous.distanceMeters, state.distanceMeters, blend),
+      laneOffset: MathUtils.lerp(previous.laneOffset, state.laneOffset, blend),
+      heightMeters: MathUtils.lerp(previous.heightMeters, state.heightMeters, blend),
+    } : state;
+    this.present(visibleState, steer);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -195,154 +204,53 @@ export class BlitzRenderer {
       bikeNdc: bikeNdc?.toArray() ?? null,
       contextLost: this.renderer.getContext().isContextLost(),
       render: { ...this.renderer.info.render },
+      resources: { ...this.renderer.info.memory },
     };
   }
 
   private present(state: BlitzRunState, steer: number): void {
+    const now = performance.now();
+    const dt = this.renderTimestamp ? MathUtils.clamp((now - this.renderTimestamp) / 1000, 0, 1 / 30) : 1 / 60;
+    this.renderTimestamp = now;
     const bike = this.bike!;
+    const impact = bike.update(state, steer, dt);
+    this.sun.position.set(bike.root.position.x - 18, bike.root.position.y + 28, bike.root.position.z + 12);
+    this.sun.target.position.copy(bike.root.position);
     const pose = sampleBlitzRoute(state.cityId, state.distanceMeters, state.laneOffset);
-    const event = state.lastEvent?.tick === state.tick ? state.lastEvent : null;
-    const landingKick = event?.type === 'landing' ? event.intensity * 0.12 : 0;
-    const hardImpact = event?.type === 'impact';
-    const impactIntensity = event?.type === 'impact' ? event.intensity : 0;
-    const speedEffect = MathUtils.clamp((state.speedMps - 12) / 26, 0, 1);
-    const rush = speedEffect * speedEffect;
-    const speedDelta = state.speedMps - this.previousSpeedMps;
-    const lateralVelocity = Number.isFinite(state.lateralVelocityMps) ? state.lateralVelocityMps : 0;
-    this.previousSpeedMps = state.speedMps;
-    bike.root.position.set(pose.x, pose.y + 0.36 + state.heightMeters, pose.z);
-    bike.root.rotation.y = pose.headingRadians;
-    const airPitch = state.airborne ? -MathUtils.clamp(state.verticalVelocityMps / 10, -0.42, 0.42) * 0.28 : 0;
-    bike.root.rotation.x = MathUtils.lerp(bike.root.rotation.x, -pose.slope * 0.24 + airPitch - impactIntensity * 0.16, 0.16);
-    const targetLean = this.reducedMotion ? 0 : MathUtils.clamp(-steer * (state.driftActive ? 0.38 : 0.2) - pose.bend * 0.035, -0.46, 0.46);
-    bike.body.rotation.z = MathUtils.lerp(bike.body.rotation.z, targetLean, 0.18);
-    bike.body.rotation.y = MathUtils.lerp(bike.body.rotation.y, lateralVelocity * 0.018, 0.16);
-    const impactSide = Math.sign(lateralVelocity) || Math.sign(steer) || 1;
-    bike.body.position.x = MathUtils.lerp(bike.body.position.x, hardImpact ? -impactSide * 0.22 * impactIntensity : 0, hardImpact ? 0.78 : 0.16);
-    bike.rider.rotation.z = MathUtils.lerp(bike.rider.rotation.z, targetLean * 0.72, 0.2);
-    bike.rider.rotation.x = MathUtils.lerp(bike.rider.rotation.x, 0.08 - speedEffect * 0.15 - MathUtils.clamp(speedDelta, -1, 1) * 0.07 + impactIntensity * 0.2, 0.15);
-    bike.rider.rotation.z = MathUtils.lerp(bike.rider.rotation.z, targetLean * 0.72 + (hardImpact ? impactSide * 0.13 : 0), 0.2);
-    bike.rider.rotation.y = MathUtils.lerp(bike.rider.rotation.y, steer * 0.075, 0.16);
-    bike.rider.position.x = MathUtils.lerp(bike.rider.position.x, -steer * 0.035, 0.18);
-    const travelled = Math.max(0, state.distanceMeters - this.previousDistance);
+    const reset = !this.cameraReady || state.distanceMeters < this.previousDistance;
     this.previousDistance = state.distanceMeters;
-    for (const wheel of bike.wheels) wheel.rotation.x -= travelled / 0.34;
-    if (bike.wheels[1]) bike.wheels[1].rotation.y = MathUtils.lerp(bike.wheels[1].rotation.y, Math.PI / 2 + steer * 0.2, 0.24);
-    for (const trail of bike.trail) {
-      trail.visible = state.driftActive && state.surface !== 'pavement';
-      trail.scale.z = state.driftActive ? 1 + Math.sin(state.tick * 0.7) * 0.22 : 0.1;
-      (trail.material as MeshBasicMaterial).opacity = state.driftActive ? 0.18 : 0;
-    }
-    /*
-     * Speed cues scaled across the speed the game actually runs at.
-     *
-     * This was clamp((speed - 13) / 14), which saturates at 27 m/s. A run
-     * cruises at ~30 and boosts to ~38.5, so every cue - streaks, road
-     * markers, bike bob - sat pinned at maximum for the whole ride and boost
-     * changed nothing you could see. That is why 108 km/h did not feel like
-     * 108 km/h: the picture stopped responding before the bike got going.
-     *
-     * 12 m/s is a crawl, 40 m/s is boosted top speed. `rush` is the same
-     * curve biased to the top end, for the cues that should only scream when
-     * the bike is genuinely flying.
-     */
-    bike.body.position.y = Math.sin(state.tick * 0.22) * speedEffect * 0.026 - landingKick;
-    bike.body.rotation.x = Math.sin(state.tick * 0.34) * speedEffect * 0.018 - MathUtils.clamp(speedDelta, -1, 1) * 0.08;
-    bike.rider.position.y = 0.012 + Math.sin(state.tick * 0.22 + 0.8) * speedEffect * 0.014;
-    bike.motionStreaks.forEach((streak, index) => {
-      const material = streak.material as MeshBasicMaterial;
-      const visible = speedEffect > 0.72 || state.boostActive;
-      streak.visible = visible;
-      streak.position.z = -1.35 - ((state.tick * (0.26 + speedEffect * 0.95) + index * 0.82) % 5.9);
-      streak.scale.z = 0.45 + speedEffect * (1.05 + (index % 3) * 0.32) + rush * 1.5;
-      material.opacity = rush * (state.boostActive ? 0.25 : 0.08);
-    });
-    const dustStrength = state.surface === 'dirt' ? 0.86 : state.surface === 'gravel' ? 0.62 : state.driftActive ? 0.24 : 0;
-    const dustColour = state.surface === 'gravel' ? 0xb2aaa0 : state.surface === 'wood' ? 0x9c8063 : 0xc6a177;
-    bike.dust.forEach((puff, index) => {
-      const material = puff.material as MeshBasicMaterial;
-      const active = dustStrength > 0.05;
-      const phase = (state.tick * (0.12 + speedEffect * 0.28) + index * 0.71) % 4.6;
-      puff.visible = active;
-      puff.position.set((index % 2 === 0 ? -1 : 1) * (0.12 + (index % 4) * 0.035), 0.12 + phase * 0.08, -0.98 - phase * 0.42);
-      puff.scale.set(0.7 + phase * 0.16, 0.45 + phase * 0.22, 0.7 + phase * 0.16);
-      material.color.setHex(dustColour);
-      material.opacity = active ? dustStrength * Math.max(0, 1 - phase / 4.8) * (0.18 + speedEffect * 0.22) : 0;
-    });
-    const impact = event?.type === 'landing' || event?.type === 'impact';
-    bike.impactRings.forEach((ring, index) => {
-      const material = ring.material as MeshBasicMaterial;
-      ring.visible = impact;
-      ring.position.set(0, 0.035, -0.1 - index * 0.42);
-      ring.scale.setScalar(impact ? 0.8 + (event?.intensity ?? 0.4) * (1.2 + index * 0.5) : 0.1);
-      material.opacity = impact ? (event?.intensity ?? 0.4) * (0.32 - index * 0.08) : 0;
-    });
-    const forward = new Vector3(Math.sin(pose.headingRadians), 0, Math.cos(pose.headingRadians));
-    const right = new Vector3(forward.z, 0, -forward.x);
-    const roadFlow = state.tick * (0.16 + speedEffect * 1.15);
-    this.speedMarkers.forEach((marker, index) => {
-      const distanceFromBike = 4.8 - ((roadFlow + index * 0.84) % 8.6);
-      const lane = ((index % 5) - 2) * 0.64;
-      marker.position.copy(new Vector3(pose.x, pose.y + 0.102, pose.z))
-        .addScaledVector(forward, distanceFromBike)
-        .addScaledVector(right, lane);
-      marker.rotation.y = pose.headingRadians;
-      marker.scale.z = 0.5 + speedEffect * (0.8 + (index % 3) * 0.24) + rush * 0.9;
-      marker.visible = speedEffect > 0.28 && index % 2 === 0;
-      (marker.material as MeshBasicMaterial).opacity = rush * (state.boostActive ? 0.22 : 0.08);
-    });
-    bike.headlight.intensity = state.boostActive ? 9 : 5;
-    this.relayGates.forEach((gate, index) => {
-      const mission = state.missions[index];
-      gate.visible = !mission?.resolved;
-      const pulse = this.reducedMotion ? 1 : 1 + Math.sin(state.tick * 0.12 + index) * 0.05;
-      gate.scale.setScalar(pulse);
-    });
-    if (this.crowd) updateCityCrowd(this.crowd, state.tick);
-
-    const portrait = this.camera.aspect < 0.8;
-    const speedLookahead = Math.min(1.45, state.speedMps / 20);
-    const focus = new Vector3(pose.x, pose.y + (portrait ? 1.62 : 0.96) + state.heightMeters * 0.35, pose.z).addScaledVector(forward, (portrait ? 1.72 : 1.88) + speedLookahead);
-    /*
-     * Lower and closer than it was (3.5 m up, 7.8 m back).
-     *
-     * Speed is read from what passes near the camera, so a high, distant
-     * chase view flattens it however fast the bike is actually going. Dropping
-     * the eye toward the road and pulling in puts the tarmac and the kerb in
-     * the near field where they streak.
-     */
-    const desired = new Vector3(pose.x, pose.y + (portrait ? 2.28 : 2.22) + landingKick + impactIntensity * 0.14, pose.z)
-      .addScaledVector(forward, portrait ? -4.95 : -5.2)
-      .addScaledVector(right, this.reducedMotion ? 0 : -pose.bend * 0.16);
-    if (!this.cameraReady) {
-      this.camera.position.copy(desired);
+    const speed = MathUtils.clamp(state.speedMps / 40, 0, 1);
+    const speedLookahead = 3 + speed * 3;
+    this.forward.set(Math.sin(pose.headingRadians), 0, Math.cos(pose.headingRadians));
+    const behindGround = courseTerrainHeight(state.cityId, Math.max(0, state.distanceMeters - 6.7), state.laneOffset);
+    this.cameraTarget.set(pose.x, Math.max(bike.root.position.y + 2.5, behindGround + 2), pose.z).addScaledVector(this.forward, -6.7);
+    this.cameraFocus.set(pose.x, bike.root.position.y + 1.05, pose.z).addScaledVector(this.forward, speedLookahead);
+    if (reset) {
+      this.camera.position.copy(this.cameraTarget);
       this.cameraReady = true;
     } else {
-      /*
-       * Tighter than it was (0.125, and 0.085 on boost). A heavily smoothed
-       * chase camera lags the bike, which damps exactly the relative motion
-       * that reads as speed - and it was slowest precisely when boosting.
-       * Boost now tightens the follow rather than loosening it.
-       */
-      this.camera.position.lerp(desired, this.reducedMotion ? 0.22 : state.boostActive ? 0.2 : 0.17);
+      // Transport the follow rig with the bicycle before damping its offset.
+      // Otherwise low FPS increases chase lag and hides the actual speed.
+      this.camera.position.add(bike.root.position).sub(this.previousBikePosition);
+      this.camera.position.lerp(this.cameraTarget, 1 - Math.exp(-dt * 9));
     }
-    this.camera.lookAt(focus);
-    this.camera.rotation.z = MathUtils.lerp(this.camera.rotation.z, this.reducedMotion ? 0 : -targetLean * 0.035 + pose.bend * 0.006 + (hardImpact ? impactSide * 0.035 : 0), 0.14);
-    /*
-     * FOV is the strongest speed cue a racing game has, and this was barely
-     * using it: 60 to 64.6 across the whole normal range. It now opens with
-     * real speed and kicks again on boost.
-     */
-    const desiredFov = this.reducedMotion ? 58 : 57 + speedEffect * 16 + (state.boostActive ? 4 : 0);
-    this.camera.fov = MathUtils.lerp(this.camera.fov, desiredFov, state.boostActive ? 0.16 : 0.12);
+    this.previousBikePosition.copy(bike.root.position);
+    this.camera.lookAt(this.cameraFocus);
+    if (!this.reducedMotion) this.camera.rotateZ(-steer * .018 + impact * .015 * Math.sin(state.tick * .9));
+    const targetFov = this.reducedMotion ? 60 : 58 + speed * 9 + (state.boostActive ? 3 : 0);
+    this.camera.fov = MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.exp(-dt * 5));
     this.camera.updateProjectionMatrix();
+    this.relayGates.forEach((gate, index) => { gate.visible = state.missions[index]?.status !== 'complete'; });
+    if (this.crowd) updateCityCrowd(this.crowd, state.tick);
+    if (state.cityId === 'lagos' && this.cityRoot) updateRushCourse(this.cityRoot, state.distanceMeters);
   }
 }
 
 function createCity(city: BlitzCityDefinition): Group {
+  if (city.id === 'lagos') return createRushCourse(city.id);
   const root = new Group();
   root.name = `atlas-blitz-city-${city.id}`;
-  const ground = new Mesh(new PlaneGeometry(86, 86), new MeshStandardMaterial({ color: city.fog, roughness: 1 }));
+    const ground = new Mesh(new PlaneGeometry(1200, 1200), new MeshStandardMaterial({ color: city.fog, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.08;
   ground.receiveShadow = true;
@@ -387,31 +295,20 @@ function createRoad(root: Group, city: BlitzCityDefinition): void {
   for (let index = 0; index < 52; index += 1) {
     const pose = sampleBlitzRoute(city.id, city.lengthMeters * (index / 52));
     const dash = new Mesh(new BoxGeometry(0.065, 0.018, 0.68), lineMaterial);
-    dash.position.set(pose.x, 0.082, pose.z);
+    dash.position.set(pose.x, pose.y + 0.082, pose.z);
     dash.rotation.y = pose.headingRadians;
     root.add(dash);
   }
 }
 
 function createRoadRibbon(city: BlitzCityDefinition, width: number, material: MeshStandardMaterial | MeshBasicMaterial): Mesh {
-  const ribbon = buildBlitzRoadRibbon(city.route, width, city.routeElevation);
+  const samples = Array.from({ length: 640 }, (_, i) => sampleBlitzRoute(city.id, city.lengthMeters * i / 640));
+  const ribbon = buildBlitzRoadRibbon(samples.map(p => [p.x, p.z] as const), width, samples.map(p => p.y));
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(ribbon.positions, 3));
   geometry.setIndex([...ribbon.indices]);
   geometry.computeVertexNormals();
   return new Mesh(geometry, material);
-}
-
-function createSpeedMarkers(city: BlitzCityDefinition): Mesh[] {
-  return Array.from({ length: 9 }, (_, index) => {
-    const marker = new Mesh(
-      new BoxGeometry(index % 3 === 0 ? 0.06 : 0.035, 0.012, 0.72),
-      new MeshBasicMaterial({ color: city.id === 'dubai' ? 0xd8c4a6 : 0xcbd7d3, transparent: true, opacity: 0 }),
-    );
-    marker.name = `atlas-blitz-speed-marker-${index}`;
-    marker.visible = false;
-    return marker;
-  });
 }
 
 function createRouteDistricts(root: Group, city: BlitzCityDefinition): void {
@@ -1152,224 +1049,18 @@ function createRoadHazard(city: BlitzCityDefinition, id: string): Group {
 
 function createRelayGate(city: BlitzCityDefinition, index: number): Group {
   const gate = new Group();
-  gate.name = `atlas-blitz-relay-gate-${index + 1}`;
-  const material = new MeshStandardMaterial({
-    color: index === 1 ? city.accent : 0xd9d1bd,
-    roughness: 0.5,
-    metalness: 0.2,
-    emissive: city.signal,
-    emissiveIntensity: 0.12,
-  });
+  gate.name = `nim-rush-course-marker-${index}`;
+  const pole = new MeshStandardMaterial({ color: 0x454a40, roughness: .9 });
+  const flag = new MeshStandardMaterial({ color: city.accent, roughness: .85, side: 2 });
   for (const side of [-1, 1]) {
-    const pillar = new Mesh(new BoxGeometry(0.13, 2.15, 0.13), material);
-    pillar.position.set(side * city.roadWidth * 0.46, 1.08, 0);
-    gate.add(pillar);
+    const upright = new Mesh(new CylinderGeometry(.025, .025, 2.6, 6), pole);
+    upright.position.set(side * (city.roadWidth / 2 + .5), 1.3, 0);
+    const cloth = new Mesh(new PlaneGeometry(.4, 1.5), flag);
+    cloth.position.set(side * (city.roadWidth / 2 + .72), 1.7, 0);
+    cloth.rotation.y = side * .3;
+    gate.add(upright, cloth);
   }
-  const arch = new Mesh(new TorusGeometry(city.roadWidth * 0.46, 0.055, 7, 28, Math.PI), material);
-  arch.position.y = 2.12;
-  arch.rotation.z = Math.PI;
-  gate.add(arch);
-  const pulse = new PointLight(index === 1 ? city.accent : city.signal, 2.4, 6, 2);
-  pulse.position.y = 1.9;
-  gate.add(pulse);
   return gate;
-}
-
-function createBikeAndRider(city: BlitzCityDefinition): BikeRig {
-  const root = new Group();
-  root.name = 'atlas-blitz-bike';
-  const body = new Group();
-  const rider = createHumanRider(city);
-  root.add(body);
-  const dark = new MeshPhysicalMaterial({ color: 0x0c1026, roughness: 0.5, metalness: 0.58, clearcoat: 0.34, clearcoatRoughness: 0.26 });
-  const frame = new MeshPhysicalMaterial({ color: city.accent, roughness: 0.32, metalness: 0.62, clearcoat: 0.72, clearcoatRoughness: 0.18 });
-  const chrome = new MeshPhysicalMaterial({ color: 0xb8c7e8, roughness: 0.2, metalness: 0.88, clearcoat: 0.4, clearcoatRoughness: 0.14 });
-  const wheels: Mesh[] = [];
-  for (const z of [-0.88, 0.92]) {
-    const wheel = new Mesh(new TorusGeometry(0.34, 0.085, 10, 22), dark);
-    wheel.rotation.y = Math.PI / 2;
-    wheel.position.set(0, 0.34, z);
-    wheel.castShadow = true;
-    body.add(wheel);
-    const disc = new Mesh(new TorusGeometry(0.19, 0.014, 7, 18), chrome);
-    disc.rotation.y = Math.PI / 2;
-    disc.position.set(0, 0.34, z);
-    body.add(disc);
-    const hub = new Mesh(new CylinderGeometry(0.055, 0.055, 0.16, 10), chrome);
-    hub.rotation.z = Math.PI / 2;
-    hub.position.set(0, 0.34, z);
-    body.add(hub);
-    wheels.push(wheel);
-  }
-  body.add(cylinderBetween(new Vector3(0, 0.4, -0.82), new Vector3(0, 0.74, 0.05), 0.055, frame));
-  body.add(cylinderBetween(new Vector3(0, 0.4, 0.86), new Vector3(0, 0.74, 0.05), 0.055, frame));
-  body.add(cylinderBetween(new Vector3(0, 0.4, -0.82), new Vector3(0, 0.42, 0.86), 0.04, chrome));
-  body.add(cylinderBetween(new Vector3(-0.16, 0.48, 0.72), new Vector3(-0.14, 0.94, 0.76), 0.035, chrome));
-  body.add(cylinderBetween(new Vector3(0.16, 0.48, 0.72), new Vector3(0.14, 0.94, 0.76), 0.035, chrome));
-  const tank = new Mesh(new SphereGeometry(0.28, 12, 8), frame);
-  tank.scale.set(1.25, 0.72, 1.5);
-  tank.position.set(0, 0.78, 0.24);
-  const seat = new Mesh(new BoxGeometry(0.36, 0.1, 0.55), dark);
-  seat.position.set(0, 0.78, -0.34);
-  seat.rotation.x = -0.08;
-  const handle = new Mesh(new BoxGeometry(0.82, 0.045, 0.045), chrome);
-  handle.position.set(0, 1.02, 0.72);
-  const fairing = new Mesh(new BoxGeometry(0.46, 0.4, 0.48), frame);
-  fairing.position.set(0, 0.79, 0.68);
-  fairing.rotation.x = -0.18;
-  const windscreen = new Mesh(new BoxGeometry(0.3, 0.22, 0.06), new MeshPhysicalMaterial({ color: 0x8ed8ef, roughness: 0.12, metalness: 0.15, transmission: 0.18, transparent: true, opacity: 0.76 }));
-  windscreen.position.set(0, 1.01, 0.76);
-  windscreen.rotation.x = -0.38;
-  const dashboard = new Mesh(new CylinderGeometry(0.09, 0.09, 0.025, 12), new MeshBasicMaterial({ color: city.signal }));
-  dashboard.rotation.x = Math.PI / 2;
-  dashboard.position.set(0, 1.025, 0.63);
-  const exhaust = new Mesh(new CylinderGeometry(0.07, 0.085, 0.78, 10), chrome);
-  exhaust.rotation.x = Math.PI / 2;
-  exhaust.position.set(0.27, 0.42, -0.35);
-  const tail = new Mesh(new BoxGeometry(0.22, 0.12, 0.07), new MeshBasicMaterial({ color: 0xff477e }));
-  tail.position.set(0, 0.72, -0.75);
-  body.add(tank, seat, handle, fairing, windscreen, dashboard, exhaust, tail, rider);
-  const headlight = new PointLight(0xcff8ff, 5, 10, 2);
-  headlight.position.set(0, 0.88, 0.95);
-  body.add(headlight);
-  const trail = [-0.12, 0.12].map((x) => {
-    const beam = new Mesh(new BoxGeometry(0.065, 0.05, 1.5), new MeshBasicMaterial({ color: 0x6b5e51, transparent: true, opacity: 0.24 }));
-    beam.position.set(x, 0.38, -1.55);
-    body.add(beam);
-    return beam;
-  });
-  const dust = Array.from({ length: 14 }, (_, index) => {
-    const puff = new Mesh(
-      new SphereGeometry(0.11 + (index % 3) * 0.025, 7, 5),
-      new MeshBasicMaterial({ color: 0xc09b72, transparent: true, opacity: 0 }),
-    );
-    puff.visible = false;
-    body.add(puff);
-    return puff;
-  });
-  const impactRings = Array.from({ length: 2 }, () => {
-    const ring = new Mesh(
-      new TorusGeometry(0.22, 0.035, 7, 24),
-      new MeshBasicMaterial({ color: 0xdfe8e1, transparent: true, opacity: 0 }),
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.visible = false;
-    root.add(ring);
-    return ring;
-  });
-  const motionStreaks = Array.from({ length: 9 }, (_, index) => {
-    const streak = new Mesh(
-      new BoxGeometry(index % 3 === 0 ? 0.07 : 0.042, 0.024, 1.55),
-      new MeshBasicMaterial({ color: index % 2 === 0 ? 0xd5ded9 : 0xb3c1c0, transparent: true, opacity: 0 }),
-    );
-    streak.position.set((index % 3 - 1) * 1.05, -0.29, -1.5 - index * 0.82);
-    streak.rotation.y = (index % 2 === 0 ? 1 : -1) * 0.035;
-    streak.visible = false;
-    body.add(streak);
-    return streak;
-  });
-  return { root, body, rider, wheels, trail, motionStreaks, dust, impactRings, headlight };
-}
-
-function createHumanRider(city: BlitzCityDefinition): Group {
-  const rider = new Group();
-  rider.name = 'atlas-blitz-human-rider';
-  rider.position.z = 0.08;
-  rider.rotation.x = 0.08;
-  const skin = new MeshStandardMaterial({ color: 0x704631, roughness: 0.86 });
-  const jacket = new MeshStandardMaterial({ color: 0x20264c, roughness: 0.72 });
-  const trousers = new MeshStandardMaterial({ color: 0x10142c, roughness: 0.82 });
-  const shoe = new MeshStandardMaterial({ color: 0x090b18, roughness: 0.92 });
-  const hair = new MeshStandardMaterial({ color: 0x151018, roughness: 0.94 });
-  const torso = new Mesh(new CylinderGeometry(0.2, 0.27, 0.7, 8), jacket);
-  torso.position.set(0, 1.34, -0.08);
-  torso.rotation.x = 0.52;
-  torso.castShadow = true;
-  const neck = new Mesh(new CylinderGeometry(0.075, 0.085, 0.15, 8), skin);
-  neck.position.set(0, 1.67, 0.13);
-  neck.rotation.x = 0.45;
-  const head = new Mesh(new SphereGeometry(0.17, 12, 9), skin);
-  head.name = 'atlas-blitz-rider-face';
-  head.scale.set(0.82, 1.08, 0.9);
-  head.position.set(0, 1.83, 0.22);
-  const hairCap = new Mesh(new SphereGeometry(0.174, 12, 7, 0, Math.PI * 2, 0, Math.PI * 0.48), hair);
-  hairCap.position.set(0, 1.88, 0.205);
-  hairCap.rotation.x = -0.12;
-  const hairBack = new Mesh(new SphereGeometry(0.145, 10, 7), hair);
-  hairBack.scale.set(0.82, 1.18, 0.58);
-  hairBack.position.set(0, 1.77, 0.08);
-  const helmetShell = new Mesh(new SphereGeometry(0.205, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.56), new MeshPhysicalMaterial({ color: city.accent, roughness: 0.24, metalness: 0.46, clearcoat: 0.8, clearcoatRoughness: 0.14 }));
-  helmetShell.scale.set(1.03, 1.02, 1.03);
-  helmetShell.position.set(0, 1.91, 0.16);
-  const visor = new Mesh(new SphereGeometry(0.13, 12, 7, 0, Math.PI * 2, 0.1, Math.PI * 0.22), new MeshPhysicalMaterial({ color: 0x151c34, roughness: 0.1, metalness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.12, transparent: true, opacity: 0.84 }));
-  visor.scale.set(1.05, 0.54, 0.34);
-  visor.position.set(0, 1.86, 0.345);
-  const mouth = new Mesh(new BoxGeometry(0.06, 0.014, 0.012), new MeshBasicMaterial({ color: 0x4b2931 }));
-  mouth.position.set(0, 1.72, 0.373);
-  const nose = new Mesh(new SphereGeometry(0.028, 7, 5), skin);
-  nose.position.set(0, 1.83, 0.375);
-  for (const x of [-0.055, 0.055]) {
-    const eye = new Mesh(new SphereGeometry(0.013, 6, 4), new MeshBasicMaterial({ color: 0x11121e }));
-    eye.position.set(x, 1.87, 0.365);
-    rider.add(eye);
-    const brow = new Mesh(new BoxGeometry(0.052, 0.01, 0.012), hair);
-    brow.position.set(x, 1.91, 0.354);
-    brow.rotation.z = x < 0 ? -0.08 : 0.08;
-    rider.add(brow);
-  }
-  rider.add(helmetShell, visor, mouth);
-  const shoulderLeft = new Vector3(-0.23, 1.57, 0.04);
-  const shoulderRight = new Vector3(0.23, 1.57, 0.04);
-  const elbowLeft = new Vector3(-0.34, 1.31, 0.35);
-  const elbowRight = new Vector3(0.34, 1.31, 0.35);
-  const handLeft = new Vector3(-0.34, 1.05, 0.72);
-  const handRight = new Vector3(0.34, 1.05, 0.72);
-  const hipLeft = new Vector3(-0.13, 1.03, -0.25);
-  const hipRight = new Vector3(0.13, 1.03, -0.25);
-  const kneeLeft = new Vector3(-0.25, 0.75, 0.08);
-  const kneeRight = new Vector3(0.25, 0.75, 0.08);
-  const ankleLeft = new Vector3(-0.22, 0.48, 0.34);
-  const ankleRight = new Vector3(0.22, 0.48, 0.34);
-  rider.add(
-    torso, neck, head, hairCap, hairBack, nose,
-    limb(shoulderLeft, elbowLeft, 0.07, jacket),
-    limb(elbowLeft, handLeft, 0.06, jacket),
-    limb(shoulderRight, elbowRight, 0.07, jacket),
-    limb(elbowRight, handRight, 0.06, jacket),
-    limb(hipLeft, kneeLeft, 0.095, trousers),
-    limb(kneeLeft, ankleLeft, 0.075, trousers),
-    limb(hipRight, kneeRight, 0.095, trousers),
-    limb(kneeRight, ankleRight, 0.075, trousers),
-  );
-  for (const x of [-0.22, 0.22]) {
-    const foot = new Mesh(new BoxGeometry(0.14, 0.1, 0.28), shoe);
-    foot.position.set(x, 0.45, 0.3);
-    foot.rotation.x = -0.16;
-    rider.add(foot);
-  }
-  for (const x of [-0.34, 0.34]) {
-    const glove = new Mesh(new SphereGeometry(0.07, 8, 6), skin);
-    glove.position.set(x, 1.05, 0.72);
-    rider.add(glove);
-  }
-  const stripe = new Mesh(new BoxGeometry(0.22, 0.04, 0.03), new MeshBasicMaterial({ color: city.signal }));
-  stripe.position.set(0, 1.38, 0.25);
-  stripe.rotation.x = 0.52;
-  rider.add(stripe);
-  return rider;
-}
-
-function limb(start: Vector3, end: Vector3, radius: number, material: MeshStandardMaterial): Mesh {
-  return cylinderBetween(start, end, radius, material);
-}
-
-function cylinderBetween(start: Vector3, end: Vector3, radius: number, material: MeshStandardMaterial): Mesh {
-  const direction = end.clone().sub(start);
-  const mesh = new Mesh(new CylinderGeometry(radius, radius * 1.04, direction.length(), 8), material);
-  mesh.position.copy(start).add(end).multiplyScalar(0.5);
-  mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize());
-  mesh.castShadow = true;
-  return mesh;
 }
 
 function seeded(seed: string): () => number {
@@ -1384,10 +1075,24 @@ function seeded(seed: string): () => number {
 }
 
 function disposeTree(root: Object3D): void {
+  const disposedTextures = new Set<Texture>();
   root.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
+    if (!(object instanceof Mesh) && !(object instanceof Points)) return;
     (object.geometry as BufferGeometry).dispose();
     const materials = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of materials) material.dispose();
+    for (const material of materials) {
+      for (const value of Object.values(material)) if (value instanceof Texture && !disposedTextures.has(value)) {
+        disposedTextures.add(value); value.dispose();
+      }
+      material.dispose();
+    }
   });
+}
+
+function limb(start: Vector3, end: Vector3, radius: number, material: MeshStandardMaterial): Mesh {
+  const direction = end.clone().sub(start);
+  const mesh = new Mesh(new CylinderGeometry(radius, radius * 1.04, direction.length(), 8), material);
+  mesh.position.copy(start).add(end).multiplyScalar(.5);
+  mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize());
+  return mesh;
 }
