@@ -1,4 +1,5 @@
 import type { LanternEvidenceSource, LanternPhase } from '../../../shared/atlas/adventures/last-lantern';
+import type { BlitzPhysicsEvent } from '../../../shared/atlas/blitz/types';
 
 /*
  * The game is written in English and narrated by the browser's speech synthesis.
@@ -12,7 +13,7 @@ export const ATLAS_NARRATION_LOCALE = 'en-US';
 export type AtlasVoiceProfile = 'mara' | 'atlas' | 'nia' | 'oren' | 'tala' | 'ivo' | 'ada';
 
 export type AtlasAudioBus = 'ambience' | 'events' | 'interface' | 'voice';
-export type AtlasAudioCue = 'atlas-theme' | 'city-ambience' | 'harbor-waiting-ambience' | 'harbor-restored-ambience' | 'payment-pending' | 'payment-confirmed' | 'beacon-confirmation' | 'city-footstep' | 'city-interaction' | 'bike-engine' | 'bike-boost' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete';
+export type AtlasAudioCue = 'atlas-theme' | 'city-ambience' | 'harbor-waiting-ambience' | 'harbor-restored-ambience' | 'payment-pending' | 'payment-confirmed' | 'beacon-confirmation' | 'city-footstep' | 'city-interaction' | 'bike-engine' | 'bike-boost' | 'bike-skid' | 'bike-impact' | 'bike-landing' | 'bike-surface-change' | 'route-refused' | 'route-evidence' | 'route-repaired' | 'route-complete';
 
 export interface AtlasAudioBackend {
   unlock(): void;
@@ -114,6 +115,22 @@ export class AtlasAudio {
   setBikeSpeed(speedMps: number): void {
     if (!this.unlocked) return;
     this.backend.setEngineSpeed?.(speedMps);
+  }
+
+  playPhysicsCue(event: BlitzPhysicsEvent): void {
+    if (!this.unlocked) return;
+    let cue: Extract<AtlasAudioCue, `bike-${string}`>;
+    switch (event.type) {
+      case 'skid': cue = 'bike-skid'; break;
+      case 'impact': cue = 'bike-impact'; break;
+      case 'landing': cue = 'bike-landing'; break;
+      case 'surface-change': cue = 'bike-surface-change'; break;
+      case 'launch':
+      case 'boost-start': cue = 'bike-boost'; break;
+      case 'boost-end': cue = 'bike-surface-change'; break;
+      default: assertNeverPhysicsEvent(event);
+    }
+    this.playCue(cue, 'events', false);
   }
 
   stopBikeEngine(): void {
@@ -230,7 +247,15 @@ const TONES: Record<AtlasAudioCue, ToneRecipe> = {
   'city-interaction': { from: 330, to: 520, duration: 0.18 },
   'bike-engine': { from: 55, to: 120, duration: 0.12 },
   'bike-boost': { from: 180, to: 640, duration: 0.28 },
+  'bike-skid': { from: 92, to: 54, duration: 0.18 },
+  'bike-impact': { from: 78, to: 38, duration: 0.22 },
+  'bike-landing': { from: 120, to: 66, duration: 0.2 },
+  'bike-surface-change': { from: 150, to: 90, duration: 0.12 },
 };
+
+function assertNeverPhysicsEvent(value: never): never {
+  throw new Error(`Unknown Blitz physics event: ${String(value)}`);
+}
 
 const VOICE_PROFILES: Record<AtlasVoiceProfile, { readonly rate: number; readonly pitch: number }> = {
   mara: { rate: 0.88, pitch: 0.94 },

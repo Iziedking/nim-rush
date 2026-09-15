@@ -1,6 +1,7 @@
 import { blitzCity } from './cities';
 import { selectBlitzMissions } from './missions';
-import type { BlitzCityId, BlitzInput, BlitzMissionState, BlitzRoutePose, BlitzRunState } from './types';
+import { blitzSurface } from './surfaces';
+import type { BlitzCityId, BlitzInput, BlitzMissionState, BlitzPhysicsEvent, BlitzRoutePose, BlitzRunState, BlitzSurface } from './types';
 
 export const BLITZ_TICK_RATE = 30;
 export const BLITZ_LIMIT_SECONDS = 90;
@@ -45,6 +46,12 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string }): Bl
     distanceMeters: 0,
     speedMps: 0,
     laneOffset: 0,
+    lateralVelocityMps: 0,
+    heightMeters: 0,
+    verticalVelocityMps: 0,
+    airborne: false,
+    surface: 'pavement',
+    lastEvent: null,
     boostEnergy: 28,
     boostActive: false,
     driftActive: false,
@@ -59,6 +66,7 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string }): Bl
     missions,
     activeRelay: null,
     processedObstacleIds: [],
+    processedFeatureIds: [],
     lastImpactTick: -BLITZ_TICK_RATE,
   });
 }
@@ -76,6 +84,10 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const elapsedMs = Math.round(elapsedTicks * 1_000 / BLITZ_TICK_RATE);
   const steer = input.steer;
   const driftActive = input.drift && Math.abs(steer) >= 0.2 && state.speedMps >= 8;
+  const brakeActive = input.brake === true;
+  const routeSurface = surfaceAt(city, state.distanceMeters);
+  const surface = Math.abs(state.laneOffset) > city.roadWidth * 0.5 ? 'dirt' : routeSurface;
+  const surfaceProfile = blitzSurface(surface);
   /*
    * Boost needs a real charge to start, and only needs a spark to continue.
    *
@@ -84,15 +96,17 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
    * for four, on for one - a visible judder and a speed line that never
    * settled. Requiring a proper charge to engage, then letting it run to zero,
    * makes a boost an event with a beginning and an end.
-   */
+  */
   const boostActive = input.boost && (state.boostActive ? state.boostEnergy > 0.25 : state.boostEnergy >= BOOST_ENGAGE_ENERGY);
-  const laneStep = steer * (driftActive ? 0.17 : 0.105);
-  const laneOffset = clamp((state.laneOffset + laneStep) * (Math.abs(steer) < 0.04 ? 0.997 : 1), -city.roadWidth * 0.72, city.roadWidth * 0.72);
+  const lateralAcceleration = steer * (driftActive ? 13 : 8) * surfaceProfile.grip;
+  let lateralVelocityMps = clamp(state.lateralVelocityMps + lateralAcceleration / BLITZ_TICK_RATE, -12, 12);
+  lateralVelocityMps *= driftActive ? 0.988 : Math.pow(surfaceProfile.grip, 0.35) * 0.94;
+  const laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
   const offRoad = Math.abs(laneOffset) > city.roadWidth * 0.5;
-  const targetSpeed = offRoad ? 14 : city.baseSpeedMps + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0);
+  const targetSpeed = offRoad ? 14 : city.baseSpeedMps * surfaceProfile.resistance + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0) - (brakeActive ? 8 : 0);
   // A bike should hook up immediately after GO. Keep the authoritative target
   // speed unchanged, but make the launch response feel responsive on touch.
-  let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : 0.55);
+  let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
   /*
    * The old economy drained 1.05 a tick against a 28 charge: 31.5 a second, so
    * a boost lasted 1.06 seconds and then never returned, because idle regen of
@@ -112,8 +126,41 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   let nearMisses = state.nearMisses;
   let lastImpactTick = state.lastImpactTick;
   const processedObstacleIds = [...state.processedObstacleIds];
+  const processedFeatureIds = [...state.processedFeatureIds];
   let missions = state.missions.map((mission) => ({ ...mission }));
   let activeRelay = state.activeRelay ? { ...state.activeRelay } : null;
+  let heightMeters = state.heightMeters;
+  let verticalVelocityMps = state.verticalVelocityMps;
+  let airborne = state.airborne;
+  let lastEvent: BlitzPhysicsEvent | null = state.surface === surface ? null : { type: 'surface-change', tick: state.tick + 1, intensity: 0.5, surface };
+
+  if (airborne) {
+    heightMeters += verticalVelocityMps / BLITZ_TICK_RATE;
+    verticalVelocityMps -= 10.8 / BLITZ_TICK_RATE;
+    if (heightMeters <= 0) {
+      const landingIntensity = clamp(Math.abs(verticalVelocityMps) / 8, 0.2, 1);
+      heightMeters = 0;
+      verticalVelocityMps = 0;
+      airborne = false;
+      lastEvent = { type: 'landing', tick: state.tick + 1, intensity: landingIntensity, surface };
+    }
+  }
+
+  for (const feature of city.terrainFeatures) {
+    const featureDistance = city.lengthMeters * feature.distance01;
+    if (processedFeatureIds.includes(feature.id) || state.distanceMeters >= featureDistance || distanceMeters < featureDistance) continue;
+    processedFeatureIds.push(feature.id);
+    if (feature.kind === 'jump' && !airborne) {
+      airborne = true;
+      heightMeters = 0.06;
+      verticalVelocityMps = feature.impulseMps + Math.max(0, speedMps - city.baseSpeedMps) * 0.08;
+      lastEvent = { type: 'launch', tick: state.tick + 1, intensity: clamp(verticalVelocityMps / 7, 0.4, 1), surface: feature.surface };
+    } else if (feature.kind === 'rough') {
+      speedMps *= 0.86;
+      penaltyScore += 110;
+      lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 0.35, surface: feature.surface };
+    }
+  }
 
   if (offRoad && elapsedTicks - lastImpactTick >= BLITZ_TICK_RATE) {
     penaltyScore += 90;
@@ -131,6 +178,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
       speedMps *= 0.56;
       boostEnergy = Math.max(0, boostEnergy - 15);
       lastImpactTick = elapsedTicks;
+      lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 1, surface };
     } else if (clearance < 1.7) {
       nearMisses += 1;
       distanceScore += 180;
@@ -164,6 +212,12 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const finished = distanceMeters >= city.lengthMeters;
   const timedOut = !finished && elapsedTicks >= BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE;
   const timeBonus = finished ? Math.max(0, Math.floor((BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE - elapsedTicks) / BLITZ_TICK_RATE) * 100) : 0;
+  if (driftActive && Math.abs(lateralVelocityMps) >= surfaceProfile.skidThreshold) {
+    lastEvent = { type: 'skid', tick: state.tick + 1, intensity: clamp(Math.abs(lateralVelocityMps) / 10, 0.35, 1), surface };
+  }
+  if (state.boostActive !== boostActive) {
+    lastEvent = { type: boostActive ? 'boost-start' : 'boost-end', tick: state.tick + 1, intensity: 1, surface };
+  }
   return withScore({
     ...state,
     phase: finished ? 'finished' : timedOut ? 'timeout' : 'running',
@@ -173,6 +227,12 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     distanceMeters,
     speedMps,
     laneOffset,
+    lateralVelocityMps,
+    heightMeters,
+    verticalVelocityMps,
+    airborne,
+    surface,
+    lastEvent,
     boostEnergy,
     boostActive,
     driftActive,
@@ -186,6 +246,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     missions,
     activeRelay,
     processedObstacleIds,
+    processedFeatureIds,
     lastImpactTick,
   });
 }
@@ -211,7 +272,19 @@ export function sampleBlitzRoute(cityId: BlitzCityId, distanceMeters: number, la
   const incoming = Math.atan2(start[0] - previous[0], start[1] - previous[1]);
   const outgoing = Math.atan2(after[0] - end[0], after[1] - end[1]);
   const bend = Math.atan2(Math.sin(outgoing - incoming), Math.cos(outgoing - incoming));
-  return { x: x + normalX * laneOffset, z: z + normalZ * laneOffset, headingRadians, bend };
+  const heightStart = city.routeElevation[index] ?? 0;
+  const heightEnd = city.routeElevation[(index + 1) % city.routeElevation.length] ?? heightStart;
+  const terrainY = lerp(heightStart, heightEnd, smooth(amount));
+  const previousHeight = city.routeElevation[(index - 1 + city.routeElevation.length) % city.routeElevation.length] ?? heightStart;
+  const nextHeight = city.routeElevation[(index + 1) % city.routeElevation.length] ?? heightEnd;
+  const slope = (nextHeight - previousHeight) / Math.max(0.001, tangentLength * 2);
+  return { x: x + normalX * laneOffset, z: z + normalZ * laneOffset, y: terrainY, headingRadians, bend, slope, surface: surfaceAt(city, distanceMeters) };
+}
+
+function surfaceAt(city: ReturnType<typeof blitzCity>, distanceMeters: number): BlitzSurface {
+  const fraction = clamp(distanceMeters / city.lengthMeters, 0, 0.999999);
+  const segment = city.surfaceSegments.find((candidate) => fraction >= candidate.start01 && fraction < candidate.end01);
+  return segment?.surface ?? 'pavement';
 }
 
 function withScore(state: Omit<BlitzRunState, 'score'> & { score?: number }): BlitzRunState {
@@ -219,7 +292,7 @@ function withScore(state: Omit<BlitzRunState, 'score'> & { score?: number }): Bl
 }
 
 function validateInput(input: BlitzInput): BlitzInput {
-  if (!Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1 || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean' || input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right') throw new Error('Beacon Blitz input is invalid.');
+  if (!Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1 || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean' || input.brake !== undefined && typeof input.brake !== 'boolean' || input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right') throw new Error('Beacon Blitz input is invalid.');
   return input;
 }
 

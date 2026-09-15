@@ -18,5 +18,5 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["server", "shared", "scripts/prove.ts", "scripts/archive-legacy.ts"]
+  "include": ["server", "shared", "scripts/prove.ts", "scripts/prove-blitz.ts", "scripts/archive-legacy.ts"]
 }

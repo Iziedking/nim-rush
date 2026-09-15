@@ -54,10 +54,13 @@ describe('Beacon Blitz public arcade experience', () => {
   it('offers touch and keyboard steering, drift, boost and two relay choices', () => {
     expect(input).toContain("'ArrowLeft'");
     expect(input).toContain("'ArrowRight'");
+    expect(input).toContain("'ArrowDown'");
+    expect(input).toContain("'KeyS'");
     expect(input).toContain("'ShiftLeft'");
     expect(input).toContain("'Space'");
     expect(app).toContain('blitz-steer-zone');
     expect(app).toContain('blitz-drift');
+    expect(app).toContain('blitz-brake');
     expect(app).toContain('blitz-boost');
     expect(app).toContain('chooseRelay(\'left\')');
     expect(app).toContain('chooseRelay(\'right\')');

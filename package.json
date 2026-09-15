@@ -21,6 +21,7 @@
     "server": "tsx --env-file-if-exists=.env server/start.ts",
     "server:dev": "tsx watch --env-file-if-exists=.env server/start.ts",
     "prove": "tsx scripts/prove.ts",
+    "prove:blitz": "tsx scripts/prove-blitz.ts",
     "archive:legacy:dry": "tsx --env-file-if-exists=.env scripts/archive-legacy.ts",
     "prove:relay": "tsx --env-file-if-exists=.env scripts/prove-relay.ts",
     "restore:backup": "tsx --env-file-if-exists=.env scripts/restore-backup.ts",

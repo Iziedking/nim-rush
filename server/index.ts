@@ -286,16 +286,18 @@ const atlasIdentity = createAtlasIdentityService({ auth: playerAuth, domain: ALL
 const atlasTickets = createAtlasTicketService({ identity: atlasIdentity });
 const atlasSubmissions = createAtlasSubmissionService({ tickets: atlasTickets, expectedOrigin: ALLOWED_ORIGINS[0] ?? 'https://www.sface.site', mission: ATLAS_CORE_FIXTURE });
 const atlasLeaderboard = createAtlasLeaderboardService();
-const atlasBlitz = createAtlasBlitzService({
+// A public ranked board must survive restart. The service's optional store is
+// useful for isolated tests, but is not a production ranking capability.
+const atlasBlitz = ATLAS_PRODUCTION_GATE.durableRepository ? createAtlasBlitzService({
   identity: atlasIdentity,
-  stateStore: ATLAS_PRODUCTION_GATE.durableRepository ? atlasStateStore : undefined,
+  stateStore: atlasStateStore,
   /*
    * A ranked run the server re-simulated and agreed with earns a share of the
    * day's mainnet pool. Undefined when no treasury is configured, and the
    * board works exactly the same without it.
    */
   daily: atlasDaily,
-});
+}) : undefined;
 const atlasCompetitive = ATLAS_PRODUCTION_GATE.competitive && atlasBeacon && atlasEchoes
   ? createAtlasCompetitiveRuntime({ identity: atlasIdentity, tickets: atlasTickets, submissions: atlasSubmissions, leaderboard: atlasLeaderboard, beacon: atlasBeacon, echoes: atlasEchoes, stateStore: atlasStateStore, ticketPolicy: ATLAS_COMPETITIVE_POLICY! })
   : undefined;

@@ -124,6 +124,40 @@ describe('Beacon Blitz deterministic arcade core', () => {
     expect(boosted.speedMps).toBeGreaterThan(turning.speedMps);
   });
 
+  it('carries lateral momentum and brakes instead of teleporting between lanes', () => {
+    let state = advance(createBlitzRun({ cityId: 'lagos', seed: 'physical-handling' }), BLITZ_TICK_RATE * 3 + 2);
+    state = advance(state, 12, { steer: 0.8, drift: false, boost: false });
+    expect(state.lateralVelocityMps).toBeGreaterThan(0.5);
+    const offsetAtRelease = state.laneOffset;
+    state = advance(state, 10, idle);
+    expect(state.laneOffset).toBeGreaterThan(offsetAtRelease);
+    expect(Math.abs(state.lateralVelocityMps)).toBeLessThan(3);
+
+    const coasting = advance(state, 12, idle);
+    const braking = advance(state, 12, { ...idle, brake: true });
+    expect(braking.speedMps).toBeLessThan(coasting.speedMps - 2);
+  });
+
+  it('emits deterministic surface, launch and landing events from authored terrain', () => {
+    let state = advance(createBlitzRun({ cityId: 'lagos', seed: 'physical-events' }), BLITZ_TICK_RATE * 3 + 2);
+    let sawLaunch = false;
+    let sawLanding = false;
+    let sawSurface = false;
+    let visitedNonPavement = false;
+    for (let tick = 0; tick < BLITZ_TICK_RATE * 35 && state.phase === 'running'; tick += 1) {
+      state = stepBlitzRun(state, idle);
+      sawLaunch ||= state.lastEvent?.type === 'launch';
+      sawLanding ||= state.lastEvent?.type === 'landing';
+      sawSurface ||= state.lastEvent?.type === 'surface-change';
+      visitedNonPavement ||= state.surface !== 'pavement';
+    }
+    expect(sawLaunch).toBe(true);
+    expect(sawLanding).toBe(true);
+    expect(sawSurface).toBe(true);
+    expect(visitedNonPavement).toBe(true);
+    expect(state.heightMeters).toBeGreaterThanOrEqual(0);
+  });
+
   it('projects a stable world position and heading along each authored route', () => {
     for (const city of BLITZ_CITIES) {
       const a = sampleBlitzRoute(city.id, city.lengthMeters * 0.35, -1.2);

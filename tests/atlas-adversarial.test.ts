@@ -41,7 +41,7 @@ describe('NIM Atlas competitive boundary', () => {
     await expect(setup.identity.bindWallet({ challenge, publicKey: replacementPublic.toHex(), signature })).rejects.toThrow(/another wallet|conflict/i);
   });
 
-  it('requires an audited P-256 recovery challenge before replacing a wallet binding', async () => {
+  it('refuses a device-only recovery that substitutes an unsigned wallet', async () => {
     const setup = await createSetup();
     await setup.bindWallet();
     const replacementPrivate = PrivateKey.generate();
@@ -49,7 +49,17 @@ describe('NIM Atlas competitive boundary', () => {
     const bodyDigest = 'd'.repeat(64);
     const challenge = setup.identity.issueRecoveryChallenge({ actorId: setup.actorId, bodyDigest });
     const signature = await signChallenge(setup.actorCredential.pair, challenge);
-    await expect(setup.identity.recoverWallet({ actorId: setup.actorId, seasonId: 'season-1', address: replacementAddress, network: 'testalbatross', reason: 'local fixture recovery', bodyDigest, proof: { challengeId: challenge.id, publicKeyJwk: setup.actorCredential.publicKeyJwk, signature } })).resolves.toMatchObject({ address: replacementAddress });
+    await expect(setup.identity.recoverWallet({ actorId: setup.actorId, seasonId: 'season-1', address: replacementAddress, network: 'testalbatross', reason: 'local fixture recovery', bodyDigest, proof: { challengeId: challenge.id, publicKeyJwk: setup.actorCredential.publicKeyJwk, signature } })).rejects.toThrow(/wallet.*signature|same wallet/i);
+    expect(setup.identity.getBinding(setup.actorId, 'season-1')?.address).toBe(setup.walletAddress);
+  });
+
+  it('allows audited recovery of the same cryptographically bound wallet', async () => {
+    const setup = await createSetup();
+    await setup.bindWallet();
+    const bodyDigest = 'e'.repeat(64);
+    const challenge = setup.identity.issueRecoveryChallenge({ actorId: setup.actorId, bodyDigest });
+    const signature = await signChallenge(setup.actorCredential.pair, challenge);
+    await expect(setup.identity.recoverWallet({ actorId: setup.actorId, seasonId: 'season-1', address: setup.walletAddress, network: 'testalbatross', reason: 'restore current wallet', bodyDigest, proof: { challengeId: challenge.id, publicKeyJwk: setup.actorCredential.publicKeyJwk, signature } })).resolves.toMatchObject({ address: setup.walletAddress, publicKey: setup.walletPublic.toHex() });
     expect(setup.identity.audit().at(-1)).toMatchObject({ type: 'wallet-binding.recovered', actorId: setup.actorId });
   });
 

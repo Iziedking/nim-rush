@@ -11,7 +11,7 @@ export interface BlitzRoadRibbon {
   readonly joins: readonly BlitzRoadJoin[];
 }
 
-export function buildBlitzRoadRibbon(route: readonly BlitzRoadPoint[], width: number): BlitzRoadRibbon {
+export function buildBlitzRoadRibbon(route: readonly BlitzRoadPoint[], width: number, elevation: readonly number[] = []): BlitzRoadRibbon {
   if (route.length < 3) throw new Error('A Blitz road needs at least three route points.');
   if (!Number.isFinite(width) || width <= 0) throw new Error('A Blitz road width must be positive.');
 
@@ -32,7 +32,10 @@ export function buildBlitzRoadRibbon(route: readonly BlitzRoadPoint[], width: nu
     };
   });
 
-  const positions = joins.flatMap((join) => [join.left[0], 0, join.left[1], join.right[0], 0, join.right[1]]);
+  const positions = joins.flatMap((join, index) => {
+    const height = elevation[index] ?? 0;
+    return [join.left[0], height, join.left[1], join.right[0], height, join.right[1]];
+  });
   const indices: number[] = [];
   for (let index = 0; index < joins.length; index += 1) {
     const next = (index + 1) % joins.length;
@@ -50,4 +53,3 @@ function normalize(x: number, y: number): BlitzRoadPoint {
   if (length < 0.0001) throw new Error('A Blitz route cannot contain repeated adjacent points.');
   return [x / length, y / length];
 }
-

@@ -123,6 +123,13 @@ export function createAtlasIdentityService(options: { auth: PlayerAuth; now?: ()
       const existing = bindings.get(actorKey);
       if (!existing) throw new AtlasIdentityError('invalid', 'Atlas wallet binding does not exist.');
       const address = Address.fromUserFriendlyAddress(input.address).toUserFriendlyAddress();
+      // A device proof cannot authorize a different wallet or network. Keep
+      // recovery scoped to the existing signed binding; rotation needs a new
+      // wallet-signature protocol rather than reusing the old public key.
+      if (address !== existing.address || input.network !== existing.network
+        || PublicKey.fromHex(existing.publicKey).toAddress().toUserFriendlyAddress() !== address) {
+        throw new AtlasIdentityError('invalid', 'Recovery requires the same wallet and network. A different wallet requires its own wallet signature.');
+      }
       const owner = [...bindings.values()].find((binding) => binding.seasonId === input.seasonId && binding.address === address && binding.actorId !== input.actorId);
       if (owner) throw new AtlasIdentityError('conflict', 'Wallet is already bound to another actor in this season.');
       const binding: AtlasWalletBinding = { ...existing, address, network: input.network, boundAt: input.now ?? now() };

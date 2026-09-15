@@ -1,11 +1,22 @@
 export type BlitzCityId = 'lagos' | 'london' | 'dubai';
 export type BlitzChoice = 'left' | 'right';
 export type BlitzRunPhase = 'countdown' | 'running' | 'finished' | 'timeout';
+export type BlitzSurface = 'pavement' | 'dirt' | 'gravel' | 'wood';
+
+export type BlitzPhysicsEvent =
+  | { readonly type: 'launch'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'landing'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'impact'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'skid'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'surface-change'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'boost-start'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'boost-end'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface };
 
 export interface BlitzInput {
   readonly steer: number;
   readonly drift: boolean;
   readonly boost: boolean;
+  readonly brake?: boolean;
   readonly relayChoice?: BlitzChoice;
 }
 
@@ -43,6 +54,12 @@ export interface BlitzRunState {
   readonly distanceMeters: number;
   readonly speedMps: number;
   readonly laneOffset: number;
+  readonly lateralVelocityMps: number;
+  readonly heightMeters: number;
+  readonly verticalVelocityMps: number;
+  readonly airborne: boolean;
+  readonly surface: BlitzSurface;
+  readonly lastEvent: BlitzPhysicsEvent | null;
   readonly boostEnergy: number;
   readonly boostActive: boolean;
   readonly driftActive: boolean;
@@ -57,6 +74,7 @@ export interface BlitzRunState {
   readonly missions: readonly BlitzMissionState[];
   readonly activeRelay: BlitzActiveRelay | null;
   readonly processedObstacleIds: readonly string[];
+  readonly processedFeatureIds: readonly string[];
   readonly lastImpactTick: number;
 }
 
@@ -68,6 +86,9 @@ export interface BlitzTraceFrame {
 export interface BlitzRoutePose {
   readonly x: number;
   readonly z: number;
+  readonly y: number;
   readonly headingRadians: number;
   readonly bend: number;
+  readonly slope: number;
+  readonly surface: BlitzSurface;
 }

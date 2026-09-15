@@ -39,9 +39,11 @@ describe('Beacon Blitz verified competition service', () => {
 
   it('replays a finished trace, rejects tampering and is idempotent by run id', async () => {
     let id = 0;
-    const service = createAtlasBlitzService({ identity: identity({ 'season-1:actor-a': walletA }), now: () => 2_000, randomId: () => `ticket-${++id}` });
+    let current = 2_000;
+    const service = createAtlasBlitzService({ identity: identity({ 'season-1:actor-a': walletA }), now: () => current, randomId: () => `ticket-${++id}` });
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     const trace = await completeTrace('lagos', ticket.seed);
+    current += trace.elapsedMs + 3_000;
     const input = { runId: 'run-a', ticketId: ticket.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos' as const, seasonId: 'season-1', seed: ticket.seed, frames: trace.frames, traceHash: trace.hash, claimedScore: trace.score };
     const accepted = await service.submit(input);
     expect(accepted.row).toMatchObject({ rank: 1, verified: true, username: 'Sface', walletAddress: walletA, score: trace.score });
@@ -52,11 +54,13 @@ describe('Beacon Blitz verified competition service', () => {
 
   it('keeps one username per wallet and ranks by score then time and collisions', async () => {
     let id = 0;
-    const service = createAtlasBlitzService({ identity: identity({ 'season-1:actor-a': walletA, 'season-1:actor-b': walletB }), now: () => 4_000, randomId: () => `ticket-${++id}` });
+    let current = 4_000;
+    const service = createAtlasBlitzService({ identity: identity({ 'season-1:actor-a': walletA, 'season-1:actor-b': walletB }), now: () => current, randomId: () => `ticket-${++id}` });
     const ticketA = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'london', seasonId: 'season-1' });
     await expect(service.issueTicket({ actorId: 'actor-b', walletAddress: walletB, username: 'sFACE', cityId: 'london', seasonId: 'season-1' })).rejects.toThrow(/username/i);
     const ticketB = await service.issueTicket({ actorId: 'actor-b', walletAddress: walletB, username: 'Kemi', cityId: 'london', seasonId: 'season-1' });
     const [traceA, traceB] = await Promise.all([completeTrace('london', ticketA.seed), completeTrace('london', ticketB.seed)]);
+    current += Math.max(traceA.elapsedMs, traceB.elapsedMs) + 3_000;
     await service.submit({ runId: 'run-a', ticketId: ticketA.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'london', seasonId: 'season-1', seed: ticketA.seed, frames: traceA.frames, traceHash: traceA.hash, claimedScore: traceA.score });
     await service.submit({ runId: 'run-b', ticketId: ticketB.id, actorId: 'actor-b', walletAddress: walletB, username: 'Kemi', cityId: 'london', seasonId: 'season-1', seed: ticketB.seed, frames: traceB.frames, traceHash: traceB.hash, claimedScore: traceB.score });
     const board = await service.leaderboard('season-1', 'london');
@@ -93,14 +97,16 @@ describe('Beacon Blitz verified competition service', () => {
  */
 describe('a verified run and the day pool', () => {
   async function rankedRun(daily?: { qualifyVerifiedRun: (input: { actorId: string; walletAddress: string; source: string }) => Promise<unknown> }) {
+    let current = 9_000;
     const service = createAtlasBlitzService({
       identity: identity({ 'season-1:actor-a': walletA }),
-      now: () => 9_000,
+      now: () => current,
       randomId: () => 'ticket-pool',
       daily: daily as never,
     });
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     const trace = await completeTrace('lagos', ticket.seed);
+    current += trace.elapsedMs + 3_000;
     const result = await service.submit({
       runId: 'run-pool', ticketId: ticket.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface',
       cityId: 'lagos', seasonId: 'season-1', seed: ticket.seed, frames: trace.frames, traceHash: trace.hash, claimedScore: trace.score,

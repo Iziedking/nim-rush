@@ -1,13 +1,35 @@
-# sFace / NIM Atlas
+# sFace / Beacon Blitz
 
-Sface is a Nimiq Pay Mini App game. NIM Atlas is the game inside it. The player walks through a living city,
-helps residents repair broken payment routes, and learns the Nimiq system by
-making the right decision at the right place.
+The default game is Beacon Blitz: ride a 90-second city circuit, steer around
+traffic, brake into corners, manage drift and boost, and feel authored surfaces,
+jumps and landings while answering short Nimiq route questions.
+Practice starts without a wallet. Ranked runs use wallet-bound tickets and
+server replay. NIM RUSH is the next development direction, not a claim that
+the proposed downhill physics already ships.
 
 Play the current build at [sface.site](https://sface.site). The product is
 free and playable without a wallet. Practice mode is the default.
 
-Last reviewed: 2026-09-09.
+Last reviewed: 2026-09-15.
+
+## Ranked result integrity
+
+The server reconstructs the result from the exact recorded controls. It rejects
+forged scores, mismatched wallet/ticket metadata, reused tickets, controls after
+finish, and runs received before their simulated duration could have elapsed.
+Ticket consumption and result storage are serialized within one service
+instance. A failed storage write does not publish an accepted result.
+
+Run `npm run prove:blitz` for local replay, refusal and CPU timing evidence.
+These checks prove a legal simulation, not human play, wallet-host behavior or
+a chain payout. Multi-worker operation requires transactional storage. See the
+[NIM RUSH audit and roadmap](docs/nim-rush-audit-2026-09-15.md) for current gaps,
+performance targets and rollout caveats.
+
+## Atlas adventure reference
+
+The sections below describe the retained adventure at `?atlas=legacy`.
+They are not a description of the default Blitz racing screen.
 
 ## The player loop
 

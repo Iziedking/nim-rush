@@ -136,7 +136,7 @@ export class BlitzRenderer {
     this.relayGates = [0.24, 0.51, 0.77].map((distance01, index) => {
       const gate = createRelayGate(city, index);
       const pose = sampleBlitzRoute(city.id, city.lengthMeters * distance01);
-      gate.position.set(pose.x, 0, pose.z);
+      gate.position.set(pose.x, pose.y, pose.z);
       gate.rotation.y = pose.headingRadians;
       this.cityRoot!.add(gate);
       return gate;
@@ -149,7 +149,7 @@ export class BlitzRenderer {
   renderPreview(cityId: BlitzCityId): void {
     if (!this.bike || this.activeCity !== cityId) return;
     const city = blitzCity(cityId);
-    const state = { cityId, tick: 0, distanceMeters: city.lengthMeters * 0.08, laneOffset: 0, speedMps: 0, driftActive: false, boostActive: false, missions: [] } as unknown as BlitzRunState;
+    const state = { cityId, tick: 0, distanceMeters: city.lengthMeters * 0.08, laneOffset: 0, speedMps: 0, heightMeters: 0, driftActive: false, boostActive: false, missions: [], lastEvent: null } as unknown as BlitzRunState;
     this.present(state, 0);
     this.renderer.render(this.scene, this.camera);
   }
@@ -194,7 +194,9 @@ export class BlitzRenderer {
   private present(state: BlitzRunState, steer: number): void {
     const bike = this.bike!;
     const pose = sampleBlitzRoute(state.cityId, state.distanceMeters, state.laneOffset);
-    bike.root.position.set(pose.x, 0.36, pose.z);
+    const event = state.lastEvent?.tick === state.tick ? state.lastEvent : null;
+    const landingKick = event?.type === 'landing' ? event.intensity * 0.12 : 0;
+    bike.root.position.set(pose.x, pose.y + 0.36 + state.heightMeters, pose.z);
     bike.root.rotation.y = pose.headingRadians;
     const targetLean = this.reducedMotion ? 0 : MathUtils.clamp(-steer * (state.driftActive ? 0.38 : 0.2) - pose.bend * 0.035, -0.46, 0.46);
     bike.body.rotation.z = MathUtils.lerp(bike.body.rotation.z, targetLean, 0.18);
@@ -223,7 +225,7 @@ export class BlitzRenderer {
      */
     const speedEffect = MathUtils.clamp((state.speedMps - 12) / 26, 0, 1);
     const rush = speedEffect * speedEffect;
-    bike.body.position.y = Math.sin(state.tick * 0.22) * speedEffect * 0.026;
+    bike.body.position.y = Math.sin(state.tick * 0.22) * speedEffect * 0.026 - landingKick;
     bike.body.rotation.x = Math.sin(state.tick * 0.34) * speedEffect * 0.018;
     bike.rider.position.y = 0.012 + Math.sin(state.tick * 0.22 + 0.8) * speedEffect * 0.014;
     bike.motionStreaks.forEach((streak, index) => {
@@ -240,7 +242,7 @@ export class BlitzRenderer {
     this.speedMarkers.forEach((marker, index) => {
       const distanceFromBike = 4.8 - ((roadFlow + index * 0.84) % 8.6);
       const lane = ((index % 5) - 2) * 0.64;
-      marker.position.copy(new Vector3(pose.x, 0.102, pose.z))
+      marker.position.copy(new Vector3(pose.x, pose.y + 0.102, pose.z))
         .addScaledVector(forward, distanceFromBike)
         .addScaledVector(right, lane);
       marker.rotation.y = pose.headingRadians;
@@ -259,7 +261,7 @@ export class BlitzRenderer {
 
     const portrait = this.camera.aspect < 0.8;
     const speedLookahead = Math.min(1.45, state.speedMps / 20);
-    const focus = new Vector3(pose.x, portrait ? 1.9 : 1.18, pose.z).addScaledVector(forward, (portrait ? 1.9 : 2.1) + speedLookahead);
+    const focus = new Vector3(pose.x, pose.y + (portrait ? 1.9 : 1.18), pose.z).addScaledVector(forward, (portrait ? 1.9 : 2.1) + speedLookahead);
     /*
      * Lower and closer than it was (3.5 m up, 7.8 m back).
      *
@@ -268,7 +270,7 @@ export class BlitzRenderer {
      * the eye toward the road and pulling in puts the tarmac and the kerb in
      * the near field where they streak.
      */
-    const desired = new Vector3(pose.x, portrait ? 2.62 : 2.72, pose.z)
+    const desired = new Vector3(pose.x, pose.y + (portrait ? 2.62 : 2.72) + landingKick, pose.z)
       .addScaledVector(forward, portrait ? -6.1 : -6.55)
       .addScaledVector(right, this.reducedMotion ? 0 : -pose.bend * 0.16);
     if (!this.cameraReady) {
@@ -314,7 +316,7 @@ function createCity(city: BlitzCityDefinition): Group {
   for (const obstacle of city.obstacles) {
     const pose = sampleBlitzRoute(city.id, city.lengthMeters * obstacle.distance01, obstacle.lane);
     const traffic = createTrafficVehicle(city, obstacle.id);
-    traffic.position.set(pose.x, 0.26, pose.z);
+    traffic.position.set(pose.x, pose.y + 0.26, pose.z);
     traffic.rotation.y = pose.headingRadians;
     root.add(traffic);
   }
@@ -345,7 +347,7 @@ function createRoad(root: Group, city: BlitzCityDefinition): void {
 }
 
 function createRoadRibbon(city: BlitzCityDefinition, width: number, material: MeshStandardMaterial | MeshBasicMaterial): Mesh {
-  const ribbon = buildBlitzRoadRibbon(city.route, width);
+  const ribbon = buildBlitzRoadRibbon(city.route, width, city.routeElevation);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(ribbon.positions, 3));
   geometry.setIndex([...ribbon.indices]);

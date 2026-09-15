@@ -5,7 +5,8 @@ import type { AtlasStateStore } from './persistence';
 import type { AtlasDailyService } from './daily';
 import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
-import { hashBlitzTrace, replayBlitzTrace } from '../../shared/atlas/blitz/replay';
+import { hashBlitzTrace, replayBlitzTrace, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
+import { BLITZ_TICK_RATE } from '../../shared/atlas/blitz/core';
 import { BLITZ_CITIES } from '../../shared/atlas/blitz/cities';
 
 type StoredRow = Omit<BlitzLeaderboardRow, 'rank'>;
@@ -57,101 +58,140 @@ export function createAtlasBlitzService(options: {
   const usernameWallet = new Map<string, { walletAddress: string; display: string }>();
   const walletUsername = new Map<string, string>();
   let loaded = false;
+  let operations: Promise<void> = Promise.resolve();
+  let pendingOperations = 0;
+  let committed: AtlasBlitzSnapshot = serialiseSnapshot();
 
   async function ensureLoaded(): Promise<void> {
     if (loaded) return;
+    if (options.stateStore) {
+      const snapshot = await options.stateStore.load<AtlasBlitzSnapshot | null>('blitz', null);
+      if (snapshot) restoreSnapshot(snapshot);
+    }
+    committed = serialiseSnapshot();
     loaded = true;
-    if (!options.stateStore) return;
-    const snapshot = await options.stateStore.load<AtlasBlitzSnapshot | null>('blitz', null);
-    if (snapshot) restoreSnapshot(snapshot);
   }
 
   async function persist(): Promise<void> {
-    if (options.stateStore) await options.stateStore.save('blitz', serialiseSnapshot());
+    const candidate = serialiseSnapshot();
+    if (options.stateStore) await options.stateStore.save('blitz', candidate);
+    committed = candidate;
+  }
+
+  // One service instance owns the snapshot. Serialize check, replay, consume
+  // and save together, including reads; a multi-worker service needs database
+  // transactions instead. Bound queued traces so overload cannot retain them
+  // without limit. Roll back to the last durable state on storage failure.
+  function enqueue<T>(action: () => Promise<T>): Promise<T> {
+    if (pendingOperations >= 32) return Promise.reject(new AtlasBlitzError('invalid', 'Competition is busy. Retry this run shortly.'));
+    pendingOperations++;
+    const operation = operations.then(async () => {
+      await ensureLoaded();
+      try { return await action(); }
+      catch (error) { restoreSnapshot(committed); throw error; }
+    });
+    const settled = operation.finally(() => { pendingOperations--; });
+    operations = settled.then(() => undefined, () => undefined);
+    return settled;
   }
 
   return {
     async issueTicket(input) {
-      await ensureLoaded();
-      assertSeason(input.seasonId);
-      assertCity(input.cityId);
-      const username = normalizeDisplayName(input.username);
-      const binding = options.identity.getBinding(input.actorId, input.seasonId);
-      if (!binding || binding.address !== input.walletAddress) throw new AtlasBlitzError('identity', 'The wallet binding does not match this rider and season.');
-      bindUsername(input.seasonId, input.walletAddress, username);
-      const issuedAt = now();
-      const seedWindow = Math.floor(issuedAt / (5 * 60_000));
-      const ticket: BlitzTicket = {
-        id: randomId(), actorId: input.actorId, walletAddress: input.walletAddress, username,
-        cityId: input.cityId, seasonId: input.seasonId, seed: `${input.seasonId}:${input.cityId}:${seedWindow}`,
-        issuedAt, expiresAt: issuedAt + 5 * 60_000,
-      };
-      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(ticket.id)) throw new AtlasBlitzError('invalid', 'Beacon Blitz ticket id is invalid.');
-      tickets.set(ticket.id, structuredClone(ticket));
-      await persist();
-      return structuredClone(ticket);
+      input = structuredClone(input);
+      return enqueue(async () => {
+        assertSeason(input.seasonId);
+        assertCity(input.cityId);
+        const username = normalizeDisplayName(input.username);
+        const binding = options.identity.getBinding(input.actorId, input.seasonId);
+        if (!binding || binding.address !== input.walletAddress) throw new AtlasBlitzError('identity', 'The wallet binding does not match this rider and season.');
+        bindUsername(input.seasonId, input.walletAddress, username);
+        const issuedAt = now();
+        const seedWindow = Math.floor(issuedAt / (5 * 60_000));
+        const ticket: BlitzTicket = {
+          id: randomId(), actorId: input.actorId, walletAddress: input.walletAddress, username,
+          cityId: input.cityId, seasonId: input.seasonId, seed: `${input.seasonId}:${input.cityId}:${seedWindow}`,
+          issuedAt, expiresAt: issuedAt + 5 * 60_000,
+        };
+        if (!/^[a-zA-Z0-9_-]{1,128}$/.test(ticket.id)) throw new AtlasBlitzError('invalid', 'Beacon Blitz ticket id is invalid.');
+        tickets.set(ticket.id, structuredClone(ticket));
+        await persist();
+        return structuredClone(ticket);
+      });
     },
 
     async submit(input) {
-      await ensureLoaded();
       assertSubmission(input);
-      const fingerprint = `${input.ticketId}:${input.traceHash}:${input.claimedScore}`;
-      const existing = runs.get(input.runId);
-      if (existing) {
-        if (existing.fingerprint !== fingerprint) throw new AtlasBlitzError('duplicate', 'A different Beacon Blitz run already uses this run id.');
-        return { row: await rankedRow(existing.row), duplicate: true };
+      validateBlitzTrace(input.frames);
+      input = structuredClone(input);
+      const receivedAt = now();
+      const result = await enqueue(async () => {
+        const ticket = tickets.get(input.ticketId);
+        if (!ticket) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket is missing.');
+        const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || ticket.seed !== input.seed;
+        if (mismatch) throw new AtlasBlitzError('ticket', 'Beacon Blitz submission does not match its ticket.');
+        const binding = options.identity.getBinding(input.actorId, input.seasonId);
+        if (!binding || binding.address !== input.walletAddress) throw new AtlasBlitzError('identity', 'The wallet binding is no longer valid for this rider.');
+        const traceHash = await hashBlitzTrace(input.frames);
+        if (traceHash !== input.traceHash) throw new AtlasBlitzError('replay', 'Beacon Blitz trace hash does not match the submitted controls.');
+        const fingerprint = `${input.ticketId}:${input.traceHash}:${input.claimedScore}`;
+        const existing = runs.get(input.runId);
+        if (existing) {
+          if (existing.fingerprint !== fingerprint) throw new AtlasBlitzError('duplicate', 'A different Beacon Blitz run already uses this run id.');
+          return { row: await rankedRow(existing.row), duplicate: true };
+        }
+        if (receivedAt >= ticket.expiresAt) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket expired before the run was submitted.');
+        if (receivedAt - ticket.issuedAt > BLITZ_RANKED_SUBMISSION_WINDOW_MS) {
+          throw new AtlasBlitzError('ticket', 'A ranked Beacon Blitz run must finish within two minutes of ticket issue.');
+        }
+        if (ticket.usedByRunId && ticket.usedByRunId !== input.runId) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket has already been used.');
+        const replay = replayBlitzTrace({ cityId: input.cityId, seed: input.seed, frames: input.frames });
+        if (replay.phase !== 'finished') throw new AtlasBlitzError('replay', 'Only a completed Beacon Blitz run can be ranked.');
+        if (replay.score !== input.claimedScore) throw new AtlasBlitzError('replay', 'Beacon Blitz claimed score does not match authoritative replay.');
+        // Ticket issue precedes countdown. Include those ticks, and measure at
+        // receipt rather than after queueing so backlog cannot legitimize an
+        // instant computed run. This does not prove that a human played.
+        const durationMs = Math.floor(replay.tick * 1_000 / BLITZ_TICK_RATE);
+        if (receivedAt - ticket.issuedAt < durationMs) throw new AtlasBlitzError('replay', 'Beacon Blitz replay duration exceeds elapsed server time.');
+        const row: StoredRow = {
+          runId: input.runId, actorId: input.actorId, walletAddress: input.walletAddress, username: input.username,
+          cityId: input.cityId, seasonId: input.seasonId, score: replay.score, elapsedMs: replay.elapsedMs,
+          collisions: replay.collisions, traceHash, verifiedAt: now(), verified: true,
+        };
+        ticket.usedByRunId = input.runId;
+        runs.set(input.runId, { row, fingerprint });
+        const key = bestKey(row);
+        const current = best.get(key);
+        if (!current || compareRows(row, current) < 0) best.set(key, row);
+        await persist();
+        return { row: await rankedRow(row), duplicate: false };
+      });
+      // Qualification follows the committed score and must not hold the board
+      // mutation queue. Durable retry of a failed qualification is a separate
+      // reward-service requirement; this result does not claim a payout.
+      if (!result.duplicate) {
+        try {
+          await options.daily?.qualifyVerifiedRun({ actorId: result.row.actorId, walletAddress: result.row.walletAddress, source: 'blitz-ranked' });
+        } catch { /* A reward outage leaves the verified score available. */ }
       }
-      const ticket = tickets.get(input.ticketId);
-      if (!ticket) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket is missing.');
-      if (now() >= ticket.expiresAt) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket expired before the run was submitted.');
-      if (now() - ticket.issuedAt > BLITZ_RANKED_SUBMISSION_WINDOW_MS) {
-        throw new AtlasBlitzError('ticket', 'A ranked Beacon Blitz run must finish within two minutes of ticket issue.');
-      }
-      const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || ticket.seed !== input.seed;
-      if (mismatch) throw new AtlasBlitzError('ticket', 'Beacon Blitz submission does not match its ticket.');
-      if (ticket.usedByRunId && ticket.usedByRunId !== input.runId) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket has already been used.');
-      const binding = options.identity.getBinding(input.actorId, input.seasonId);
-      if (!binding || binding.address !== input.walletAddress) throw new AtlasBlitzError('identity', 'The wallet binding is no longer valid for this rider.');
-      const traceHash = await hashBlitzTrace(input.frames);
-      if (traceHash !== input.traceHash) throw new AtlasBlitzError('replay', 'Beacon Blitz trace hash does not match the submitted controls.');
-      const replay = replayBlitzTrace({ cityId: input.cityId, seed: input.seed, frames: input.frames });
-      if (replay.phase !== 'finished') throw new AtlasBlitzError('replay', 'Only a completed Beacon Blitz run can be ranked.');
-      if (replay.score !== input.claimedScore) throw new AtlasBlitzError('replay', 'Beacon Blitz claimed score does not match authoritative replay.');
-      const row: StoredRow = {
-        runId: input.runId, actorId: input.actorId, walletAddress: input.walletAddress, username: input.username,
-        cityId: input.cityId, seasonId: input.seasonId, score: replay.score, elapsedMs: replay.elapsedMs,
-        collisions: replay.collisions, traceHash, verifiedAt: now(), verified: true,
-      };
-      ticket.usedByRunId = input.runId;
-      runs.set(input.runId, { row, fingerprint });
-      const key = bestKey(row);
-      const current = best.get(key);
-      if (!current || compareRows(row, current) < 0) best.set(key, row);
-      await persist();
-      /*
-       * Never fatal to the run. The score is verified and recorded either way;
-       * a reward pool that cannot be reached must not cost a player the place
-       * on the board they just earned.
-       */
-      try {
-        await options.daily?.qualifyVerifiedRun({ actorId: row.actorId, walletAddress: row.walletAddress, source: 'blitz-ranked' });
-      } catch { /* The board is the product; the pool is a bonus on top of it. */ }
-      return { row: await rankedRow(row), duplicate: false };
+      return result;
     },
 
     async leaderboard(seasonId, cityId) {
-      await ensureLoaded();
-      assertSeason(seasonId);
-      assertCity(cityId);
-      return ranked(seasonId, cityId);
+      return enqueue(async () => {
+        assertSeason(seasonId);
+        assertCity(cityId);
+        return ranked(seasonId, cityId);
+      });
     },
 
     serialise() {
-      return serialiseSnapshot();
+      return structuredClone(committed);
     },
 
     restore(raw) {
+      if (pendingOperations > 0) throw new AtlasBlitzError('invalid', 'Cannot restore competition state during an operation.');
       restoreSnapshot(raw);
+      committed = serialiseSnapshot();
       loaded = true;
     },
   };

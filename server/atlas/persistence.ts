@@ -52,8 +52,10 @@ export function createAtlasStateStore(repository: AtlasRepository, now: () => nu
     save<T>(key: string, value: T): Promise<void> {
       operations = operations.catch(() => undefined).then(async () => {
         await initialise();
-        records[key] = structuredClone(value);
-        await repository.save({ version: 1, updatedAt: now(), records });
+        const candidate = { ...records, [key]: structuredClone(value) };
+        await repository.save({ version: 1, updatedAt: now(), records: candidate });
+        // A failed write must not leak into a later save by another service.
+        records = candidate;
       });
       return operations;
     },

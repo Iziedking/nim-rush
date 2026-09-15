@@ -153,6 +153,24 @@ docs/superpowers/
 ui-artifacts/
 PLAN-CYCLE-*.md
 
+# Internal audits, plans, research notes and handoffs. Keep these local even
+# when they live outside docs/superpowers; public product docs are named and
+# re-included explicitly above.
+*-audit-*.md
+*-plan-*.md
+*-planning-*.md
+*-research-*.md
+*-handoff-*.md
+*AUDIT*.md
+*PLAN*.md
+*RESEARCH*.md
+*HANDOFF*.md
+docs/**/plans/
+docs/**/planning/
+docs/**/audits/
+docs/**/handoffs/
+docs/**/drafts/
+
 # Ad-hoc verification screenshots dropped in the repo root while checking a
 # change by hand. Rule: evidence is generated, never captured. The tracked
 # recipe is scripts/shoot-atlas.mjs, which writes the real set into

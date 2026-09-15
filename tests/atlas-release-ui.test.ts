@@ -63,9 +63,10 @@ describe('NIM Atlas release-quality UI contract', () => {
     expect(app).toContain('this.renderer.drawHarbor');
   });
 
-  it('introduces the shipped NIM Atlas product before archived Cycle I history', () => {
+  it('introduces the active racer and labels the retained Atlas adventure', () => {
     const firstSection = readme.slice(0, readme.indexOf('## The player loop'));
-    expect(firstSection).toContain('Sface is a Nimiq Pay Mini App game.');
-    expect(firstSection).toContain('NIM Atlas is the game inside it.');
+    expect(firstSection).toContain('The default game is Beacon Blitz');
+    expect(firstSection).toContain('## Atlas adventure reference');
+    expect(firstSection).toContain('?atlas=legacy');
   });
 });

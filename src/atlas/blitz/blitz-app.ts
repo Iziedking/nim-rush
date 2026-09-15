@@ -33,6 +33,7 @@ export class BlitzApp {
   private previousTimestamp: number | null = null;
   private accumulator = 0;
   private shownRelay = -1;
+  private lastPhysicsAudioTick = -1;
   private scoreNode: HTMLElement | null = null;
   private timerNode: HTMLElement | null = null;
   private speedNode: HTMLElement | null = null;
@@ -77,6 +78,11 @@ export class BlitzApp {
         phase: this.state.phase,
         distanceMeters: this.state.distanceMeters,
         laneOffset: this.state.laneOffset,
+        lateralVelocityMps: this.state.lateralVelocityMps,
+        heightMeters: this.state.heightMeters,
+        airborne: this.state.airborne,
+        surface: this.state.surface,
+        lastEvent: this.state.lastEvent?.type ?? null,
         speedMps: this.state.speedMps,
         boostEnergy: this.state.boostEnergy,
         boostActive: this.state.boostActive,
@@ -202,6 +208,7 @@ export class BlitzApp {
     this.frames = [];
     this.pendingChoice = undefined;
     this.shownRelay = -1;
+    this.lastPhysicsAudioTick = -1;
     this.paused = false;
     this.input.reset();
     await this.renderer.loadCity(cityId);
@@ -258,11 +265,13 @@ export class BlitzApp {
     steerZone.append(node('span', '', 'STEER'), steerRail);
     const actions = node('div', 'blitz-actions');
     const drift = button('DRIFT', 'blitz-control blitz-drift', () => undefined);
+    const brake = button('BRAKE', 'blitz-control blitz-brake', () => undefined);
     const boostButton = button('BOOST', 'blitz-control blitz-boost', () => undefined);
-    actions.append(drift, boostButton);
+    actions.append(drift, brake, boostButton);
     controls.append(steerZone, actions);
     this.input.bindSteering(steerZone, thumb);
     this.input.bindHold(drift, 'drift');
+    this.input.bindHold(brake, 'brake');
     this.input.bindHold(boostButton, 'boost');
 
     screen.append(top, speedBox, progress, boost, this.relayHost, this.feedbackNode, this.countdownNode, controls);
@@ -287,6 +296,10 @@ export class BlitzApp {
       const wasBoostActive = next.boostActive;
       next = stepBlitzRun(next, input);
       if (!wasBoostActive && next.boostActive) this.audio.playWorldCue('bike-boost');
+      if (next.lastEvent && next.lastEvent.tick !== this.lastPhysicsAudioTick && next.lastEvent.type !== 'boost-start' && next.lastEvent.type !== 'boost-end') {
+        this.audio.playPhysicsCue(next.lastEvent);
+        this.lastPhysicsAudioTick = next.lastEvent.tick;
+      }
       this.accumulator -= STEP_MS;
       steps += 1;
     }

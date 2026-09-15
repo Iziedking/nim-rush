@@ -4,6 +4,7 @@ export class BlitzInputController {
   private steer = 0;
   private drift = false;
   private boost = false;
+  private brake = false;
   private steeringPointer: number | null = null;
   private readonly pressed = new Set<string>();
   private readonly cleanups: Array<() => void> = [];
@@ -11,7 +12,7 @@ export class BlitzInputController {
 
   constructor(target: Window = window) {
     const keydown = (event: KeyboardEvent) => {
-      if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'ShiftLeft', 'ShiftRight', 'Space'].includes(event.code)) event.preventDefault();
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyS', 'ShiftLeft', 'ShiftRight', 'Space'].includes(event.code)) event.preventDefault();
       this.pressed.add(event.code);
       this.readKeyboard();
     };
@@ -57,10 +58,11 @@ export class BlitzInputController {
     );
   }
 
-  bindHold(button: HTMLElement, action: 'drift' | 'boost'): void {
+  bindHold(button: HTMLElement, action: 'drift' | 'boost' | 'brake'): void {
     const set = (active: boolean) => {
       if (action === 'drift') this.drift = active;
-      else this.boost = active;
+      else if (action === 'boost') this.boost = active;
+      else this.brake = active;
       button.classList.toggle('is-held', active);
     };
     const down = (event: PointerEvent) => {
@@ -81,7 +83,7 @@ export class BlitzInputController {
   }
 
   sample(): BlitzInput {
-    return { steer: this.steer, drift: this.drift, boost: this.boost };
+    return { steer: this.steer, drift: this.drift, boost: this.boost, brake: this.brake };
   }
 
   reset(): void {
@@ -89,6 +91,7 @@ export class BlitzInputController {
     this.steer = 0;
     this.drift = false;
     this.boost = false;
+    this.brake = false;
     this.steeringPointer = null;
   }
 
@@ -109,6 +112,7 @@ export class BlitzInputController {
     this.steer = left === right ? 0 : left ? -1 : 1;
     this.drift = this.pressed.has('ShiftLeft') || this.pressed.has('ShiftRight');
     this.boost = this.pressed.has('Space');
+    this.brake = this.pressed.has('ArrowDown') || this.pressed.has('KeyS');
   }
 }
 
