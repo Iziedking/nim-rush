@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { AtlasIdentityService } from './identity';
 import type { AtlasStateStore } from './persistence';
 import type { AtlasDailyService } from './daily';
+import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, type BlitzPrizeAllocation } from '../../shared/atlas/blitz/prize';
 import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
 import { hashBlitzTrace, replayBlitzTrace, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
@@ -42,9 +43,33 @@ export interface AtlasBlitzService {
   issueTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<BlitzTicket>;
   submit(input: BlitzSubmissionInput): Promise<BlitzSubmitResult>;
   leaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
+  /**
+   * What today's board would owe if it closed now. Read-only: it moves nothing
+   * and marks nothing paid.
+   */
+  prizeTable(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzPrizeTable>;
   retryPendingQualifications(): Promise<BlitzQualificationRetryResult>;
   serialise(): AtlasBlitzSnapshot;
   restore(raw: unknown): void;
+}
+
+/**
+ * The states a prize table is allowed to be in, and no others.
+ *
+ * `unavailable` is not `unfunded`. A pool the server could not read is an
+ * unknown, and showing an unknown as "no pool today" would be a claim the
+ * server cannot support. The plan requires these to stay distinguishable.
+ */
+export type BlitzPrizeState = 'unavailable' | 'unfunded' | 'funded';
+
+export interface BlitzPrizeTable {
+  readonly state: BlitzPrizeState;
+  readonly poolLuna: number | null;
+  readonly splitBps: readonly number[];
+  readonly allocations: readonly BlitzPrizeAllocation[];
+  readonly remainderLuna: number;
+  /** Distinct wallets with a verified run on this board. */
+  readonly qualifiedRiders: number;
 }
 
 export class AtlasBlitzError extends Error {
@@ -67,7 +92,14 @@ export function createAtlasBlitzService(options: {
    * rather than on a client request: the player cannot ask to be eligible,
    * only to be verified, and eligibility follows from that.
    */
-  daily?: Pick<AtlasDailyService, 'qualifyVerifiedRun'>;
+  /*
+   * `standing` is optional on purpose. Qualification and the prize table are
+   * separate needs, and a caller that only wants verified runs counted should
+   * not have to supply a pool reader to get one. Without it the prize table
+   * reports `unavailable`, which is the honest answer to "what is the pool?"
+   * from a service that has no way to look.
+   */
+  daily?: Pick<AtlasDailyService, 'qualifyVerifiedRun'> & Partial<Pick<AtlasDailyService, 'standing'>>;
 }): AtlasBlitzService {
   const now = options.now ?? Date.now;
   const randomId = options.randomId ?? (() => randomBytes(16).toString('hex'));
@@ -213,6 +245,50 @@ export function createAtlasBlitzService(options: {
         if (challengeId !== undefined && !/^[a-z0-9:_-]{1,160}$/.test(challengeId)) throw new AtlasBlitzError('invalid', 'Beacon Blitz challenge id is invalid.');
         return ranked(seasonId, cityId, challengeId);
       });
+    },
+
+    async prizeTable(seasonId, cityId, challengeId) {
+      const rows = await this.leaderboard(seasonId, cityId, challengeId);
+      /*
+       * A pool that cannot be read is `unavailable`, never `unfunded`. The
+       * difference matters: one says the day has no prize, the other says the
+       * server does not currently know, and only the first is a claim we can
+       * make. Failure is swallowed here because the board itself is still true
+       * and worth showing without it.
+       */
+      let poolLuna: number | null = null;
+      let state: BlitzPrizeState = 'unavailable';
+      try {
+        const standing = await options.daily?.standing?.();
+        if (standing) {
+          poolLuna = standing.rewardsEnabled ? standing.poolLuna : 0;
+          state = poolLuna !== null && poolLuna > 0 ? 'funded' : 'unfunded';
+        }
+      } catch {
+        state = 'unavailable';
+        poolLuna = null;
+      }
+
+      const { allocations, remainderLuna } = allocateBlitzPrizes({
+        poolLuna: state === 'funded' ? poolLuna : null,
+        candidates: rows.map((row) => ({
+          walletAddress: row.walletAddress,
+          score: row.score,
+          elapsedMs: row.elapsedMs,
+          collisions: row.collisions,
+          verifiedAt: row.verifiedAt,
+          runId: row.runId,
+        })),
+      });
+
+      return {
+        state,
+        poolLuna,
+        splitBps: BLITZ_PRIZE_SPLIT_BPS,
+        allocations,
+        remainderLuna,
+        qualifiedRiders: new Set(rows.map((row) => row.walletAddress)).size,
+      };
     },
 
     serialise() {

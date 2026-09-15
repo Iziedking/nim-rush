@@ -134,6 +134,22 @@ export function mountAtlasRoutes(options: {
       response.json({ ok: true, data: await options.api.blitz.leaderboard(seasonId, cityId.data, challengeId) });
     } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
+  /*
+   * What today's board would owe if it closed now. Public and read-only: it
+   * moves nothing, marks nothing paid, and names its own state so the client
+   * can tell "no pool today" apart from "the pool could not be read".
+   */
+  options.app.get('/atlas/api/blitz/prizes', options.limit(120, 40), async (request, response) => {
+    if (!options.api.blitz) { response.status(503).json({ ok: false, error: 'Beacon Blitz prizes are unavailable.' }); return; }
+    const seasonId = typeof request.query.seasonId === 'string' ? request.query.seasonId : '';
+    const cityId = blitzCityId.safeParse(request.query.cityId);
+    const challengeId = typeof request.query.challengeId === 'string' ? request.query.challengeId : undefined;
+    if (!/^[a-z0-9-]{1,80}$/.test(seasonId) || !cityId.success || (challengeId !== undefined && !/^[a-z0-9:_-]{1,160}$/.test(challengeId))) { response.status(400).json({ ok: false, error: 'Beacon Blitz prize query is invalid.' }); return; }
+    try {
+      response.setHeader('cache-control', 'no-store');
+      response.json({ ok: true, data: await options.api.blitz.prizeTable(seasonId, cityId.data, challengeId) });
+    } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
   options.app.post('/atlas/api/wallet/challenge', options.limit(24, 8), async (request, response) => {
     if (!options.api.identity || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Atlas wallet identity is unavailable.' }); return; }
     const parsed = walletChallengeBody.safeParse(request.body);

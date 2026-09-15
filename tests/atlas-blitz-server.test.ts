@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBlitzRun, stepBlitzRun } from '../shared/atlas/blitz/core';
+import { BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { hashBlitzTrace } from '../shared/atlas/blitz/replay';
 import type { BlitzCityId, BlitzTraceFrame } from '../shared/atlas/blitz/types';
 import { createAtlasBlitzService } from '../server/atlas/blitz';
@@ -134,5 +134,97 @@ describe('a verified run and the day pool', () => {
 
   it('runs the board normally with no pool configured at all', async () => {
     expect((await rankedRun()).row.verified).toBe(true);
+  });
+});
+
+/*
+ * The prize table.
+ *
+ * Read-only: it moves nothing and marks nothing paid. What it must never do is
+ * blur the three states apart from each other, because "no pool today" and
+ * "the server could not read the pool" are different claims and only one of
+ * them is something we know.
+ */
+describe('what the board would owe if it closed now', () => {
+  const pool = (poolLuna: number | null, rewardsEnabled = true) => ({
+    qualifyVerifiedRun: async () => ({ accepted: true as const, eligible: true as const, date: '2026-09-15' }),
+    standing: async () => ({ date: '2026-09-15', eligibleCount: 0, shareLuna: null, poolLuna, configuredPoolLuna: poolLuna, treasuryLuna: poolLuna, rewardsEnabled }),
+  });
+
+  async function boardOf(daily: unknown, scores: readonly number[]) {
+    let id = 0;
+    // The server refuses a run submitted sooner than the run could have taken,
+    // so the clock has to advance past the replay duration between issue and
+    // submit. A fixed clock trips that guard, which is the guard working.
+    let current = 1_000;
+    const wallets = ['NQ12 TEST WALLET A', 'NQ34 TEST WALLET B', 'NQ56 TEST WALLET C', 'NQ78 TEST WALLET D'];
+    const bindings: Record<string, string> = {};
+    for (const [index] of scores.entries()) bindings[`season-1:actor-${index}`] = wallets[index]!;
+    const service = createAtlasBlitzService({ identity: identity(bindings), now: () => current, randomId: () => `ticket-${++id}`, daily: daily as never });
+    for (const [index] of scores.entries()) {
+      const ticket = await service.issueTicket({ actorId: `actor-${index}`, walletAddress: wallets[index]!, username: `Rider${index}`, cityId: 'lagos', seasonId: 'season-1' });
+      const trace = await completeTrace('lagos', ticket.seed);
+      // The guard measures replay *ticks*, which include the countdown, not the
+      // run's elapsed time. Advance by the whole trace or it still trips.
+      current += Math.ceil((trace.frames.length * 1_000) / BLITZ_TICK_RATE) + 1_000;
+      await service.submit({
+        runId: `run-${index}`, ticketId: ticket.id, actorId: `actor-${index}`, walletAddress: wallets[index]!, username: `Rider${index}`,
+        cityId: 'lagos', seasonId: 'season-1', seed: ticket.seed, frames: trace.frames, traceHash: trace.hash, claimedScore: trace.score,
+      });
+    }
+    return service.prizeTable('season-1', 'lagos');
+  }
+
+  it('reports a funded pool split 50/30/20 across the riders who exist', async () => {
+    const table = await boardOf(pool(10_000), [1, 2, 3]);
+    expect(table.state).toBe('funded');
+    expect(table.poolLuna).toBe(10_000);
+    expect(table.splitBps).toEqual([5_000, 3_000, 2_000]);
+    expect(table.allocations.map((entry) => entry.luna)).toEqual([5_000, 3_000, 2_000]);
+    expect(table.qualifiedRiders).toBe(3);
+  });
+
+  it('calls an unfunded day unfunded, and owes nobody anything', async () => {
+    const table = await boardOf(pool(0), [1, 2]);
+    expect(table.state).toBe('unfunded');
+    expect(table.allocations).toEqual([]);
+  });
+
+  it('calls rewards-disabled unfunded rather than inventing a pool', async () => {
+    const table = await boardOf(pool(10_000, false), [1]);
+    expect(table.state).toBe('unfunded');
+    expect(table.allocations).toEqual([]);
+  });
+
+  /*
+   * The distinction that matters most. A treasury the server cannot reach is
+   * an unknown, and reporting an unknown as "no pool today" would be a claim
+   * about the treasury that nothing supports.
+   */
+  it('calls an unreadable pool unavailable, not unfunded', async () => {
+    const table = await boardOf({
+      qualifyVerifiedRun: async () => ({ accepted: true as const, eligible: true as const, date: '2026-09-15' }),
+      standing: async () => { throw new Error('treasury unreachable'); },
+    }, [1, 2]);
+    expect(table.state).toBe('unavailable');
+    expect(table.poolLuna).toBeNull();
+    expect(table.allocations).toEqual([]);
+  });
+
+  it('is unavailable when nothing can tell it about a pool at all', async () => {
+    const table = await boardOf(undefined, [1]);
+    expect(table.state).toBe('unavailable');
+    expect(table.allocations).toEqual([]);
+  });
+
+  it('still shows the board when the pool is missing', async () => {
+    const table = await boardOf(undefined, [1, 2]);
+    expect(table.qualifiedRiders).toBe(2);
+  });
+
+  it('pays only the places that exist and keeps the rest', async () => {
+    const table = await boardOf(pool(10_000), [1]);
+    expect(table.allocations).toHaveLength(1);
+    expect(table.remainderLuna).toBe(5_000);
   });
 });
