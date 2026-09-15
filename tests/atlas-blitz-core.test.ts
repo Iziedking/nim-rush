@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLITZ_TICK_RATE, createBlitzRun, sampleBlitzRoute, stepBlitzRun } from '../shared/atlas/blitz/core';
+import { BLITZ_TICK_RATE, createBlitzRun, getBlitzScoreBreakdown, sampleBlitzRoute, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { BLITZ_CITIES, nextBlitzCity } from '../shared/atlas/blitz/cities';
 import { selectBlitzMissions } from '../shared/atlas/blitz/missions';
 import type { BlitzInput, BlitzRunState } from '../shared/atlas/blitz/types';
@@ -44,8 +44,8 @@ describe('the boost economy', () => {
       state = stepBlitzRun(state, boost);
       fastest = Math.max(fastest, state.speedMps);
     }
-    // Lagos cruises at 30 m/s; a boost is worth 8.5 on top.
-    expect(fastest).toBeGreaterThan(36);
+    // Dirt reduces Lagos cruise to 27 m/s; boost still adds 8.5 m/s.
+    expect(fastest).toBeGreaterThan(35);
   });
 
   /*
@@ -67,7 +67,7 @@ describe('the boost economy', () => {
     for (let tick = 0; tick < BLITZ_TICK_RATE * 20; tick += 1) {
       state = stepBlitzRun(state, boost);
       if (state.boostActive) current += 1;
-      else if (current > 0) { episodes.push(current); current = 0; }
+      else if (current > 0) { if (state.elapsedTicks - state.lastImpactTick > BLITZ_TICK_RATE) episodes.push(current); current = 0; }
     }
     expect(episodes.length).toBeGreaterThan(0);
     expect(Math.min(...episodes)).toBeGreaterThan(BLITZ_TICK_RATE * 0.4);
@@ -104,7 +104,7 @@ describe('Beacon Blitz deterministic arcade core', () => {
     expect(first).toEqual(replay);
     expect(new Set(first.map((mission) => mission.id)).size).toBe(3);
     expect(first).not.toEqual(next);
-    expect(first.every((mission) => mission.explanation.length <= 96)).toBe(true);
+    expect(first.every((mission) => mission.description.length <= 120)).toBe(true);
   });
 
   it('counts down, accelerates automatically, steers lanes, drifts and spends boost', () => {
@@ -167,32 +167,25 @@ describe('Beacon Blitz deterministic arcade core', () => {
     }
   });
 
-  it('opens relay gates on the road and rewards only the correct choice', () => {
+  it('opens physical mission contracts on the road without blocking the ride', () => {
     let state = createBlitzRun({ cityId: 'lagos', seed: 'relay-gate' });
     state = advance(state, BLITZ_TICK_RATE * 3);
-    while (!state.activeRelay && state.phase === 'running') state = stepBlitzRun(state, idle);
-    expect(state.activeRelay).not.toBeNull();
-    const mission = state.missions[state.activeRelay!.missionIndex]!;
-    const before = state.relayScore;
-    state = stepBlitzRun(state, { ...idle, relayChoice: mission.correctChoice });
-    expect(state.relayScore).toBeGreaterThan(before);
-    expect(state.missions[0]?.resolved).toBe(true);
+    while (!state.activeMission && state.phase === 'running') state = stepBlitzRun(state, idle);
+    expect(state.activeMission).not.toBeNull();
+    expect(state.missions[state.activeMission!.missionIndex]?.status).toBe('active');
+    expect(state.missions[state.activeMission!.missionIndex]?.description).toBeTruthy();
   });
 
   it('finishes every launch city in 55–75 seconds on a clean strong run', () => {
     for (const city of BLITZ_CITIES) {
       let state = createBlitzRun({ cityId: city.id, seed: `${city.id}-clean-finish` });
       for (let tick = 0; tick < BLITZ_TICK_RATE * 90 && state.phase !== 'finished'; tick += 1) {
-        const relay = state.activeRelay;
-        const choice = relay ? state.missions[relay.missionIndex]!.correctChoice : undefined;
-        state = stepBlitzRun(state, { steer: 0, drift: false, boost: tick % 120 < 24, relayChoice: choice });
+        state = stepBlitzRun(state, { steer: 0, drift: false, boost: tick % 120 < 24 });
       }
       expect(state.phase, city.id).toBe('finished');
       expect(state.elapsedMs, city.id).toBeGreaterThanOrEqual(55_000);
       expect(state.elapsedMs, city.id).toBeLessThanOrEqual(75_000);
-      expect(state.score, city.id).toBe(
-        state.distanceScore + state.driftScore + state.relayScore + state.timeBonus - state.penaltyScore,
-      );
+      expect(state.score, city.id).toBe(getBlitzScoreBreakdown(state).total);
     }
   });
 

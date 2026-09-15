@@ -14,8 +14,7 @@ function trace(cityId: BlitzCityId, seed: string) {
   let state = createBlitzRun({ cityId, seed });
   const frames: BlitzTraceFrame[] = [];
   while (state.phase !== 'finished' && state.phase !== 'timeout') {
-    const relayChoice = state.activeRelay ? state.missions[state.activeRelay.missionIndex]!.correctChoice : undefined;
-    const input = { steer: 0, drift: false, boost: state.tick % 140 < 24, relayChoice };
+    const input = { steer: 0, drift: false, boost: state.tick % 140 < 24 };
     frames.push({ tick: frames.length, input });
     state = stepBlitzRun(state, input);
   }
@@ -63,7 +62,7 @@ const retry = await service.submit({ ...submission, runId: accepted.value.row.ru
 assert.equal(retry.duplicate, true);
 await assert.rejects(service.submit({ ...submission, runId: accepted.value.row.runId, walletAddress: 'another-wallet' }), /ticket/);
 
-const sources = ['shared/atlas/blitz/core.ts', 'shared/atlas/blitz/cities.ts', 'shared/atlas/blitz/missions.ts', 'shared/atlas/blitz/replay.ts', 'server/atlas/blitz.ts', 'server/atlas/identity.ts', 'server/atlas/persistence.ts', 'scripts/prove-blitz.ts'];
+const sources = ['shared/atlas/blitz/core.ts', 'shared/atlas/blitz/course.ts', 'shared/atlas/blitz/cities.ts', 'shared/atlas/blitz/daily.ts', 'shared/atlas/blitz/surfaces.ts', 'shared/atlas/blitz/missions.ts', 'shared/atlas/blitz/rules.ts', 'shared/atlas/blitz/replay.ts', 'server/atlas/blitz.ts', 'server/atlas/identity.ts', 'server/atlas/persistence.ts', 'scripts/prove-blitz.ts'];
 const sourceHashes = Object.fromEntries(await Promise.all(sources.map(async (path) => [path, createHash('sha256').update(await readFile(path)).digest('hex')])));
 const report = {
   generatedAt: new Date().toISOString(), node: process.version, platform: process.platform,

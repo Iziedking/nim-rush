@@ -19,9 +19,7 @@ async function completeTrace(cityId: BlitzCityId, seed: string): Promise<{ frame
   const frames: BlitzTraceFrame[] = [];
   let state = createBlitzRun({ cityId, seed });
   while (state.phase !== 'finished' && state.phase !== 'timeout') {
-    const relay = state.activeRelay;
-    const relayChoice = relay ? state.missions[relay.missionIndex]!.correctChoice : undefined;
-    const input = { steer: 0, drift: false, boost: state.tick % 140 < 24, relayChoice };
+    const input = { steer: 0, drift: false, boost: state.tick % 140 < 24 };
     frames.push({ tick: frames.length, input });
     state = stepBlitzRun(state, input);
   }
@@ -34,10 +32,10 @@ describe('Beacon Blitz verified competition service', () => {
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     expect(ticket).toMatchObject({ id: 'ticket-a', cityId: 'lagos', seasonId: 'season-1', username: 'Sface' });
     expect(ticket).toMatchObject({
-      challengeId: 'season-1:lagos:1970-01-01:blitz-daily-v1',
+      challengeId: 'season-1:lagos:1970-01-01:rush-missions-v5-rookie',
       challengeDate: '1970-01-01',
-      rulesetVersion: 'blitz-daily-v1',
-      seed: 'season-1:lagos:1970-01-01:blitz-daily-v1',
+      rulesetVersion: 'rush-missions-v5-rookie',
+      seed: 'season-1:lagos:1970-01-01:rush-missions-v5-rookie',
     });
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletB, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' })).rejects.toThrow(/wallet binding/i);
   });

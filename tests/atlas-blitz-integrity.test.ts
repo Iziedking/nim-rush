@@ -18,8 +18,7 @@ async function fixture(stateStore?: AtlasStateStore, daily?: Pick<AtlasDailyServ
   let state = createBlitzRun({ cityId: ticket.cityId, seed: ticket.seed });
   const frames: BlitzTraceFrame[] = [];
   while (state.phase !== 'finished' && state.phase !== 'timeout') {
-    const relayChoice = state.activeRelay ? state.missions[state.activeRelay.missionIndex]!.correctChoice : undefined;
-    const input = { steer: 0, drift: false, boost: false, relayChoice };
+    const input = { steer: 0, drift: false, boost: false };
     frames.push({ tick: frames.length, input });
     state = stepBlitzRun(state, input);
   }

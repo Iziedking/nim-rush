@@ -149,6 +149,7 @@ export function createAtlasBlitzService(options: {
       const result = await enqueue(async () => {
         const ticket = tickets.get(input.ticketId);
         if (!ticket) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket is missing.');
+        if (ticket.rulesetVersion !== BLITZ_DAILY_RULESET_VERSION) throw new AtlasBlitzError('ticket', 'This course has changed. Reload and start a new ranked run.');
         const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || (input.challengeId !== undefined && ticket.challengeId !== input.challengeId) || (input.challengeDate !== undefined && ticket.challengeDate !== input.challengeDate) || (input.rulesetVersion !== undefined && ticket.rulesetVersion !== input.rulesetVersion) || ticket.seed !== input.seed;
         if (mismatch) throw new AtlasBlitzError('ticket', 'Beacon Blitz submission does not match its ticket.');
         const binding = options.identity.getBinding(input.actorId, input.seasonId);

@@ -5,7 +5,7 @@ import type { BlitzCityId } from './types';
  * for issuance, while this pure module lets the client explain the same board
  * without importing a clock, network client, or UI framework.
  */
-export const BLITZ_DAILY_RULESET_VERSION = 'blitz-daily-v1';
+export const BLITZ_DAILY_RULESET_VERSION = 'rush-missions-v5-rookie';
 export const BLITZ_DAY_MS = 86_400_000;
 
 export interface BlitzDailyChallenge {

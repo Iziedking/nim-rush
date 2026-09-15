@@ -17,7 +17,7 @@ export function replayBlitzTrace(input: { cityId: BlitzCityId; seed: string; fra
 
 export async function hashBlitzTrace(frames: readonly BlitzTraceFrame[]): Promise<string> {
   validateBlitzTrace(frames);
-  const canonical = frames.map((frame) => ({ tick: frame.tick, steer: frame.input.steer, drift: frame.input.drift, boost: frame.input.boost, relayChoice: frame.input.relayChoice ?? null }));
+  const canonical = frames.map((frame) => ({ tick: frame.tick, steer: frame.input.steer, drift: frame.input.drift, boost: frame.input.boost, brake: frame.input.brake ?? false, relayChoice: frame.input.relayChoice ?? null }));
   const bytes = new TextEncoder().encode(JSON.stringify(canonical));
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -31,6 +31,7 @@ export function validateBlitzTrace(frames: readonly BlitzTraceFrame[]): void {
     const input = frame.input;
     if (!input || !Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1
       || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean'
+      || (input.brake !== undefined && typeof input.brake !== 'boolean')
       || (input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right')) {
       throw new Error('Beacon Blitz trace input is invalid.');
     }

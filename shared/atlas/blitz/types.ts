@@ -1,7 +1,10 @@
 export type BlitzCityId = 'lagos' | 'london' | 'dubai';
 export type BlitzChoice = 'left' | 'right';
+export type BlitzDifficulty = 'rookie' | 'pro';
 export type BlitzRunPhase = 'countdown' | 'running' | 'finished' | 'timeout';
-export type BlitzSurface = 'pavement' | 'dirt' | 'gravel' | 'wood';
+export type BlitzSurface = 'pavement' | 'dirt' | 'gravel' | 'wood' | 'grass';
+export type BlitzMissionKind = 'line' | 'control' | 'risk';
+export type BlitzMissionStatus = 'pending' | 'active' | 'complete' | 'failed';
 
 export type BlitzPhysicsEvent =
   | { readonly type: 'launch'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
@@ -23,18 +26,30 @@ export interface BlitzInput {
 export interface BlitzMissionDefinition {
   readonly id: string;
   readonly label: string;
-  readonly prompt: string;
-  readonly left: string;
-  readonly right: string;
-  readonly correctChoice: BlitzChoice;
-  readonly explanation: string;
+  readonly kind: BlitzMissionKind;
+  readonly verb: string;
+  readonly description: string;
+  readonly target: number;
+  readonly bonus: number;
+  /** Legacy relay fields are optional so old saved traces fail closed. */
+  readonly prompt?: string;
+  readonly left?: string;
+  readonly right?: string;
+  readonly correctChoice?: BlitzChoice;
+  readonly explanation?: string;
 }
 
 export interface BlitzMissionState extends BlitzMissionDefinition {
   readonly gateDistance: number;
-  readonly resolved: boolean;
-  readonly selectedChoice: BlitzChoice | null;
-  readonly correct: boolean | null;
+  readonly windowEndDistance: number;
+  readonly progress: number;
+  readonly status: BlitzMissionStatus;
+  readonly startedAtTick: number | null;
+  readonly contactsAtStart: number | null;
+  readonly failureReason: string | null;
+  readonly resolved?: boolean;
+  readonly selectedChoice?: BlitzChoice | null;
+  readonly correct?: boolean | null;
 }
 
 export interface BlitzActiveRelay {
@@ -42,8 +57,27 @@ export interface BlitzActiveRelay {
   readonly expiresAtTick: number;
 }
 
+export interface BlitzActiveMission {
+  readonly missionIndex: number;
+  readonly expiresAtTick: number;
+}
+
+export interface BlitzScoreBreakdown {
+  readonly finishTime: number;
+  readonly racingLine: number;
+  readonly control: number;
+  readonly airtime: number;
+  readonly missions: number;
+  readonly drift: number;
+  readonly collisionPenalties: number;
+  readonly missedGatePenalties: number;
+  readonly total: number;
+}
+
 export interface BlitzRunState {
   readonly version: 1;
+  readonly rulesetVersion: string;
+  readonly difficulty: BlitzDifficulty;
   readonly cityId: BlitzCityId;
   readonly seed: string;
   readonly phase: BlitzRunPhase;
@@ -64,14 +98,23 @@ export interface BlitzRunState {
   readonly boostActive: boolean;
   readonly driftActive: boolean;
   readonly distanceScore: number;
+  readonly lineScore: number;
+  readonly controlScore: number;
+  readonly airtimeScore: number;
+  readonly missionScore: number;
   readonly driftScore: number;
   readonly relayScore: number;
   readonly timeBonus: number;
+  readonly collisionPenalty: number;
+  readonly missedGatePenalty: number;
+  readonly offRoadPenalty: number;
   readonly penaltyScore: number;
   readonly score: number;
+  readonly scoreBreakdown: BlitzScoreBreakdown;
   readonly collisions: number;
   readonly nearMisses: number;
   readonly missions: readonly BlitzMissionState[];
+  readonly activeMission: BlitzActiveMission | null;
   readonly activeRelay: BlitzActiveRelay | null;
   readonly processedObstacleIds: readonly string[];
   readonly processedFeatureIds: readonly string[];

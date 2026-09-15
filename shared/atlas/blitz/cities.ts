@@ -21,6 +21,7 @@ export interface BlitzTerrainFeature {
 }
 
 export interface BlitzCityDefinition {
+  readonly closed?: boolean;
   readonly id: BlitzCityId;
   readonly name: string;
   readonly circuit: string;
@@ -42,24 +43,24 @@ export interface BlitzCityDefinition {
 
 export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
   {
-    id: 'lagos', name: 'Lagos', circuit: 'Lagos Pulse', callout: 'Lagoon heat. Market lights. No brakes.',
+    id: 'lagos', name: 'Lagos', circuit: 'Ridge Run', callout: 'Read the trail. Brake before the turn. Land clean.', closed: false,
     lengthMeters: 1_900, roadWidth: 7.2, baseSpeedMps: 30,
-    sky: 0x6f91b7, fog: 0x9b7b82, road: 0x242838, accent: 0xffb020, signal: 0x10e0c1,
+    sky: 0xa9c3ca, fog: 0xb5c2b6, road: 0x897054, accent: 0xf4ba36, signal: 0xe9e4cc,
     // A visible rise, crest and drop gives the hero route a readable physical
     // profile instead of a flat loop with a city painted around it.
-    routeElevation: [0.35, 1.2, 2.55, 1.65, 0.8, 0.25, 0.05, 0.4],
-    surfaceSegments: [{ start01: 0.16, end01: 0.23, surface: 'dirt' }, { start01: 0.47, end01: 0.55, surface: 'gravel' }, { start01: 0.73, end01: 0.79, surface: 'wood' }],
+    routeElevation: [112, 106, 92, 77, 82, 64, 49, 37, 28, 18, 8, 2],
+    surfaceSegments: [{ start01: 0, end01: 0.47, surface: 'dirt' }, { start01: 0.47, end01: 0.55, surface: 'gravel' }, { start01: 0.55, end01: 0.73, surface: 'dirt' }, { start01: 0.73, end01: 0.79, surface: 'wood' }, { start01: 0.79, end01: 1, surface: 'dirt' }],
     terrainFeatures: [
       { id: 'lagos-market-kicker', distance01: 0.18, kind: 'jump', surface: 'dirt', impulseMps: 4.6 },
       { id: 'lagos-gravel-rough', distance01: 0.51, kind: 'rough', surface: 'gravel', impulseMps: 0 },
       { id: 'lagos-boardwalk-launch', distance01: 0.75, kind: 'jump', surface: 'wood', impulseMps: 4.2 },
     ],
-    route: [[-10, 11], [-2, 13], [8, 9], [12, 1], [8, -9], [-1, -12], [-11, -7], [-13, 2]],
+    route: [[0, 0], [0, 12], [8, 26], [-2, 40], [-14, 48], [-8, 62], [10, 76], [16, 91], [2, 108], [-10, 120], [-3, 137], [8, 151]],
     obstacles: [
-      { id: 'lagos-keke-1', distance01: 0.18, lane: -1.8 },
-      { id: 'lagos-bus-2', distance01: 0.37, lane: 1.5 },
-      { id: 'lagos-crate-3', distance01: 0.61, lane: -0.4 },
-      { id: 'lagos-keke-4', distance01: 0.84, lane: 1.9 },
+      { id: 'lagos-rock-1', distance01: 0.085, lane: -1.8 },
+      { id: 'lagos-rock-2', distance01: 0.37, lane: 1.5 },
+      { id: 'lagos-log-3', distance01: 0.61, lane: -0.4 },
+      { id: 'lagos-rock-4', distance01: 0.84, lane: 1.9 },
     ],
   },
   {

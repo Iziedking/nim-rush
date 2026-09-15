@@ -1,41 +1,44 @@
 import { blitzCity } from './cities';
-import { selectBlitzMissions } from './missions';
+import { missionWindow, selectBlitzMissions } from './missions';
+import { blitzRules, type BlitzDifficultyRules } from './rules';
 import { blitzSurface } from './surfaces';
-import type { BlitzCityId, BlitzInput, BlitzMissionState, BlitzPhysicsEvent, BlitzRoutePose, BlitzRunState, BlitzSurface } from './types';
+import { courseGroundLift, courseTerrainHeight, nearbyCourseColliders, sampleCourse } from './course';
+import type { BlitzCityId, BlitzDifficulty, BlitzInput, BlitzMissionState, BlitzPhysicsEvent, BlitzRoutePose, BlitzRunState, BlitzScoreBreakdown, BlitzSurface } from './types';
 
 export const BLITZ_TICK_RATE = 30;
 export const BLITZ_LIMIT_SECONDS = 90;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
-// Eight seconds gives a touch player time to read the Nimiq decision and
-// choose a route while the bike keeps moving at full pace.
-const RELAY_WINDOW_TICKS = BLITZ_TICK_RATE * 8;
-const GATE_FRACTIONS = [0.24, 0.51, 0.77] as const;
-/*
- * The boost economy, per tick at 30 ticks a second.
- *
- * Net drain while boosting is 0.45 a tick, so a full tank is about four and a
- * half seconds of boost and the 28 a run starts with is about two. Riding
- * refills it in twenty seconds; drifting refills it in four and a half. That
- * gap is the point: drift already carries risk, and this is what pays for it.
- */
+const LINE_GATE_FRACTIONS = [0.26, 0.5, 0.74] as const;
 const BOOST_MAX = 60;
 const BOOST_DRAIN = 0.55;
 const BOOST_IDLE_REGEN = 0.1;
 const BOOST_DRIFT_REGEN = 0.45;
-/** Charge needed to *start* a boost, so it cannot stutter on at empty. */
 const BOOST_ENGAGE_ENERGY = 9;
 
-export function createBlitzRun(input: { cityId: BlitzCityId; seed: string }): BlitzRunState {
+export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; difficulty?: BlitzDifficulty }): BlitzRunState {
+  const difficulty = input.difficulty ?? 'rookie';
+  const rules = blitzRules(difficulty);
   const city = blitzCity(input.cityId);
-  const missions: BlitzMissionState[] = selectBlitzMissions(input.seed).map((mission, index) => ({
-    ...mission,
-    gateDistance: city.lengthMeters * GATE_FRACTIONS[index]!,
-    resolved: false,
-    selectedChoice: null,
-    correct: null,
-  }));
+  const missions: BlitzMissionState[] = selectBlitzMissions(input.seed, difficulty).map((mission) => {
+    const window = missionWindow(mission.kind, rules.riskWindowStart, rules.riskWindowEnd);
+    return {
+      ...mission,
+      gateDistance: city.lengthMeters * window.start,
+      windowEndDistance: city.lengthMeters * window.end,
+      progress: 0,
+      status: 'pending',
+      startedAtTick: null,
+      contactsAtStart: null,
+      failureReason: null,
+      resolved: false,
+      selectedChoice: null,
+      correct: null,
+    };
+  });
   return withScore({
     version: 1,
+    rulesetVersion: rules.rulesetVersion,
+    difficulty,
     cityId: input.cityId,
     seed: input.seed,
     phase: 'countdown',
@@ -56,14 +59,19 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string }): Bl
     boostActive: false,
     driftActive: false,
     distanceScore: 0,
+    lineScore: 0,
+    controlScore: 0,
+    airtimeScore: 0,
+    missionScore: 0,
     driftScore: 0,
-    relayScore: 0,
     timeBonus: 0,
-    penaltyScore: 0,
-    score: 0,
+    collisionPenalty: 0,
+    missedGatePenalty: 0,
+    offRoadPenalty: 0,
     collisions: 0,
     nearMisses: 0,
     missions,
+    activeMission: null,
     activeRelay: null,
     processedObstacleIds: [],
     processedFeatureIds: [],
@@ -80,66 +88,66 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   }
 
   const city = blitzCity(state.cityId);
+  const rules = blitzRules(state.difficulty);
   const elapsedTicks = state.elapsedTicks + 1;
   const elapsedMs = Math.round(elapsedTicks * 1_000 / BLITZ_TICK_RATE);
-  const steer = input.steer;
-  const driftActive = input.drift && Math.abs(steer) >= 0.2 && state.speedMps >= 8;
+  const driftActive = input.drift && Math.abs(input.steer) >= 0.2 && state.speedMps >= 8;
   const brakeActive = input.brake === true;
   const routeSurface = surfaceAt(city, state.distanceMeters);
-  const surface = Math.abs(state.laneOffset) > city.roadWidth * 0.5 ? 'dirt' : routeSurface;
+  const surface = Math.abs(state.laneOffset) > city.roadWidth * 0.5 ? 'grass' : routeSurface;
   const surfaceProfile = blitzSurface(surface);
-  /*
-   * Boost needs a real charge to start, and only needs a spark to continue.
-   *
-   * The single threshold made boost stutter: at empty, idle regen crossed 0.25
-   * every few ticks, so holding the button flicked boost on for one tick, off
-   * for four, on for one - a visible judder and a speed line that never
-   * settled. Requiring a proper charge to engage, then letting it run to zero,
-   * makes a boost an event with a beginning and an end.
-  */
-  const boostActive = input.boost && (state.boostActive ? state.boostEnergy > 0.25 : state.boostEnergy >= BOOST_ENGAGE_ENERGY);
-  const lateralAcceleration = steer * (driftActive ? 13 : 8) * surfaceProfile.grip;
+  const boostActive = surface !== 'grass' && input.boost
+    && (state.boostActive ? state.boostEnergy > 0.25 : state.boostEnergy >= BOOST_ENGAGE_ENERGY);
+  const lateralAcceleration = input.steer * (driftActive ? 13 : 8) * surfaceProfile.grip;
   let lateralVelocityMps = clamp(state.lateralVelocityMps + lateralAcceleration / BLITZ_TICK_RATE, -12, 12);
   lateralVelocityMps *= driftActive ? 0.988 : Math.pow(surfaceProfile.grip, 0.35) * 0.94;
   let laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
   const offRoad = Math.abs(laneOffset) > city.roadWidth * 0.5;
-  const targetSpeed = offRoad ? 14 : city.baseSpeedMps * surfaceProfile.resistance + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0) - (brakeActive ? 8 : 0);
-  // A bike should hook up immediately after GO. Keep the authoritative target
-  // speed unchanged, but make the launch response feel responsive on touch.
+  const shoulderDepth = Math.max(0, Math.abs(laneOffset) - city.roadWidth * 0.5);
+  const grassProfile = blitzSurface('grass');
+  const targetSpeed = brakeActive ? 0 : offRoad
+    ? city.baseSpeedMps * grassProfile.resistance / (1 + shoulderDepth * 0.18)
+    : city.baseSpeedMps * surfaceProfile.resistance + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0);
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
-  /*
-   * The old economy drained 1.05 a tick against a 28 charge: 31.5 a second, so
-   * a boost lasted 1.06 seconds and then never returned, because idle regen of
-   * 0.045 a tick needs ten minutes to refill. A 90 second run therefore sat at
-   * exactly base speed almost from end to end, and a racing game reads as fast
-   * because its speed *changes*. Boost is now about two and a half seconds,
-   * refills in roughly six while riding, and refills far faster if you drift
-   * for it - which makes drifting worth the risk it already carries.
-   */
+  if (offRoad && !brakeActive && !state.airborne) {
+    const here = sampleCourse(city.id, state.distanceMeters);
+    const ahead = sampleCourse(city.id, state.distanceMeters + 1);
+    const grade = ahead.y + courseGroundLift(city.id, state.distanceMeters + 1, laneOffset)
+      - here.y - courseGroundLift(city.id, state.distanceMeters, laneOffset);
+    const acceleration = clamp((targetSpeed - state.speedMps) * 0.85 - 9.81 * clamp(grade, -0.5, 0.5), -7, 3.5);
+    speedMps = Math.max(0, state.speedMps + acceleration / BLITZ_TICK_RATE);
+  }
+  if (state.airborne && !brakeActive) speedMps = state.speedMps;
   let boostEnergy = clamp(state.boostEnergy + (driftActive ? BOOST_DRIFT_REGEN : BOOST_IDLE_REGEN) - (boostActive ? BOOST_DRAIN : 0), 0, BOOST_MAX);
-  const distanceMeters = Math.min(city.lengthMeters, state.distanceMeters + speedMps / BLITZ_TICK_RATE);
+  let distanceMeters = Math.min(city.lengthMeters, state.distanceMeters + speedMps / BLITZ_TICK_RATE);
   let distanceScore = Math.floor(distanceMeters * 10);
-  let driftScore = state.driftScore + (driftActive ? Math.max(1, Math.round(Math.abs(steer) * speedMps * 0.16)) : 0);
-  let relayScore = state.relayScore;
-  let penaltyScore = state.penaltyScore;
+  let lineScore = state.lineScore;
+  let controlScore = state.controlScore;
+  let airtimeScore = state.airtimeScore;
+  let missionScore = state.missionScore;
+  let driftScore = state.driftScore + (driftActive ? Math.max(1, Math.round(Math.abs(input.steer) * speedMps * 0.16)) : 0);
+  let collisionPenalty = state.collisionPenalty;
+  let missedGatePenalty = state.missedGatePenalty;
+  let offRoadPenalty = state.offRoadPenalty;
   let collisions = state.collisions;
   let nearMisses = state.nearMisses;
   let lastImpactTick = state.lastImpactTick;
   const processedObstacleIds = [...state.processedObstacleIds];
   const processedFeatureIds = [...state.processedFeatureIds];
   let missions = state.missions.map((mission) => ({ ...mission }));
-  let activeRelay = state.activeRelay ? { ...state.activeRelay } : null;
   let heightMeters = state.heightMeters;
   let verticalVelocityMps = state.verticalVelocityMps;
   let airborne = state.airborne;
   let lastEvent: BlitzPhysicsEvent | null = state.surface === surface ? null : { type: 'surface-change', tick: state.tick + 1, intensity: 0.5, surface };
 
   if (airborne) {
-    heightMeters += verticalVelocityMps / BLITZ_TICK_RATE;
+    const terrainRise = sampleCourse(city.id, distanceMeters).y - sampleCourse(city.id, state.distanceMeters).y;
+    heightMeters += verticalVelocityMps / BLITZ_TICK_RATE - terrainRise;
     verticalVelocityMps -= 10.8 / BLITZ_TICK_RATE;
-    if (heightMeters <= 0) {
+    const groundLift = courseGroundLift(city.id, distanceMeters, laneOffset);
+    if (heightMeters <= groundLift) {
       const landingIntensity = clamp(Math.abs(verticalVelocityMps) / 8, 0.2, 1);
-      heightMeters = 0;
+      heightMeters = groundLift;
       verticalVelocityMps = 0;
       airborne = false;
       lastEvent = { type: 'landing', tick: state.tick + 1, intensity: landingIntensity, surface };
@@ -150,81 +158,82 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     const featureDistance = city.lengthMeters * feature.distance01;
     if (processedFeatureIds.includes(feature.id) || state.distanceMeters >= featureDistance || distanceMeters < featureDistance) continue;
     processedFeatureIds.push(feature.id);
-    if (feature.kind === 'jump' && !airborne) {
+    if (feature.kind === 'jump' && !airborne && Math.abs(laneOffset) <= city.roadWidth * 0.38) {
       airborne = true;
-      heightMeters = 0.06;
+      heightMeters = 0.76;
       verticalVelocityMps = feature.impulseMps + Math.max(0, speedMps - city.baseSpeedMps) * 0.08;
       lastEvent = { type: 'launch', tick: state.tick + 1, intensity: clamp(verticalVelocityMps / 7, 0.4, 1), surface: feature.surface };
     } else if (feature.kind === 'rough') {
       speedMps *= 0.86;
-      penaltyScore += 110;
+      missedGatePenalty += 110;
       lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 0.35, surface: feature.surface };
     }
   }
 
   if (offRoad && elapsedTicks - lastImpactTick >= BLITZ_TICK_RATE) {
-    penaltyScore += 90;
+    offRoadPenalty += 90;
     lastImpactTick = elapsedTicks;
   }
 
-  for (const obstacle of city.obstacles) {
-    const obstacleDistance = city.lengthMeters * obstacle.distance01;
-    if (processedObstacleIds.includes(obstacle.id) || state.distanceMeters >= obstacleDistance || distanceMeters < obstacleDistance) continue;
-    processedObstacleIds.push(obstacle.id);
+  const enabledObstacleIds = new Set(city.obstacles.slice(0, rules.obstacleLimit).map((obstacle) => obstacle.id));
+  for (const obstacle of nearbyCourseColliders(city.id, state.distanceMeters)) {
+    if (!obstacle.roadside && !enabledObstacleIds.has(obstacle.id)) continue;
+    const nearFace = obstacle.distance - obstacle.halfLength - 1.1;
+    const farFace = obstacle.distance + obstacle.halfLength + 1.1;
+    if (state.distanceMeters > farFace || distanceMeters < nearFace) continue;
+    const wheelY = sampleCourse(city.id, distanceMeters).y + heightMeters;
+    const obstacleTop = courseTerrainHeight(city.id, obstacle.distance, obstacle.lane) + obstacle.height;
+    if (airborne && wheelY > obstacleTop + 0.08) continue;
+    const hitWidth = obstacle.halfWidth + 0.32;
+    const previousLateral = state.laneOffset - obstacle.lane;
+    const currentLateral = laneOffset - obstacle.lane;
     const clearance = Math.abs(laneOffset - obstacle.lane);
-    if (clearance < 0.82) {
-      collisions += 1;
-      penaltyScore += 420;
-      speedMps *= 0.56;
-      boostEnergy = Math.max(0, boostEnergy - 15);
-      // A collision is not only a score event. Push the authoritative line
-      // away from the obstacle and reverse part of the lateral momentum so a
-      // rider cannot visually ghost through a vehicle and continue on the
-      // exact same trajectory.
-      const directionAway = Math.sign(laneOffset - obstacle.lane) || Math.sign(steer) || 1;
-      laneOffset = clamp(laneOffset + directionAway * 0.18, -city.roadWidth * 0.72, city.roadWidth * 0.72);
-      lateralVelocityMps = clamp(lateralVelocityMps + directionAway * 2.4, -12, 12);
+    const crossesSide = previousLateral * currentLateral < 0;
+    if (clearance < hitWidth || crossesSide) {
+      const directionAway = Math.sign(previousLateral) || Math.sign(input.steer) || 1;
+      if (state.distanceMeters <= nearFace + 0.002) distanceMeters = Math.max(state.distanceMeters, nearFace - 0.001);
+      else laneOffset = obstacle.lane + directionAway * (hitWidth + 0.002);
+      if (!processedObstacleIds.includes(obstacle.id)) {
+        processedObstacleIds.push(obstacle.id);
+        collisions += 1;
+        collisionPenalty += 420;
+        // Impact removes charge as well as speed, so a collision cannot be
+        // hidden behind the score penalty alone.
+        boostEnergy = Math.max(0, boostEnergy - 15);
+        lateralVelocityMps = directionAway * 6;
+        lastImpactTick = elapsedTicks;
+        lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 1, surface };
+      }
+      speedMps *= 0.35;
       lastImpactTick = elapsedTicks;
       lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 1, surface };
-    } else if (clearance < 1.7) {
+    } else if (!obstacle.roadside && distanceMeters >= obstacle.distance && !processedObstacleIds.includes(obstacle.id) && clearance < hitWidth + 0.9) {
+      processedObstacleIds.push(obstacle.id);
       nearMisses += 1;
-      distanceScore += 180;
     }
   }
-
-  if (!activeRelay) {
-    const missionIndex = missions.findIndex((mission) => !mission.resolved && distanceMeters >= mission.gateDistance);
-    if (missionIndex >= 0) activeRelay = { missionIndex, expiresAtTick: elapsedTicks + RELAY_WINDOW_TICKS };
+  distanceScore += nearMisses * 180;
+  for (const fraction of LINE_GATE_FRACTIONS) {
+    const gateId = `line-gate-${fraction}`;
+    const gateDistance = city.lengthMeters * fraction;
+    if (processedFeatureIds.includes(gateId) || state.distanceMeters >= gateDistance || distanceMeters < gateDistance) continue;
+    processedFeatureIds.push(gateId);
+    if (!airborne && Math.abs(laneOffset) <= city.roadWidth * rules.lineTolerance && collisions === state.collisions) lineScore += 180;
+    else missedGatePenalty += 180;
   }
-  if (activeRelay && input.relayChoice) {
-    const mission = missions[activeRelay.missionIndex]!;
-    const correct = input.relayChoice === mission.correctChoice;
-    missions[activeRelay.missionIndex] = { ...mission, resolved: true, selectedChoice: input.relayChoice, correct };
-    if (correct) {
-      relayScore += 1_200;
-      boostEnergy = Math.min(BOOST_MAX, boostEnergy + 24);
-    } else {
-      penaltyScore += 300;
-      speedMps *= 0.78;
-    }
-    activeRelay = null;
-  } else if (activeRelay && elapsedTicks >= activeRelay.expiresAtTick) {
-    const mission = missions[activeRelay.missionIndex]!;
-    missions[activeRelay.missionIndex] = { ...mission, resolved: true, selectedChoice: null, correct: false };
-    penaltyScore += 360;
-    speedMps *= 0.72;
-    activeRelay = null;
-  }
+  if (!airborne) heightMeters = courseGroundLift(city.id, distanceMeters, laneOffset);
 
   const finished = distanceMeters >= city.lengthMeters;
   const timedOut = !finished && elapsedTicks >= BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE;
+  const missionResult = updateMissions({ city, rules, state, missions, distanceMeters, elapsedTicks, input, surface, airborne, collisions, finished, lastEvent });
+  missions = missionResult.missions;
+  missionScore += missionResult.missionScore;
+  controlScore += missionResult.controlScore;
+  airtimeScore += missionResult.airtimeScore;
+  missedGatePenalty += missionResult.missedGatePenalty;
   const timeBonus = finished ? Math.max(0, Math.floor((BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE - elapsedTicks) / BLITZ_TICK_RATE) * 100) : 0;
-  if (driftActive && Math.abs(lateralVelocityMps) >= surfaceProfile.skidThreshold) {
-    lastEvent = { type: 'skid', tick: state.tick + 1, intensity: clamp(Math.abs(lateralVelocityMps) / 10, 0.35, 1), surface };
-  }
-  if (state.boostActive !== boostActive) {
-    lastEvent = { type: boostActive ? 'boost-start' : 'boost-end', tick: state.tick + 1, intensity: 1, surface };
-  }
+  if (!lastEvent && driftActive && Math.abs(lateralVelocityMps) >= surfaceProfile.skidThreshold) lastEvent = { type: 'skid', tick: state.tick + 1, intensity: clamp(Math.abs(lateralVelocityMps) / 10, 0.35, 1), surface };
+  if (!lastEvent && state.boostActive !== boostActive) lastEvent = { type: boostActive ? 'boost-start' : 'boost-end', tick: state.tick + 1, intensity: 1, surface };
   return withScore({
     ...state,
     phase: finished ? 'finished' : timedOut ? 'timeout' : 'running',
@@ -244,48 +253,118 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     boostActive,
     driftActive,
     distanceScore,
+    lineScore,
+    controlScore,
+    airtimeScore,
+    missionScore,
     driftScore,
-    relayScore,
     timeBonus,
-    penaltyScore,
+    collisionPenalty,
+    missedGatePenalty,
+    offRoadPenalty,
     collisions,
     nearMisses,
     missions,
-    activeRelay,
+    activeMission: missionResult.activeMission,
+    activeRelay: null,
     processedObstacleIds,
     processedFeatureIds,
     lastImpactTick,
   });
 }
 
+type BlitzScoreSource = Pick<BlitzRunState, 'distanceScore' | 'lineScore' | 'controlScore' | 'airtimeScore' | 'missionScore' | 'driftScore' | 'timeBonus' | 'collisionPenalty' | 'missedGatePenalty' | 'offRoadPenalty'>;
+
+export function getBlitzScoreBreakdown(state: BlitzScoreSource): BlitzScoreBreakdown {
+  const total = Math.max(0, state.distanceScore + state.lineScore + state.controlScore + state.airtimeScore + state.missionScore + state.driftScore + state.timeBonus - state.collisionPenalty - state.missedGatePenalty - state.offRoadPenalty);
+  return {
+    finishTime: state.timeBonus,
+    racingLine: state.distanceScore + state.lineScore,
+    control: state.controlScore,
+    airtime: state.airtimeScore,
+    missions: state.missionScore,
+    drift: state.driftScore,
+    collisionPenalties: state.collisionPenalty,
+    missedGatePenalties: state.missedGatePenalty + state.offRoadPenalty,
+    total,
+  };
+}
+
+function updateMissions(input: {
+  city: ReturnType<typeof blitzCity>;
+  rules: BlitzDifficultyRules;
+  state: BlitzRunState;
+  missions: BlitzMissionState[];
+  distanceMeters: number;
+  elapsedTicks: number;
+  input: BlitzInput;
+  surface: BlitzSurface;
+  airborne: boolean;
+  collisions: number;
+  finished: boolean;
+  lastEvent: BlitzPhysicsEvent | null;
+}): { missions: BlitzMissionState[]; activeMission: BlitzRunState['activeMission']; missionScore: number; controlScore: number; airtimeScore: number; missedGatePenalty: number } {
+  let missionScore = 0;
+  let controlScore = 0;
+  let airtimeScore = 0;
+  let missedGatePenalty = 0;
+  const missions = input.missions.map((mission) => {
+    let next = mission;
+    if (next.status === 'pending' && input.distanceMeters >= next.gateDistance) {
+      next = { ...next, status: 'active', startedAtTick: input.elapsedTicks, contactsAtStart: input.collisions };
+    }
+    if (next.status !== 'active') return next;
+    const cleanLine = !input.airborne && input.surface !== 'grass'
+      && Math.abs(input.state.laneOffset) <= input.city.roadWidth * input.rules.lineTolerance
+      && input.collisions === (next.contactsAtStart ?? input.collisions);
+    if (next.id === 'line-master') {
+      const checkpoint = next.gateDistance + (next.windowEndDistance - next.gateDistance) / next.target * (next.progress + 1);
+      if (input.distanceMeters >= checkpoint) {
+        if (cleanLine) next = { ...next, progress: next.progress + 1 };
+        else next = { ...next, status: 'failed', failureReason: 'The racing line was lost.' };
+      }
+    } else if (next.id === 'surface-discipline') {
+      if (input.surface === 'grass' || input.collisions > (next.contactsAtStart ?? input.collisions)) next = { ...next, status: 'failed', failureReason: 'The surface was left uncontrolled.' };
+      else if (input.distanceMeters >= next.windowEndDistance) next = { ...next, progress: 1, status: 'complete' };
+    } else if (next.id === 'brake-late-exit-clean') {
+      if (input.distanceMeters <= next.windowEndDistance && input.input.brake && input.state.speedMps <= input.rules.controlSpeedCapMps) next = { ...next, progress: 1 };
+      else if (input.distanceMeters > next.windowEndDistance) {
+        if (next.progress >= 1 && input.state.speedMps >= input.rules.controlExitSpeedMps) next = { ...next, progress: 2, status: 'complete' };
+        else next = { ...next, status: 'failed', failureReason: 'The brake point or exit speed was missed.' };
+      }
+    } else if (next.id === 'air-judge') {
+      if (input.lastEvent?.type === 'launch') next = { ...next, progress: 1 };
+      if (input.lastEvent?.type === 'landing') {
+        if (next.progress >= 1 && input.lastEvent.intensity <= 0.75) next = { ...next, progress: 2, status: 'complete' };
+        else next = { ...next, status: 'failed', failureReason: 'The landing was too heavy.' };
+      } else if (input.distanceMeters > next.windowEndDistance && next.progress < 2) next = { ...next, status: 'failed', failureReason: 'The jump was not completed.' };
+    } else if (next.id === 'risk-route') {
+      if (input.distanceMeters <= next.windowEndDistance && input.surface === 'grass') next = { ...next, progress: 1 };
+      else if (input.distanceMeters > next.windowEndDistance) {
+        if (next.progress >= 1 && input.surface !== 'grass' && input.collisions === (next.contactsAtStart ?? input.collisions)) next = { ...next, progress: 2, status: 'complete' };
+        else next = { ...next, status: 'failed', failureReason: 'The risk line was not recovered cleanly.' };
+      }
+    } else if (next.id === 'perfect-descent' && input.finished) {
+      const otherComplete = input.missions.filter((candidate) => candidate.id !== next.id).every((candidate) => candidate.status === 'complete');
+      next = input.collisions === 0 && otherComplete ? { ...next, progress: 1, status: 'complete' } : { ...next, status: 'failed', failureReason: 'A clean descent still had unfinished work.' };
+    }
+    if (next.progress >= next.target && next.status === 'active') next = { ...next, status: 'complete' };
+    if (next.status === 'complete' && mission.status !== 'complete') missionScore += next.bonus;
+    if (next.id === 'brake-late-exit-clean' && next.progress > mission.progress) controlScore += 280;
+    if (next.id === 'air-judge' && next.status === 'complete' && mission.status !== 'complete') airtimeScore += 350;
+    if (next.status === 'failed' && mission.status !== 'failed') missedGatePenalty += 220;
+    return next;
+  });
+  const activeIndex = missions.findIndex((mission) => mission.status === 'active');
+  const activeMission = activeIndex < 0 ? null : {
+    missionIndex: activeIndex,
+    expiresAtTick: input.elapsedTicks + Math.max(1, Math.round((missions[activeIndex]!.windowEndDistance - input.distanceMeters) / Math.max(input.state.speedMps, 1) * BLITZ_TICK_RATE)),
+  };
+  return { missions, activeMission, missionScore, controlScore, airtimeScore, missedGatePenalty };
+}
+
 export function sampleBlitzRoute(cityId: BlitzCityId, distanceMeters: number, laneOffset = 0): BlitzRoutePose {
-  const city = blitzCity(cityId);
-  const points = city.route;
-  const loop = clamp(distanceMeters / city.lengthMeters, 0, 0.999999) * points.length;
-  const index = Math.floor(loop);
-  const amount = loop - index;
-  const previous = points[(index - 1 + points.length) % points.length]!;
-  const start = points[index]!;
-  const end = points[(index + 1) % points.length]!;
-  const after = points[(index + 2) % points.length]!;
-  const x = lerp(start[0], end[0], smooth(amount));
-  const z = lerp(start[1], end[1], smooth(amount));
-  const tangentX = end[0] - start[0];
-  const tangentZ = end[1] - start[1];
-  const tangentLength = Math.max(0.001, Math.hypot(tangentX, tangentZ));
-  const normalX = -tangentZ / tangentLength;
-  const normalZ = tangentX / tangentLength;
-  const headingRadians = Math.atan2(tangentX, tangentZ);
-  const incoming = Math.atan2(start[0] - previous[0], start[1] - previous[1]);
-  const outgoing = Math.atan2(after[0] - end[0], after[1] - end[1]);
-  const bend = Math.atan2(Math.sin(outgoing - incoming), Math.cos(outgoing - incoming));
-  const heightStart = city.routeElevation[index] ?? 0;
-  const heightEnd = city.routeElevation[(index + 1) % city.routeElevation.length] ?? heightStart;
-  const terrainY = lerp(heightStart, heightEnd, smooth(amount));
-  const previousHeight = city.routeElevation[(index - 1 + city.routeElevation.length) % city.routeElevation.length] ?? heightStart;
-  const nextHeight = city.routeElevation[(index + 1) % city.routeElevation.length] ?? heightEnd;
-  const slope = (nextHeight - previousHeight) / Math.max(0.001, tangentLength * 2);
-  return { x: x + normalX * laneOffset, z: z + normalZ * laneOffset, y: terrainY, headingRadians, bend, slope, surface: surfaceAt(city, distanceMeters) };
+  return sampleCourse(cityId, distanceMeters, laneOffset);
 }
 
 function surfaceAt(city: ReturnType<typeof blitzCity>, distanceMeters: number): BlitzSurface {
@@ -294,12 +373,13 @@ function surfaceAt(city: ReturnType<typeof blitzCity>, distanceMeters: number): 
   return segment?.surface ?? 'pavement';
 }
 
-function withScore(state: Omit<BlitzRunState, 'score'> & { score?: number }): BlitzRunState {
-  return { ...state, score: Math.max(0, state.distanceScore + state.driftScore + state.relayScore + state.timeBonus - state.penaltyScore) };
+function withScore(state: Omit<BlitzRunState, 'score' | 'scoreBreakdown' | 'penaltyScore' | 'relayScore'>): BlitzRunState {
+  const breakdown = getBlitzScoreBreakdown(state);
+  return { ...state, penaltyScore: breakdown.collisionPenalties + breakdown.missedGatePenalties, relayScore: state.missionScore, scoreBreakdown: breakdown, score: breakdown.total };
 }
 
 function validateInput(input: BlitzInput): BlitzInput {
-  if (!Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1 || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean' || input.brake !== undefined && typeof input.brake !== 'boolean' || input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right') throw new Error('Beacon Blitz input is invalid.');
+  if (!Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1 || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean' || (input.brake !== undefined && typeof input.brake !== 'boolean') || (input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right')) throw new Error('Beacon Blitz input is invalid.');
   return input;
 }
 
@@ -310,12 +390,4 @@ function approach(value: number, target: number, amount: number): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function lerp(start: number, end: number, amount: number): number {
-  return start + (end - start) * amount;
-}
-
-function smooth(value: number): number {
-  return value * value * (3 - 2 * value);
 }
