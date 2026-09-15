@@ -202,7 +202,10 @@ describe('what a closed day owes', () => {
     const plan = planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(10_000, [WALLET_A, WALLET_B, WALLET_C]).allocations });
     expect(plan.map((entry) => entry.rank)).toEqual([1, 2, 3]);
     expect(plan.map((entry) => entry.amountLuna)).toEqual([5_000, 3_000, 2_000]);
-    expect(plan.every((entry) => entry.period === CHALLENGE)).toBe(true);
+    // The period is derived from the challenge rather than being it: the ledger
+    // stores no colons, so the raw challenge id could never be written.
+    expect(new Set(plan.map((entry) => entry.period)).size).toBe(1);
+    expect(plan[0]!.period).toMatch(/^blitz-/);
   });
 
   /*
@@ -219,8 +222,43 @@ describe('what a closed day owes', () => {
 
   it('keys an obligation to the place, so a day cannot pay a place twice', () => {
     const plan = planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(10_000, [WALLET_A, WALLET_B, WALLET_C]).allocations });
-    expect(plan[0]!.id).toBe(`blitz:${CHALLENGE}:1`);
-    expect(plan[2]!.id).toBe(`blitz:${CHALLENGE}:3`);
+    expect(plan.map((entry) => entry.rank)).toEqual([1, 2, 3]);
+    expect(new Set(plan.map((entry) => entry.id)).size).toBe(3);
+    expect(plan.every((entry) => entry.id.endsWith('-1') || entry.id.endsWith('-2') || entry.id.endsWith('-3'))).toBe(true);
+  });
+
+  /*
+   * The ledger in server/atlas/payouts.ts validates both id and period against
+   * /^[a-z0-9-]{1,80}$/ - no colons, 80 characters. Challenge ids are
+   * colon-separated and long, so an obligation named after one directly is
+   * refused at the moment it is written, which is the worst possible moment.
+   */
+  it('names obligations the treasury ledger will actually accept', () => {
+    const ledgerId = /^[a-z0-9-]{1,80}$/;
+    const plan = planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(10_000, [WALLET_A, WALLET_B, WALLET_C]).allocations });
+    for (const entry of plan) {
+      expect(entry.id, `id ${entry.id} would be refused`).toMatch(ledgerId);
+      expect(entry.period, `period ${entry.period} would be refused`).toMatch(ledgerId);
+    }
+  });
+
+  /*
+   * Slugging colons to dashes is only safe if it cannot collapse two different
+   * challenges onto one name. A season literally called "cycle-2-lagos" must
+   * not produce the same obligation as season "cycle-2" in city "lagos".
+   */
+  it('cannot collapse two different challenges onto one obligation', () => {
+    const allocations = table(10_000, [WALLET_A]).allocations;
+    const separate = planBlitzPayouts({ challengeId: 'cycle-2:lagos:2026-09-15', allocations })[0]!;
+    const collided = planBlitzPayouts({ challengeId: 'cycle-2-lagos:2026-09-15', allocations })[0]!;
+    expect(separate.id).not.toBe(collided.id);
+    expect(separate.period).not.toBe(collided.period);
+  });
+
+  it('refuses rather than emitting a name the ledger would reject', () => {
+    const allocations = table(10_000, [WALLET_A]).allocations;
+    // Long enough that any encoding of it exceeds the ledger's 80 characters.
+    expect(() => planBlitzPayouts({ challengeId: `cycle-2:lagos:2026-09-15:${'v'.repeat(90)}`, allocations })).toThrow(/challenge/i);
   });
 
   /*

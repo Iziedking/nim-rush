@@ -164,6 +164,28 @@ export interface BlitzPayoutPlanEntry {
  */
 const CHALLENGE_ID_PATTERN = /^[a-z0-9:_-]{1,160}$/;
 
+/*
+ * What `server/atlas/payouts.ts` will actually accept for an id and a period.
+ * Mirrored here rather than imported because this module is pure and shared
+ * with the client; read from that file on 2026-09-15. No colons, 80 characters.
+ */
+const LEDGER_NAME_PATTERN = /^[a-z0-9-]{1,80}$/;
+const LEDGER_NAME_MAX = 80;
+
+/**
+ * Encode a challenge id into something the ledger will take, without ever
+ * letting two different challenges become the same name.
+ *
+ * A plain `:` to `-` substitution is not safe: season "cycle-2" in city
+ * "lagos" and a season literally called "cycle-2-lagos" would collapse onto
+ * one obligation, and the ledger's duplicate refusal would then hide the
+ * second day's first place instead of catching it. Doubling existing dashes
+ * first makes the mapping injective and reversible.
+ */
+function ledgerSlug(challengeId: string): string {
+  return challengeId.replace(/-/g, '--').replace(/:/g, '-').replace(/_/g, '-');
+}
+
 /**
  * Turn a closed day's allocations into the obligations it owes.
  *
@@ -185,13 +207,23 @@ export function planBlitzPayouts(input: {
   if (!CHALLENGE_ID_PATTERN.test(input.challengeId)) {
     throw new Error('Beacon Blitz challenge id cannot name a payout obligation.');
   }
+  const period = `blitz-${ledgerSlug(input.challengeId)}`;
+  /*
+   * Refuse here rather than at the ledger. A name that is too long fails at
+   * the moment the obligation is written, which is the worst moment to find
+   * out: the day is closed, the winners are decided, and the treasury has a
+   * row it cannot create.
+   */
+  if (!LEDGER_NAME_PATTERN.test(period) || period.length + 2 > LEDGER_NAME_MAX) {
+    throw new Error('Beacon Blitz challenge id is too long to name a payout obligation.');
+  }
   return input.allocations
     // A share that floors to nothing is not an obligation: a transfer of zero
     // costs a fee to prove nothing happened.
     .filter((allocation) => allocation.luna > 0)
     .map((allocation) => ({
-      id: `blitz:${input.challengeId}:${allocation.rank}`,
-      period: input.challengeId,
+      id: `${period}-${allocation.rank}`,
+      period,
       rank: allocation.rank,
       walletAddress: allocation.walletAddress,
       amountLuna: allocation.luna,
