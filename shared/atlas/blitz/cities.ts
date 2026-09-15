@@ -45,7 +45,9 @@ export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
     id: 'lagos', name: 'Lagos', circuit: 'Lagos Pulse', callout: 'Lagoon heat. Market lights. No brakes.',
     lengthMeters: 1_900, roadWidth: 7.2, baseSpeedMps: 30,
     sky: 0x6f91b7, fog: 0x9b7b82, road: 0x242838, accent: 0xffb020, signal: 0x10e0c1,
-    routeElevation: [0.1, 0.35, 0.85, 0.55, 0.2, -0.1, -0.35, 0],
+    // A visible rise, crest and drop gives the hero route a readable physical
+    // profile instead of a flat loop with a city painted around it.
+    routeElevation: [0.35, 1.2, 2.55, 1.65, 0.8, 0.25, 0.05, 0.4],
     surfaceSegments: [{ start01: 0.26, end01: 0.34, surface: 'dirt' }, { start01: 0.56, end01: 0.64, surface: 'gravel' }, { start01: 0.82, end01: 0.88, surface: 'wood' }],
     terrainFeatures: [{ id: 'lagos-market-kicker', distance01: 0.3, kind: 'jump', surface: 'dirt', impulseMps: 4.6 }, { id: 'lagos-gravel-rough', distance01: 0.58, kind: 'rough', surface: 'gravel', impulseMps: 0 }],
     route: [[-10, 11], [-2, 13], [8, 9], [12, 1], [8, -9], [-1, -12], [-11, -7], [-13, 2]],

@@ -290,6 +290,9 @@ function createWebAudioBackend(): AtlasAudioBackend {
   let engineHarmonic: OscillatorNode | null = null;
   let engineFilter: BiquadFilterNode | null = null;
   let engineGain: GainNode | null = null;
+  let windSource: AudioBufferSourceNode | null = null;
+  let windFilter: BiquadFilterNode | null = null;
+  let windGain: GainNode | null = null;
   let engineSpeed = 0;
   let pendingNarration: { text: string; locale: string; speaker: AtlasVoiceProfile } | null = null;
   let voiceListenerInstalled = false;
@@ -377,6 +380,9 @@ function createWebAudioBackend(): AtlasAudioBackend {
     engineHarmonic.frequency.setTargetAtTime(104 + normalized * 164, now, 0.045);
     engineFilter.frequency.setTargetAtTime(220 + normalized * 1_160, now, 0.06);
     engineGain.gain.setTargetAtTime(0.012 + normalized * 0.075, now, 0.08);
+    windFilter?.frequency.setTargetAtTime(380 + normalized * 2_400, now, 0.12);
+    windFilter?.Q.setTargetAtTime(0.4 + normalized * 0.9, now, 0.12);
+    windGain?.gain.setTargetAtTime(0.0002 + normalized * 0.028, now, 0.16);
   }
 
   function startEngine(): void {
@@ -398,6 +404,24 @@ function createWebAudioBackend(): AtlasAudioBackend {
     engineGain.connect(output);
     engineOscillator.start();
     engineHarmonic.start();
+
+    // A filtered noise bed makes speed audible even when the engine note is
+    // subtle. It is generated locally so it adds no download weight and can
+    // react continuously to the same authoritative speed value as the HUD.
+    const windBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+    const windData = windBuffer.getChannelData(0);
+    for (let index = 0; index < windData.length; index += 1) windData[index] = Math.random() * 2 - 1;
+    windSource = context.createBufferSource();
+    windFilter = context.createBiquadFilter();
+    windGain = context.createGain();
+    windSource.buffer = windBuffer;
+    windSource.loop = true;
+    windFilter.type = 'bandpass';
+    windGain.gain.value = 0.0001;
+    windSource.connect(windFilter);
+    windFilter.connect(windGain);
+    windGain.connect(output);
+    windSource.start();
     setEngineSpeed(engineSpeed);
   }
 
@@ -408,6 +432,10 @@ function createWebAudioBackend(): AtlasAudioBackend {
     engineHarmonic = null;
     engineFilter = null;
     engineGain = null;
+    windSource?.stop();
+    windSource = null;
+    windFilter = null;
+    windGain = null;
   }
 
   return {
