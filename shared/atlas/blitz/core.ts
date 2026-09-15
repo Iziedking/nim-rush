@@ -190,9 +190,11 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     const clearance = Math.abs(laneOffset - obstacle.lane);
     const crossesSide = previousLateral * currentLateral < 0;
     if (clearance < hitWidth || crossesSide) {
-      const directionAway = Math.sign(previousLateral) || Math.sign(input.steer) || 1;
+      // A centered rider with no steer input must not receive an implicit
+      // rightward correction. Keep escape direction player- or momentum-led.
+      const directionAway = Math.sign(previousLateral) || Math.sign(input.steer) || Math.sign(lateralVelocityMps);
       if (state.distanceMeters <= nearFace + 0.002) distanceMeters = Math.max(state.distanceMeters, nearFace - 0.001);
-      else laneOffset = obstacle.lane + directionAway * (hitWidth + 0.002);
+      else if (directionAway !== 0) laneOffset = obstacle.lane + directionAway * (hitWidth + 0.002);
       if (!processedObstacleIds.includes(obstacle.id)) {
         processedObstacleIds.push(obstacle.id);
         collisions += 1;
@@ -200,7 +202,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
         // Impact removes charge as well as speed, so a collision cannot be
         // hidden behind the score penalty alone.
         boostEnergy = Math.max(0, boostEnergy - 15);
-        lateralVelocityMps = directionAway * 6;
+        if (directionAway !== 0) lateralVelocityMps = directionAway * 6;
         lastImpactTick = elapsedTicks;
         lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 1, surface };
       }

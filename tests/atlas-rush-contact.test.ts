@@ -77,9 +77,22 @@ describe('physical course geometry and replay', () => {
     expect(first.lastEvent?.type).toBe('impact');
     expect(first.speedMps).toBeLessThan(15);
     let next = first;
-    for (let tick = 0; tick < 60; tick++) next = stepBlitzRun(next, idle);
+    for (let tick = 0; tick < 60; tick++) next = stepBlitzRun(next, { ...idle, steer: -1 });
     expect(next.collisions).toBe(1);
     expect(next.distanceMeters).toBeGreaterThan(d + shape.halfLength + 1.1);
+  });
+
+  it('does not choose a rightward escape when a centered rider gives no steering input', () => {
+    const city = blitzCity('lagos'), obstacle = city.obstacles[0]!;
+    const shape = obstacleShape(obstacle.id), d = obstacle.distance01 * city.lengthMeters;
+    const state = { ...createBlitzRun({ cityId: 'lagos', seed: 'neutral-contact' }), phase: 'running' as const,
+      distanceMeters: d - shape.halfLength - 1.3, speedMps: 38, laneOffset: obstacle.lane };
+
+    const next = stepBlitzRun(state, idle);
+
+    expect(next.collisions).toBe(1);
+    expect(next.lateralVelocityMps).toBe(0);
+    expect(next.laneOffset).toBe(obstacle.lane);
   });
 
   it('resolves lateral entry against the obstacle side even after its centre was passed', () => {
