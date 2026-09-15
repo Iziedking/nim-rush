@@ -65,7 +65,7 @@
 .blitz-boost-wrap { position: absolute; right: max(15px, env(safe-area-inset-right)); bottom: max(142px, calc(env(safe-area-inset-bottom) + 126px)); width: 106px; color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .13em; text-align: right; text-shadow: var(--atlas-scrim); }
 .blitz-boost-meter { height: 8px; margin-top: 6px; overflow: hidden; border: 1px solid rgb(var(--atlas-ink-rgb) / .36); border-radius: 6px; background: rgb(var(--atlas-paper-rgb) / .7); }
 .blitz-boost-fill { display: block; width: 28%; height: 100%; background: linear-gradient(90deg, var(--atlas-selected), var(--atlas-verified)); box-shadow: 0 0 12px var(--atlas-selected); }
-.blitz-countdown { position: absolute; inset: 0; display: grid; place-items: center; color: var(--atlas-ink); font: 400 clamp(96px, 34vw, 180px)/1 AtlasDisplay, Impact, sans-serif; text-shadow: 0 8px 0 rgb(var(--atlas-shadow-rgb) / .6); pointer-events: none; }
+.blitz-countdown { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 12vh; color: rgb(255 255 255 / .9); font: 700 clamp(52px, 16vw, 104px)/1 AtlasDisplay, Impact, sans-serif; letter-spacing: .12em; text-shadow: 0 2px 14px rgb(7 12 28 / .5); pointer-events: none; }
 .blitz-countdown.is-live { animation: blitz-go .55s ease-out forwards; }
 
 .blitz-controls { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(148px, 1fr) minmax(136px, .75fr); gap: 12px; align-items: end; pointer-events: auto; }

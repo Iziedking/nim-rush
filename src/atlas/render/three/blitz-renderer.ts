@@ -4,7 +4,6 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
-  ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
   DynamicDrawUsage,
@@ -294,7 +293,7 @@ export class BlitzRenderer {
 
     const portrait = this.camera.aspect < 0.8;
     const speedLookahead = Math.min(1.45, state.speedMps / 20);
-    const focus = new Vector3(pose.x, pose.y + (portrait ? 1.9 : 1.18), pose.z).addScaledVector(forward, (portrait ? 1.9 : 2.1) + speedLookahead);
+    const focus = new Vector3(pose.x, pose.y + (portrait ? 1.62 : 0.96), pose.z).addScaledVector(forward, (portrait ? 1.72 : 1.88) + speedLookahead);
     /*
      * Lower and closer than it was (3.5 m up, 7.8 m back).
      *
@@ -303,8 +302,8 @@ export class BlitzRenderer {
      * the eye toward the road and pulling in puts the tarmac and the kerb in
      * the near field where they streak.
      */
-    const desired = new Vector3(pose.x, pose.y + (portrait ? 2.62 : 2.72) + landingKick, pose.z)
-      .addScaledVector(forward, portrait ? -6.1 : -6.55)
+    const desired = new Vector3(pose.x, pose.y + (portrait ? 2.28 : 2.22) + landingKick, pose.z)
+      .addScaledVector(forward, portrait ? -4.95 : -5.2)
       .addScaledVector(right, this.reducedMotion ? 0 : -pose.bend * 0.16);
     if (!this.cameraReady) {
       this.camera.position.copy(desired);
@@ -339,6 +338,7 @@ function createCity(city: BlitzCityDefinition): Group {
   ground.position.y = -0.08;
   ground.receiveShadow = true;
   root.add(ground);
+  createHeroEnvironment(root, city);
   createRoad(root, city);
   createRouteDistricts(root, city);
   createSkyline(root, city);
@@ -412,6 +412,10 @@ function createRouteDistricts(root: Group, city: BlitzCityDefinition): void {
   // Leave the segment immediately behind the start line open: a chase camera
   // cuts across that corner before it settles onto the circuit.
   for (let index = 0; index < city.route.length - 1; index += 1) {
+    // Lagos is the authored hero run. Keep the market city present at the
+    // horizon, but open the immediate sightline so terrain and speed own the
+    // frame instead of a wall of repeated cubes.
+    if (city.id === 'lagos' && index % 3 !== 0) continue;
     const point = city.route[index]!;
     const next = city.route[(index + 1) % city.route.length]!;
     const centerX = (point[0] + next[0]) / 2;
@@ -421,13 +425,14 @@ function createRouteDistricts(root: Group, city: BlitzCityDefinition): void {
     const outwardZ = centerZ / radialLength;
     const width = 2.4 + random() * 2.1;
     const depth = 2.2 + random() * 1.8;
-    const cityBase = city.id === 'dubai' ? 6 : city.id === 'london' ? 3.8 : 1.9;
-    const height = cityBase + random() * (city.id === 'dubai' ? 11 : city.id === 'london' ? 5 : 2.6);
-    const setback = city.roadWidth / 2 + depth / 2 + 0.9;
-    const featureTone = city.id === 'lagos' ? 0x624653 : city.id === 'london' ? 0x704052 : 0x8a7043;
+    const cityBase = city.id === 'dubai' ? 6 : city.id === 'london' ? 3.8 : 1.15;
+    const height = cityBase + random() * (city.id === 'dubai' ? 11 : city.id === 'london' ? 5 : 1.9);
+    const setback = city.roadWidth / 2 + depth / 2 + (city.id === 'lagos' ? 5.8 : 0.9);
+    const featureTone = city.id === 'lagos' ? 0x5d514d : city.id === 'london' ? 0x704052 : 0x8a7043;
     const tone = index % 3 === 0 ? featureTone : city.id === 'london' ? 0x313a55 : city.id === 'dubai' ? 0x334060 : 0x30345d;
     const building = new Mesh(new BoxGeometry(width, height, depth), new MeshStandardMaterial({ color: tone, roughness: city.id === 'dubai' ? 0.38 : 0.82, metalness: city.id === 'dubai' ? 0.28 : 0.03 }));
-    building.position.set(centerX + outwardX * setback, height / 2, centerZ + outwardZ * setback);
+    const terrainSample = sampleBlitzRoute(city.id, city.lengthMeters * ((index + 0.5) / Math.max(1, city.route.length - 1)));
+    building.position.set(centerX + outwardX * setback, (city.id === 'lagos' ? terrainSample.y : 0) + height / 2, centerZ + outwardZ * setback);
     building.rotation.y = Math.atan2(outwardX, outwardZ);
     building.castShadow = true;
     building.receiveShadow = true;
@@ -468,7 +473,7 @@ function addStreetFrontage(building: Mesh, width: number, depth: number, height:
 }
 
 function createCityCrowd(city: BlitzCityDefinition): CityCrowd {
-  const count = city.id === 'lagos' ? 38 : city.id === 'london' ? 30 : 24;
+  const count = city.id === 'lagos' ? 26 : city.id === 'london' ? 30 : 24;
   const random = seeded(`${city.id}-crowd`);
   const members: CrowdMember[] = Array.from({ length: count }, (_, index) => ({
     distanceMeters: city.lengthMeters * ((index + 0.35 + random() * 0.3) / count),
@@ -476,7 +481,7 @@ function createCityCrowd(city: BlitzCityDefinition): CityCrowd {
     direction: index % 4 < 2 ? 1 : -1,
     speedMps: index % 4 === 0 ? 0 : 0.42 + random() * 0.68,
     phase: random() * Math.PI * 2,
-    scale: 0.76 + random() * 0.14,
+    scale: 0.6 + random() * 0.12,
   }));
   const torso = new InstancedMesh(new CylinderGeometry(0.2, 0.27, 0.72, 7), new MeshBasicMaterial({ color: 0xffffff }), count);
   const head = new InstancedMesh(new SphereGeometry(0.17, 9, 7), new MeshBasicMaterial({ color: 0xffffff }), count);
@@ -525,7 +530,7 @@ function updateCityCrowd(crowd: CityCrowd, tick: number): void {
   crowd.members.forEach((member, index) => {
     const travelled = member.speedMps * elapsedSeconds * member.direction;
     const distance = (member.distanceMeters + travelled + crowd.city.lengthMeters) % crowd.city.lengthMeters;
-    const sidewalk = member.side * (crowd.city.roadWidth / 2 + 1.08 + (index % 3) * 0.28);
+    const sidewalk = member.side * (crowd.city.roadWidth / 2 + (crowd.city.id === 'lagos' ? 1.62 : 1.08) + (index % 3) * 0.28);
     const pose = sampleBlitzRoute(crowd.city.id, distance, sidewalk);
     const heading = pose.headingRadians + (member.direction < 0 ? Math.PI : 0);
     const stride = member.speedMps === 0 ? 0 : Math.sin(tick * 0.16 + member.phase) * 0.46;
@@ -547,7 +552,7 @@ function updateCityCrowd(crowd: CityCrowd, tick: number): void {
   if (crowd.umbrellas) crowd.umbrellas.instanceMatrix.needsUpdate = true;
   for (const citizen of crowd.featured) {
     const distance = (citizen.distanceMeters + citizen.speedMps * elapsedSeconds * citizen.direction + crowd.city.lengthMeters) % crowd.city.lengthMeters;
-    const pose = sampleBlitzRoute(crowd.city.id, distance, citizen.side * (crowd.city.roadWidth / 2 + 1.65));
+    const pose = sampleBlitzRoute(crowd.city.id, distance, citizen.side * (crowd.city.roadWidth / 2 + (crowd.city.id === 'lagos' ? 2.15 : 1.65)));
     citizen.root.position.set(pose.x, 0, pose.z);
     citizen.root.rotation.y = pose.headingRadians + Math.PI;
     const stride = Math.sin(elapsedSeconds * (citizen.speedMps > 0 ? 7.2 : 1.5) + citizen.phase) * (citizen.speedMps > 0 ? 0.32 : 0.035);
@@ -646,6 +651,7 @@ function createFeaturedCitizens(city: BlitzCityDefinition): FeaturedCitizen[] {
       return leg;
     });
     root.traverse((object) => { if (object instanceof Mesh) object.castShadow = true; });
+    root.scale.setScalar(city.id === 'lagos' ? 0.84 : 1);
     return {
       root,
       arms,
@@ -697,15 +703,16 @@ function addDubaiCrown(building: Mesh, width: number, depth: number, height: num
 
 function createSkyline(root: Group, city: BlitzCityDefinition): void {
   const random = seeded(city.id);
-  for (let index = 0; index < 38; index += 1) {
+  const skylineCount = city.id === 'lagos' ? 20 : 38;
+  for (let index = 0; index < skylineCount; index += 1) {
     const angle = index / 38 * Math.PI * 2 + random() * 0.08;
     // The chase camera cuts the inside of sharp corners. Keep the decorative
     // skyline outside that swept volume so no tower can swallow the camera.
-    const radius = 27 + random() * 12;
+    const radius = city.id === 'lagos' ? 34 + random() * 10 : 27 + random() * 12;
     const width = 2.1 + random() * 3.2;
     const depth = 2 + random() * 3;
-    const baseHeight = city.id === 'dubai' ? 7 : city.id === 'london' ? 4.6 : 5.2;
-    const height = baseHeight + random() * (city.id === 'dubai' ? 18 : 8);
+    const baseHeight = city.id === 'dubai' ? 7 : city.id === 'london' ? 4.6 : 3.2;
+    const height = baseHeight + random() * (city.id === 'dubai' ? 18 : city.id === 'london' ? 8 : 5.2);
     const featureTone = city.id === 'lagos' ? 0x765047 : city.id === 'london' ? 0x663d50 : 0x8a7043;
     const tone = index % 4 === 0 ? featureTone : index % 3 === 0 ? 0x343b65 : 0x252b52;
     const building = new Mesh(new BoxGeometry(width, height, depth), new MeshStandardMaterial({ color: tone, roughness: city.id === 'dubai' ? 0.35 : 0.86, metalness: city.id === 'dubai' ? 0.25 : 0.02 }));
@@ -795,7 +802,7 @@ function createHeroDressing(root: Group, city: BlitzCityDefinition): void {
     treeCount,
   );
   const canopies = new InstancedMesh(
-    new ConeGeometry(city.id === 'dubai' ? 0.9 : 0.7, city.id === 'dubai' ? 2.3 : 2.9, 7),
+    new SphereGeometry(city.id === 'dubai' ? 0.92 : 0.78, 8, 6),
     new MeshStandardMaterial({ color: city.id === 'dubai' ? 0x317b69 : 0x2e674f, roughness: 0.94 }),
     treeCount,
   );
@@ -836,7 +843,7 @@ function createHeroDressing(root: Group, city: BlitzCityDefinition): void {
     dummy.updateMatrix();
     trunks.setMatrixAt(index, dummy.matrix);
     dummy.position.y += trunkHeight * 0.82;
-    dummy.scale.multiplyScalar(0.92 + random() * 0.16);
+    dummy.scale.set(0.92 + random() * 0.18, 1.12 + random() * 0.22, 0.92 + random() * 0.18);
     dummy.updateMatrix();
     canopies.setMatrixAt(index, dummy.matrix);
   }
@@ -922,7 +929,7 @@ function createCityLandmarks(root: Group, city: BlitzCityDefinition): void {
 function createStreetLife(root: Group, city: BlitzCityDefinition): void {
   const street = new Group();
   street.name = `atlas-blitz-street-life-${city.id}`;
-  const stops = city.id === 'lagos' ? [0.08, 0.2, 0.33, 0.47, 0.7, 0.88] : [0.18, 0.36, 0.58, 0.76];
+  const stops = city.id === 'lagos' ? [0.14, 0.34, 0.58, 0.82] : [0.18, 0.36, 0.58, 0.76];
   stops.forEach((distance01, index) => {
     const side = index % 2 === 0 ? -1 : 1;
     const pose = sampleBlitzRoute(city.id, city.lengthMeters * distance01, side * (city.roadWidth / 2 + 2));
@@ -937,7 +944,7 @@ function createStreetLife(root: Group, city: BlitzCityDefinition): void {
 
     const reflection = new Mesh(
       new BoxGeometry(city.id === 'london' ? 0.24 : 0.15, 0.012, city.id === 'dubai' ? 2.8 : 1.9),
-      new MeshBasicMaterial({ color: index % 2 === 0 ? city.accent : city.signal, transparent: true, opacity: city.id === 'london' ? 0.38 : 0.24 }),
+      new MeshBasicMaterial({ color: index % 2 === 0 ? city.accent : city.signal, transparent: true, opacity: city.id === 'london' ? 0.38 : city.id === 'lagos' ? 0.08 : 0.16 }),
     );
     const roadPose = sampleBlitzRoute(city.id, city.lengthMeters * distance01, side * city.roadWidth * 0.24);
     reflection.position.set(roadPose.x, 0.092, roadPose.z);
@@ -945,6 +952,58 @@ function createStreetLife(root: Group, city: BlitzCityDefinition): void {
     street.add(reflection);
   });
   root.add(street);
+}
+
+/**
+ * The hero course gets a readable physical setting before decorative city
+ * dressing is added. Lagos is deliberately an open waterfront climb/drop:
+ * the road rises above a dark lagoon edge, then returns through a sparse
+ * market embankment. It gives the camera a foreground, midground and horizon
+ * instead of the flat-box silhouette that made the first pass feel toy-like.
+ */
+function createHeroEnvironment(root: Group, city: BlitzCityDefinition): void {
+  if (city.id !== 'lagos') return;
+
+  const earth = new MeshStandardMaterial({ color: 0x675a52, roughness: 1, metalness: 0 });
+  const embankment = createRoadRibbon(city, city.roadWidth + 9.5, earth);
+  embankment.position.y = -0.14;
+  embankment.receiveShadow = true;
+  root.add(embankment);
+
+  const outerShoulder = createRoadRibbon(city, city.roadWidth + 2.2, new MeshStandardMaterial({ color: 0x4f4a49, roughness: 0.98 }));
+  outerShoulder.position.y = -0.015;
+  outerShoulder.receiveShadow = true;
+  root.add(outerShoulder);
+
+  const outlook = new Group();
+  outlook.name = 'atlas-blitz-lagos-waterfront-outlook';
+  const pose = sampleBlitzRoute(city.id, city.lengthMeters * 0.46);
+  const forward = new Vector3(Math.sin(pose.headingRadians), 0, Math.cos(pose.headingRadians));
+  const right = new Vector3(forward.z, 0, -forward.x);
+  const water = new Mesh(
+    new PlaneGeometry(18, 6),
+    new MeshPhysicalMaterial({ color: 0x315b67, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.82 }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.rotation.y = pose.headingRadians;
+  water.position.copy(new Vector3(pose.x, pose.y - 0.32, pose.z)).addScaledVector(right, 8.2).addScaledVector(forward, 1.5);
+  water.receiveShadow = true;
+  outlook.add(water);
+
+  const retainingWall = new Mesh(
+    new BoxGeometry(14, 0.5, 0.32),
+    new MeshStandardMaterial({ color: 0x9b9080, roughness: 0.92 }),
+  );
+  retainingWall.rotation.y = pose.headingRadians;
+  retainingWall.position.copy(new Vector3(pose.x, pose.y + 0.1, pose.z)).addScaledVector(right, 4.9);
+  outlook.add(retainingWall);
+  for (let index = 0; index < 7; index += 1) {
+    const post = new Mesh(new CylinderGeometry(0.06, 0.08, 1.2, 7), new MeshStandardMaterial({ color: 0x4a4f52, roughness: 0.9 }));
+    post.position.copy(retainingWall.position).addScaledVector(forward, -5.8 + index * 1.9);
+    post.position.y += 0.58;
+    outlook.add(post);
+  }
+  root.add(outlook);
 }
 
 function createLagosMarketStall(city: BlitzCityDefinition, index: number): Group {
@@ -1085,18 +1144,24 @@ function createRoadHazard(city: BlitzCityDefinition, id: string): Group {
 function createRelayGate(city: BlitzCityDefinition, index: number): Group {
   const gate = new Group();
   gate.name = `atlas-blitz-relay-gate-${index + 1}`;
-  const material = new MeshBasicMaterial({ color: index === 1 ? city.accent : city.signal, transparent: true, opacity: 0.88 });
+  const material = new MeshStandardMaterial({
+    color: index === 1 ? city.accent : 0xd9d1bd,
+    roughness: 0.5,
+    metalness: 0.2,
+    emissive: city.signal,
+    emissiveIntensity: 0.12,
+  });
   for (const side of [-1, 1]) {
-    const pillar = new Mesh(new BoxGeometry(0.16, 2.7, 0.16), material);
-    pillar.position.set(side * city.roadWidth * 0.46, 1.35, 0);
+    const pillar = new Mesh(new BoxGeometry(0.13, 2.15, 0.13), material);
+    pillar.position.set(side * city.roadWidth * 0.46, 1.08, 0);
     gate.add(pillar);
   }
-  const arch = new Mesh(new TorusGeometry(city.roadWidth * 0.46, 0.11, 8, 28, Math.PI), material);
-  arch.position.y = 2.7;
+  const arch = new Mesh(new TorusGeometry(city.roadWidth * 0.46, 0.055, 7, 28, Math.PI), material);
+  arch.position.y = 2.12;
   arch.rotation.z = Math.PI;
   gate.add(arch);
-  const pulse = new PointLight(index === 1 ? city.accent : city.signal, 9, 10, 2);
-  pulse.position.y = 2.4;
+  const pulse = new PointLight(index === 1 ? city.accent : city.signal, 2.4, 6, 2);
+  pulse.position.y = 1.9;
   gate.add(pulse);
   return gate;
 }
