@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes } from '../shared/atlas/blitz/prize';
+import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, planBlitzPayouts } from '../shared/atlas/blitz/prize';
 import type { BlitzPrizeCandidate } from '../shared/atlas/blitz/prize';
 
 /*
@@ -175,6 +175,88 @@ describe('who gets which place', () => {
     const first = allocateBlitzPrizes({ poolLuna: 3_338, candidates });
     for (let attempt = 0; attempt < 24; attempt += 1) {
       expect(allocateBlitzPrizes({ poolLuna: 3_338, candidates: [...candidates].reverse() })).toEqual(first);
+    }
+  });
+});
+
+/*
+ * Turning a closed day into payout obligations.
+ *
+ * The treasury ledger already refuses a duplicate id, reconciles against
+ * authoritative chain evidence and persists across restarts. What did not
+ * exist is the step before it: deciding which rows a closed day becomes, with
+ * ids stable enough that closing twice cannot pay twice.
+ *
+ * This is the durable-intent half of the money path. It writes nothing and
+ * moves nothing; it decides what the day owes and what each obligation is
+ * called.
+ */
+describe('what a closed day owes', () => {
+  const CHALLENGE = 'cycle-2:lagos:2026-09-15:rush-missions-v5-rookie';
+  const table = (poolLuna: number | null, wallets: readonly string[]) => allocateBlitzPrizes({
+    poolLuna,
+    candidates: wallets.map((wallet, index) => rider(wallet, 900 - index * 10)),
+  });
+
+  it('becomes one obligation per place that was actually won', () => {
+    const plan = planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(10_000, [WALLET_A, WALLET_B, WALLET_C]).allocations });
+    expect(plan.map((entry) => entry.rank)).toEqual([1, 2, 3]);
+    expect(plan.map((entry) => entry.amountLuna)).toEqual([5_000, 3_000, 2_000]);
+    expect(plan.every((entry) => entry.period === CHALLENGE)).toBe(true);
+  });
+
+  /*
+   * The property the whole thing rests on. The ledger refuses a duplicate id,
+   * so an id that is stable across closes is what makes closing twice safe.
+   */
+  it('names every obligation the same way every time it is planned', () => {
+    const allocations = table(10_000, [WALLET_A, WALLET_B, WALLET_C]).allocations;
+    const first = planBlitzPayouts({ challengeId: CHALLENGE, allocations });
+    const second = planBlitzPayouts({ challengeId: CHALLENGE, allocations });
+    expect(second).toEqual(first);
+    expect(new Set(first.map((entry) => entry.id)).size).toBe(first.length);
+  });
+
+  it('keys an obligation to the place, so a day cannot pay a place twice', () => {
+    const plan = planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(10_000, [WALLET_A, WALLET_B, WALLET_C]).allocations });
+    expect(plan[0]!.id).toBe(`blitz:${CHALLENGE}:1`);
+    expect(plan[2]!.id).toBe(`blitz:${CHALLENGE}:3`);
+  });
+
+  /*
+   * Two different days must never collide, or the ledger's duplicate refusal
+   * would silently swallow the second day's first place.
+   */
+  it('never reuses an id across days or cities', () => {
+    const allocations = table(10_000, [WALLET_A]).allocations;
+    const monday = planBlitzPayouts({ challengeId: 'cycle-2:lagos:2026-09-15:v5', allocations });
+    const tuesday = planBlitzPayouts({ challengeId: 'cycle-2:lagos:2026-09-16:v5', allocations });
+    const london = planBlitzPayouts({ challengeId: 'cycle-2:london:2026-09-15:v5', allocations });
+    expect(new Set([monday[0]!.id, tuesday[0]!.id, london[0]!.id]).size).toBe(3);
+  });
+
+  it('owes nothing when no pool was funded', () => {
+    expect(planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(null, [WALLET_A]).allocations })).toEqual([]);
+    expect(planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(0, [WALLET_A]).allocations })).toEqual([]);
+  });
+
+  it('owes nothing when nobody rode', () => {
+    expect(planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(10_000, []).allocations })).toEqual([]);
+  });
+
+  /*
+   * A zero share is not an obligation. Flooring a tiny pool can produce one,
+   * and sending a transfer of nothing costs a fee to prove nothing.
+   */
+  it('does not raise an obligation for a share that rounds to nothing', () => {
+    const plan = planBlitzPayouts({ challengeId: CHALLENGE, allocations: table(3, [WALLET_A, WALLET_B, WALLET_C]).allocations });
+    expect(plan.every((entry) => entry.amountLuna > 0)).toBe(true);
+  });
+
+  it('refuses a challenge id it cannot safely name an obligation after', () => {
+    const allocations = table(10_000, [WALLET_A]).allocations;
+    for (const challengeId of ['', ' ', 'has space', 'a'.repeat(200)]) {
+      expect(() => planBlitzPayouts({ challengeId, allocations })).toThrow(/challenge/i);
     }
   });
 });

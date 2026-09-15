@@ -136,3 +136,64 @@ function compareCandidates(left: BlitzPrizeCandidate, right: BlitzPrizeCandidate
   if (left.verifiedAt !== right.verifiedAt) return left.verifiedAt - right.verifiedAt;
   return left.runId < right.runId ? -1 : left.runId > right.runId ? 1 : 0;
 }
+
+/**
+ * One payout the treasury owes, named so that closing a day twice cannot pay
+ * twice.
+ *
+ * The ledger in `server/atlas/payouts.ts` refuses a duplicate id, persists
+ * across restarts, and reconciles against authoritative chain evidence before
+ * anything is called verified. All of that only means something if the id a
+ * close produces is the same id the next close produces, which is what this
+ * shape exists to guarantee.
+ */
+export interface BlitzPayoutPlanEntry {
+  /** Idempotency key. Stable across closes, unique across days and places. */
+  readonly id: string;
+  /** The challenge the obligation belongs to, carried for the ledger period. */
+  readonly period: string;
+  readonly rank: number;
+  readonly walletAddress: string;
+  readonly amountLuna: number;
+}
+
+/*
+ * Kept deliberately tight. The id is embedded in a durable ledger row, so a
+ * challenge id with a space or a colon-free shape would produce obligations
+ * nobody can parse back apart later.
+ */
+const CHALLENGE_ID_PATTERN = /^[a-z0-9:_-]{1,160}$/;
+
+/**
+ * Turn a closed day's allocations into the obligations it owes.
+ *
+ * Writes nothing and moves nothing. This is the durable-intent half of the
+ * money path: decide what is owed and what each obligation is called, before
+ * anything is submitted anywhere.
+ *
+ * The id is keyed on the **place**, not the wallet, because what a day owes is
+ * "first place", once. Keying on the wallet would let a re-close after a
+ * changed result quietly raise a second obligation for the same place. The
+ * wallet still travels with the entry so a caller holding an existing ledger
+ * row can compare the two and refuse rather than pay, which is a check the
+ * caller must make - this function cannot see the ledger.
+ */
+export function planBlitzPayouts(input: {
+  readonly challengeId: string;
+  readonly allocations: readonly BlitzPrizeAllocation[];
+}): readonly BlitzPayoutPlanEntry[] {
+  if (!CHALLENGE_ID_PATTERN.test(input.challengeId)) {
+    throw new Error('Beacon Blitz challenge id cannot name a payout obligation.');
+  }
+  return input.allocations
+    // A share that floors to nothing is not an obligation: a transfer of zero
+    // costs a fee to prove nothing happened.
+    .filter((allocation) => allocation.luna > 0)
+    .map((allocation) => ({
+      id: `blitz:${input.challengeId}:${allocation.rank}`,
+      period: input.challengeId,
+      rank: allocation.rank,
+      walletAddress: allocation.walletAddress,
+      amountLuna: allocation.luna,
+    }));
+}
