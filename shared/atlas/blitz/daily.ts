@@ -1,0 +1,40 @@
+import type { BlitzCityId } from './types';
+
+/**
+ * Versioned identity for the shared daily board. The server is authoritative
+ * for issuance, while this pure module lets the client explain the same board
+ * without importing a clock, network client, or UI framework.
+ */
+export const BLITZ_DAILY_RULESET_VERSION = 'blitz-daily-v1';
+export const BLITZ_DAY_MS = 86_400_000;
+
+export interface BlitzDailyChallenge {
+  readonly challengeId: string;
+  readonly date: string;
+  readonly rulesetVersion: typeof BLITZ_DAILY_RULESET_VERSION;
+  readonly cityId: BlitzCityId;
+  readonly seed: string;
+  readonly startsAt: number;
+  readonly expiresAt: number;
+}
+
+export function utcDateKey(timestampMs: number): string {
+  if (!Number.isSafeInteger(timestampMs) || timestampMs < 0) throw new Error('Daily challenge timestamp is invalid.');
+  return new Date(timestampMs).toISOString().slice(0, 10);
+}
+
+export function getBlitzDailyChallenge(input: { now: number; cityId: BlitzCityId; seasonId: string }): BlitzDailyChallenge {
+  if (!/^[a-z0-9-]{1,80}$/.test(input.seasonId)) throw new Error('Daily challenge season is invalid.');
+  const date = utcDateKey(input.now);
+  const startsAt = Date.parse(`${date}T00:00:00.000Z`);
+  const challengeId = `${input.seasonId}:${input.cityId}:${date}:${BLITZ_DAILY_RULESET_VERSION}`;
+  return {
+    challengeId,
+    date,
+    rulesetVersion: BLITZ_DAILY_RULESET_VERSION,
+    cityId: input.cityId,
+    seed: challengeId,
+    startsAt,
+    expiresAt: startsAt + BLITZ_DAY_MS,
+  };
+}

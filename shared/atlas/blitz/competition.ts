@@ -7,6 +7,9 @@ export interface BlitzTicket {
   readonly username: string;
   readonly cityId: BlitzCityId;
   readonly seasonId: string;
+  readonly challengeId: string;
+  readonly challengeDate: string;
+  readonly rulesetVersion: string;
   readonly seed: string;
   readonly issuedAt: number;
   readonly expiresAt: number;
@@ -20,6 +23,10 @@ export interface BlitzSubmissionInput {
   readonly username: string;
   readonly cityId: BlitzCityId;
   readonly seasonId: string;
+  /** Optional for direct callers; the ticket remains the server authority. */
+  readonly challengeId?: string;
+  readonly challengeDate?: string;
+  readonly rulesetVersion?: string;
   readonly seed: string;
   readonly frames: readonly BlitzTraceFrame[];
   readonly traceHash: string;
@@ -33,6 +40,9 @@ export interface BlitzLeaderboardRow {
   readonly username: string;
   readonly cityId: BlitzCityId;
   readonly seasonId: string;
+  readonly challengeId: string;
+  readonly challengeDate: string;
+  readonly rulesetVersion: string;
   readonly score: number;
   readonly elapsedMs: number;
   readonly collisions: number;

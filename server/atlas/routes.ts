@@ -127,10 +127,11 @@ export function mountAtlasRoutes(options: {
     if (!options.api.blitz) { response.status(503).json({ ok: false, error: 'Beacon Blitz leaderboard is unavailable.' }); return; }
     const seasonId = typeof request.query.seasonId === 'string' ? request.query.seasonId : '';
     const cityId = blitzCityId.safeParse(request.query.cityId);
-    if (!/^[a-z0-9-]{1,80}$/.test(seasonId) || !cityId.success) { response.status(400).json({ ok: false, error: 'Beacon Blitz leaderboard query is invalid.' }); return; }
+    const challengeId = typeof request.query.challengeId === 'string' ? request.query.challengeId : undefined;
+    if (!/^[a-z0-9-]{1,80}$/.test(seasonId) || !cityId.success || (challengeId !== undefined && !/^[a-z0-9:_-]{1,160}$/.test(challengeId))) { response.status(400).json({ ok: false, error: 'Beacon Blitz leaderboard query is invalid.' }); return; }
     try {
       response.setHeader('cache-control', 'no-store');
-      response.json({ ok: true, data: await options.api.blitz.leaderboard(seasonId, cityId.data) });
+      response.json({ ok: true, data: await options.api.blitz.leaderboard(seasonId, cityId.data, challengeId) });
     } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
   options.app.post('/atlas/api/wallet/challenge', options.limit(24, 8), async (request, response) => {
@@ -249,9 +250,9 @@ const ticketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64),
 const actionBody = z.object({ moveX: z.number().finite(), moveY: z.number().finite(), tool: z.enum(['none', 'scanner', 'relay-tether', 'shield-pulse']), interact: z.boolean(), system: z.enum(['active', 'paused', 'hidden']).optional() });
 const submissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-f0-9]{32}$/), actorId, walletAddress: z.string().min(1).max(64), network: z.literal('testalbatross'), role: z.enum(['explorer', 'builder']), seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), challengeId: z.string().regex(/^[a-z0-9-]{1,80}$/), origin: z.string().url().max(256), campaignHash: z.string().regex(/^[a-f0-9]{64}$/), curriculumHash: z.string().regex(/^[a-f0-9]{64}$/), rulesetHash: z.string().regex(/^[a-f0-9]{64}$/), assistance: z.enum(['none', 'free-hint', 'purchased-hint', 'answer-reveal', 'debug']), actions: z.array(actionBody).max(20_000), claimedSnapshot: z.unknown(), replayHash: z.string().regex(/^[a-f0-9]{64}$/), auth: authProof });
 const blitzCityId = z.enum(['lagos', 'london', 'dubai']);
-const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
+const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), brake: z.boolean().optional(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
 const blitzTicketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), auth: authProof });
-const blitzSubmissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/), actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), seed: z.string().min(1).max(160), frames: z.array(z.object({ tick: z.number().int().min(0).max(3_000), input: blitzInputBody })).max(3_000), traceHash: z.string().regex(/^[a-f0-9]{64}$/), claimedScore: z.number().int().min(0).max(1_000_000), auth: authProof });
+const blitzSubmissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/), actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), challengeId: z.string().regex(/^[a-z0-9:_-]{1,160}$/).optional(), challengeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), rulesetVersion: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(), seed: z.string().min(1).max(160), frames: z.array(z.object({ tick: z.number().int().min(0).max(3_000), input: blitzInputBody })).max(3_000), traceHash: z.string().regex(/^[a-f0-9]{64}$/), claimedScore: z.number().int().min(0).max(1_000_000), auth: authProof });
 function withoutAuth<T extends { auth: unknown }>(value: T): Omit<T, 'auth'> { const { auth: _auth, ...body } = value; return body; }
 
 function requiredNimiqAddress(value: unknown): string {

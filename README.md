@@ -19,12 +19,18 @@ forged scores, mismatched wallet/ticket metadata, reused tickets, controls after
 finish, and runs received before their simulated duration could have elapsed.
 Ticket consumption and result storage are serialized within one service
 instance. A failed storage write does not publish an accepted result.
+Ranked tickets carry a versioned UTC daily challenge identity, so a leaderboard
+row belongs to one reproducible course seed and cannot silently mix days.
+If the browser loses the network after a run, the signed-ticket submission is
+kept locally and can be retried without creating a second run.
+Reward qualification is recorded as a durable server outbox after verification;
+reward-service outages do not remove a score or create a second eligibility.
 
 Run `npm run prove:blitz` for local replay, refusal and CPU timing evidence.
 These checks prove a legal simulation, not human play, wallet-host behavior or
-a chain payout. Multi-worker operation requires transactional storage. See the
-[NIM RUSH audit and roadmap](docs/nim-rush-audit-2026-09-15.md) for current gaps,
-performance targets and rollout caveats.
+a chain payout. Multi-worker operation requires transactional storage. The
+public [current state report](docs/nim-atlas-current-state.md) records the
+verified product boundary and remaining release gates.
 
 ## Atlas adventure reference
 

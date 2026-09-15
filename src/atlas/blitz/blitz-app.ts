@@ -2,6 +2,7 @@ import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } fr
 import { blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
 import type { BlitzChoice, BlitzCityId, BlitzRunState, BlitzTraceFrame } from '../../../shared/atlas/blitz/types';
 import type { BlitzTicket } from '../../../shared/atlas/blitz/competition';
+import { getBlitzDailyChallenge } from '../../../shared/atlas/blitz/daily';
 import { hashBlitzTrace } from '../../../shared/atlas/blitz/replay';
 import { getOrCreateCredential } from '../../net/player-credential';
 import { createAtlasApiClient } from '../api';
@@ -12,6 +13,7 @@ import { BlitzRenderer } from '../render/three/blitz-renderer';
 import { BlitzInputController } from './blitz-input';
 import { BlitzFrameGovernor } from './frame-governor';
 import { BLITZ_ONBOARDING_BEATS, blitzOnboardingSeen, markBlitzOnboardingSeen } from './blitz-onboarding';
+import { createBlitzPendingRunStore, type BlitzPendingRunStore, type BlitzPendingSubmission } from './pending-run';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
 const BLITZ_SEASON = 'cycle-2';
@@ -25,6 +27,7 @@ export class BlitzApp {
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly audio = createAtlasAudio();
   private readonly frameGovernor = new BlitzFrameGovernor(60);
+  private readonly pendingRunStore: BlitzPendingRunStore;
   private state: BlitzRunState | null = null;
   private frames: BlitzTraceFrame[] = [];
   private cityId: BlitzCityId = 'lagos';
@@ -49,6 +52,7 @@ export class BlitzApp {
 
   constructor(private readonly ui: HTMLElement, canvas: HTMLCanvasElement) {
     this.renderer = new BlitzRenderer(canvas);
+    this.pendingRunStore = createBlitzPendingRunStore(safeLocalStorage());
   }
 
   async boot(): Promise<void> {
@@ -164,6 +168,8 @@ export class BlitzApp {
     const edition = node('span', 'blitz-edition', 'BEACON BLITZ');
     const title = node('h1', 'blitz-title', 'LAGOS\nPULSE');
     const line = node('p', 'blitz-tagline', 'A payment is stuck. Ride it through Lagos. Bring it to finality.');
+    const daily = getBlitzDailyChallenge({ now: Date.now(), cityId: 'lagos', seasonId: BLITZ_SEASON });
+    const dailyMeta = node('p', 'blitz-daily-meta', `TODAY'S VERIFIED RUN / ${daily.date} / RESET ${formatUtcTime(daily.expiresAt)}`);
     /*
      * The three-verb brief that used to sit here is gone. It taught check,
      * approve and confirm on the screen a player is trying to leave, next to a
@@ -194,7 +200,16 @@ export class BlitzApp {
      * path and nowhere else.
      */
     const note = node('p', 'blitz-quiet', 'No wallet needed to play. Ranked runs are replay-verified.');
-    screen.append(brand, edition, title, line, stats, start, note, ranked);
+    screen.append(brand, edition, title, line, dailyMeta, stats, start, note, ranked);
+    const pending = this.pendingRunStore.read();
+    if (pending) {
+      const recovery = node('section', 'blitz-pending-run');
+      const recoveryStatus = node('p', 'blitz-rank-status', 'A ranked run is saved locally and still needs verification.');
+      recovery.append(node('strong', '', 'SAVED RANKED RUN'), recoveryStatus);
+      recovery.append(button('Verify saved run', 'blitz-verify', () => void this.submitPendingRun(pending, recoveryStatus, recovery)));
+      recovery.append(button('Discard saved run', 'blitz-quiet blitz-discard-run', () => { this.pendingRunStore.clear(); recovery.remove(); }));
+      screen.append(recovery);
+    }
     this.ui.append(screen);
   }
 
@@ -533,25 +548,49 @@ export class BlitzApp {
     if (!ticket) return;
     try {
       const traceHash = await hashBlitzTrace(this.frames);
-      const result = await this.api.submitBlitzRun({
-        runId: crypto.randomUUID(), ticketId: ticket.id, actorId: ticket.actorId, walletAddress: ticket.walletAddress,
-        username: ticket.username, cityId: ticket.cityId, seasonId: ticket.seasonId, seed: ticket.seed,
-        frames: this.frames, traceHash, claimedScore: state.score,
-      });
-      if (!result.ok) throw new Error(result.error);
-      status.textContent = `VERIFIED #${result.value.row.rank} / ${ticket.username} / ${shortWallet(ticket.walletAddress)}`;
+      const pending: BlitzPendingSubmission = {
+        runId: crypto.randomUUID(), ticket, frames: structuredClone(this.frames), traceHash,
+        claimedScore: state.score, savedAt: Date.now(),
+      };
+      this.pendingRunStore.save(pending);
+      await this.submitPendingRun(pending, status, host);
     } catch (error) {
       status.textContent = error instanceof Error ? `NOT VERIFIED / ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
     }
-    await this.loadLeaderboard(state.cityId, host);
   }
 
-  private async loadLeaderboard(cityId: BlitzCityId, host: HTMLElement): Promise<void> {
+  private async submitPendingRun(pending: BlitzPendingSubmission, status: HTMLElement, host: HTMLElement): Promise<void> {
+    status.textContent = 'VERIFYING REPLAY / KEEP THIS SCREEN OPEN...';
+    try {
+      const ticket = pending.ticket;
+      const result = await this.api.submitBlitzRun({
+        runId: pending.runId, ticketId: ticket.id, actorId: ticket.actorId, walletAddress: ticket.walletAddress,
+        username: ticket.username, cityId: ticket.cityId, seasonId: ticket.seasonId,
+        challengeId: ticket.challengeId, challengeDate: ticket.challengeDate, rulesetVersion: ticket.rulesetVersion,
+        seed: ticket.seed, frames: pending.frames, traceHash: pending.traceHash, claimedScore: pending.claimedScore,
+      });
+      if (!result.ok) throw new Error(result.error);
+      this.pendingRunStore.clear();
+      host.querySelector('.blitz-retry-submit')?.remove();
+      status.textContent = `VERIFIED #${result.value.row.rank} / ${ticket.username} / ${shortWallet(ticket.walletAddress)}`;
+    } catch (error) {
+      status.textContent = error instanceof Error ? `NOT VERIFIED / ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
+      host.querySelector('.blitz-retry-submit')?.remove();
+      host.append(button('Retry verification', 'blitz-retry-submit', () => {
+        const retry = host.querySelector('.blitz-retry-submit');
+        if (retry instanceof HTMLButtonElement) retry.disabled = true;
+        void this.submitPendingRun(pending, status, host);
+      }));
+    }
+    await this.loadLeaderboard(pending.ticket.cityId, host, pending.ticket.challengeId);
+  }
+
+  private async loadLeaderboard(cityId: BlitzCityId, host: HTMLElement, challengeId = getBlitzDailyChallenge({ now: Date.now(), cityId, seasonId: BLITZ_SEASON }).challengeId): Promise<void> {
     const existing = host.querySelector('.blitz-leaderboard');
     existing?.remove();
     const board = node('div', 'blitz-leaderboard');
     try {
-      const rows = await this.api.getBlitzLeaderboard(BLITZ_SEASON, cityId);
+      const rows = await this.api.getBlitzLeaderboard(BLITZ_SEASON, cityId, challengeId);
       board.append(node('h3', '', `${blitzCity(cityId).name.toUpperCase()} VERIFIED RIDERS`));
       if (rows.length === 0) board.append(node('p', '', 'No verified riders yet. The first clean line is yours.'));
       for (const row of rows.slice(0, 5)) {
@@ -646,6 +685,10 @@ function stat(value: string, label: string): HTMLElement {
  */
 function formatNim(luna: number): string {
   return `${luna.toLocaleString('en-US')} Luna (${(luna / 100_000).toLocaleString('en-US', { maximumFractionDigits: 5 })} NIM)`;
+}
+
+function formatUtcTime(timestampMs: number): string {
+  return new Date(timestampMs).toISOString().slice(11, 16) + 'Z';
 }
 
 function shortWallet(address: string): string {

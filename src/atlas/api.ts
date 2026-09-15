@@ -147,7 +147,7 @@ export interface AtlasApiClient {
   getEchoes(): Promise<AtlasEchoSummary>;
   getCompetition(): Promise<AtlasCompetitionSummary[]>;
   getCompetitiveLeaderboard(seasonId: string, role: AtlasRole): Promise<AtlasLeaderboardRow[]>;
-  getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId): Promise<BlitzLeaderboardRow[]>;
+  getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
   issueBlitzTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<ApiResult<BlitzTicket>>;
   submitBlitzRun(input: BlitzSubmissionInput): Promise<ApiResult<BlitzSubmitResult>>;
   issueCompetitiveTicket(input: { actorId: string; walletAddress: string; role: AtlasRole }): Promise<ApiResult<AtlasCompetitiveTicket>>;
@@ -176,7 +176,7 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     getEchoes: () => requestData(fetchImpl, `${baseUrl}/atlas/api/echoes`, isEchoes),
     getCompetition: () => requestData(fetchImpl, `${baseUrl}/atlas/api/competition`, isCompetition),
     getCompetitiveLeaderboard: (seasonId, role) => requestData(fetchImpl, `${baseUrl}/atlas/api/competitive/leaderboard?seasonId=${encodeURIComponent(seasonId)}&role=${role}`, isLeaderboard),
-    getBlitzLeaderboard: (seasonId, cityId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}`, isBlitzLeaderboard),
+    getBlitzLeaderboard: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzLeaderboard),
     issueBlitzTicket: (input) => authenticatedAtlasRequest<BlitzTicket>('/atlas/api/blitz/tickets', 'atlas.ticket.issue', input.actorId, input, isBlitzTicket, { apiBase: baseUrl, fetchImpl }),
     submitBlitzRun: (input) => authenticatedAtlasRequest<BlitzSubmitResult>('/atlas/api/blitz/runs', 'atlas.run.submit', input.actorId, input, isBlitzSubmitResult, { apiBase: baseUrl, fetchImpl }),
     issueCompetitiveTicket: (input) => authenticatedRequest<AtlasCompetitiveTicket>('/atlas/api/competitive/tickets', 'atlas.ticket.issue', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
@@ -272,6 +272,9 @@ function isBlitzLeaderboardRow(value: unknown): value is BlitzLeaderboardRow {
     && typeof row.username === 'string'
     && ['lagos', 'london', 'dubai'].includes(String(row.cityId))
     && typeof row.seasonId === 'string'
+    && typeof row.challengeId === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(row.challengeDate))
+    && typeof row.rulesetVersion === 'string'
     && Number.isSafeInteger(row.score)
     && Number.isSafeInteger(row.elapsedMs)
     && Number.isSafeInteger(row.collisions)
@@ -290,6 +293,9 @@ function isBlitzTicket(value: unknown): value is BlitzTicket {
     && typeof ticket.username === 'string'
     && ['lagos', 'london', 'dubai'].includes(String(ticket.cityId))
     && typeof ticket.seasonId === 'string'
+    && typeof ticket.challengeId === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(ticket.challengeDate))
+    && typeof ticket.rulesetVersion === 'string'
     && typeof ticket.seed === 'string'
     && Number.isSafeInteger(ticket.issuedAt)
     && Number.isSafeInteger(ticket.expiresAt);

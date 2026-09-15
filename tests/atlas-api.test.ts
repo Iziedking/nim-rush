@@ -63,10 +63,10 @@ describe('NIM Atlas order API client', () => {
 
   it('reads the city-specific Blitz board with wallet and username identity', async () => {
     const fetchImpl = vi.fn(async (input: string | URL) => {
-      expect(String(input)).toBe('https://atlas.test/atlas/api/blitz/leaderboard?seasonId=blitz-cycle-2&cityId=lagos');
-      return new Response(JSON.stringify({ ok: true, data: [{ runId: 'blitz-1', actorId: 'actor-1', walletAddress: 'NQ12 WALLET', username: 'Sface', cityId: 'lagos', seasonId: 'blitz-cycle-2', score: 24_500, elapsedMs: 71_200, collisions: 0, traceHash: 'b'.repeat(64), verifiedAt: 10, verified: true, rank: 1 }] }));
+      expect(String(input)).toBe('https://atlas.test/atlas/api/blitz/leaderboard?seasonId=blitz-cycle-2&cityId=lagos&challengeId=blitz-cycle-2%3Alagos%3A2026-09-15%3Ablitz-daily-v1');
+      return new Response(JSON.stringify({ ok: true, data: [{ runId: 'blitz-1', actorId: 'actor-1', walletAddress: 'NQ12 WALLET', username: 'Sface', cityId: 'lagos', seasonId: 'blitz-cycle-2', challengeId: 'blitz-cycle-2:lagos:2026-09-15:blitz-daily-v1', challengeDate: '2026-09-15', rulesetVersion: 'blitz-daily-v1', score: 24_500, elapsedMs: 71_200, collisions: 0, traceHash: 'b'.repeat(64), verifiedAt: 10, verified: true, rank: 1 }] }));
     });
     const api = createAtlasApiClient({ baseUrl: 'https://atlas.test', fetchImpl });
-    await expect(api.getBlitzLeaderboard('blitz-cycle-2', 'lagos')).resolves.toMatchObject([{ rank: 1, username: 'Sface', walletAddress: 'NQ12 WALLET', verified: true }]);
+    await expect(api.getBlitzLeaderboard('blitz-cycle-2', 'lagos', 'blitz-cycle-2:lagos:2026-09-15:blitz-daily-v1')).resolves.toMatchObject([{ rank: 1, username: 'Sface', walletAddress: 'NQ12 WALLET', verified: true }]);
   });
 });

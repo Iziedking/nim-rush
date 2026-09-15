@@ -8,22 +8,41 @@ import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, Blit
 import { hashBlitzTrace, replayBlitzTrace, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
 import { BLITZ_TICK_RATE } from '../../shared/atlas/blitz/core';
 import { BLITZ_CITIES } from '../../shared/atlas/blitz/cities';
+import { getBlitzDailyChallenge, BLITZ_DAILY_RULESET_VERSION } from '../../shared/atlas/blitz/daily';
 
 type StoredRow = Omit<BlitzLeaderboardRow, 'rank'>;
 type StoredTicket = BlitzTicket & { usedByRunId?: string };
+export interface BlitzQualificationOutboxItem {
+  readonly id: string;
+  readonly actorId: string;
+  readonly walletAddress: string;
+  readonly source: 'blitz-ranked';
+  readonly attempts: number;
+  readonly nextAttemptAt: number;
+  readonly lastError?: string;
+  readonly completedAt?: number;
+}
 const BLITZ_RANKED_SUBMISSION_WINDOW_MS = 120_000;
 
 export interface AtlasBlitzSnapshot {
-  readonly version: 1;
+  readonly version: 2;
   tickets: readonly StoredTicket[];
   readonly runs: ReadonlyArray<{ row: StoredRow; fingerprint: string }>;
   readonly usernames: ReadonlyArray<{ seasonId: string; normalized: string; walletAddress: string; display: string }>;
+  readonly qualificationOutbox: readonly BlitzQualificationOutboxItem[];
+}
+
+export interface BlitzQualificationRetryResult {
+  readonly processed: number;
+  readonly failed: number;
+  readonly pending: number;
 }
 
 export interface AtlasBlitzService {
   issueTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<BlitzTicket>;
   submit(input: BlitzSubmissionInput): Promise<BlitzSubmitResult>;
-  leaderboard(seasonId: string, cityId: BlitzCityId): Promise<BlitzLeaderboardRow[]>;
+  leaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
+  retryPendingQualifications(): Promise<BlitzQualificationRetryResult>;
   serialise(): AtlasBlitzSnapshot;
   restore(raw: unknown): void;
 }
@@ -55,11 +74,13 @@ export function createAtlasBlitzService(options: {
   const tickets = new Map<string, StoredTicket>();
   const runs = new Map<string, { row: StoredRow; fingerprint: string }>();
   const best = new Map<string, StoredRow>();
+  const qualificationOutbox = new Map<string, BlitzQualificationOutboxItem>();
   const usernameWallet = new Map<string, { walletAddress: string; display: string }>();
   const walletUsername = new Map<string, string>();
   let loaded = false;
   let operations: Promise<void> = Promise.resolve();
   let pendingOperations = 0;
+  let drainPromise: Promise<BlitzQualificationRetryResult> | null = null;
   let committed: AtlasBlitzSnapshot = serialiseSnapshot();
 
   async function ensureLoaded(): Promise<void> {
@@ -106,11 +127,12 @@ export function createAtlasBlitzService(options: {
         if (!binding || binding.address !== input.walletAddress) throw new AtlasBlitzError('identity', 'The wallet binding does not match this rider and season.');
         bindUsername(input.seasonId, input.walletAddress, username);
         const issuedAt = now();
-        const seedWindow = Math.floor(issuedAt / (5 * 60_000));
+        const challenge = getBlitzDailyChallenge({ now: issuedAt, cityId: input.cityId, seasonId: input.seasonId });
         const ticket: BlitzTicket = {
           id: randomId(), actorId: input.actorId, walletAddress: input.walletAddress, username,
-          cityId: input.cityId, seasonId: input.seasonId, seed: `${input.seasonId}:${input.cityId}:${seedWindow}`,
-          issuedAt, expiresAt: issuedAt + 5 * 60_000,
+          cityId: input.cityId, seasonId: input.seasonId, challengeId: challenge.challengeId,
+          challengeDate: challenge.date, rulesetVersion: challenge.rulesetVersion, seed: challenge.seed,
+          issuedAt, expiresAt: Math.min(issuedAt + 5 * 60_000, challenge.expiresAt),
         };
         if (!/^[a-zA-Z0-9_-]{1,128}$/.test(ticket.id)) throw new AtlasBlitzError('invalid', 'Beacon Blitz ticket id is invalid.');
         tickets.set(ticket.id, structuredClone(ticket));
@@ -127,7 +149,7 @@ export function createAtlasBlitzService(options: {
       const result = await enqueue(async () => {
         const ticket = tickets.get(input.ticketId);
         if (!ticket) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket is missing.');
-        const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || ticket.seed !== input.seed;
+        const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || (input.challengeId !== undefined && ticket.challengeId !== input.challengeId) || (input.challengeDate !== undefined && ticket.challengeDate !== input.challengeDate) || (input.rulesetVersion !== undefined && ticket.rulesetVersion !== input.rulesetVersion) || ticket.seed !== input.seed;
         if (mismatch) throw new AtlasBlitzError('ticket', 'Beacon Blitz submission does not match its ticket.');
         const binding = options.identity.getBinding(input.actorId, input.seasonId);
         if (!binding || binding.address !== input.walletAddress) throw new AtlasBlitzError('identity', 'The wallet binding is no longer valid for this rider.');
@@ -154,7 +176,8 @@ export function createAtlasBlitzService(options: {
         if (receivedAt - ticket.issuedAt < durationMs) throw new AtlasBlitzError('replay', 'Beacon Blitz replay duration exceeds elapsed server time.');
         const row: StoredRow = {
           runId: input.runId, actorId: input.actorId, walletAddress: input.walletAddress, username: input.username,
-          cityId: input.cityId, seasonId: input.seasonId, score: replay.score, elapsedMs: replay.elapsedMs,
+          cityId: input.cityId, seasonId: input.seasonId, challengeId: ticket.challengeId, challengeDate: ticket.challengeDate,
+          rulesetVersion: ticket.rulesetVersion, score: replay.score, elapsedMs: replay.elapsedMs,
           collisions: replay.collisions, traceHash, verifiedAt: now(), verified: true,
         };
         ticket.usedByRunId = input.runId;
@@ -162,25 +185,32 @@ export function createAtlasBlitzService(options: {
         const key = bestKey(row);
         const current = best.get(key);
         if (!current || compareRows(row, current) < 0) best.set(key, row);
+        if (options.daily) {
+          const qualificationId = `${input.runId}:blitz-ranked`;
+          if (!qualificationOutbox.has(qualificationId)) qualificationOutbox.set(qualificationId, {
+            id: qualificationId, actorId: input.actorId, walletAddress: input.walletAddress, source: 'blitz-ranked',
+            attempts: 0, nextAttemptAt: receivedAt,
+          });
+        }
         await persist();
         return { row: await rankedRow(row), duplicate: false };
       });
-      // Qualification follows the committed score and must not hold the board
-      // mutation queue. Durable retry of a failed qualification is a separate
-      // reward-service requirement; this result does not claim a payout.
-      if (!result.duplicate) {
-        try {
-          await options.daily?.qualifyVerifiedRun({ actorId: result.row.actorId, walletAddress: result.row.walletAddress, source: 'blitz-ranked' });
-        } catch { /* A reward outage leaves the verified score available. */ }
-      }
+      // The score is already durable. Qualification is a separate, durable
+      // outbox side effect, so a reward outage cannot erase or delay the board.
+      if (!result.duplicate) await drainQualifications();
       return result;
     },
 
-    async leaderboard(seasonId, cityId) {
+    async retryPendingQualifications() {
+      return drainQualifications();
+    },
+
+    async leaderboard(seasonId, cityId, challengeId) {
       return enqueue(async () => {
         assertSeason(seasonId);
         assertCity(cityId);
-        return ranked(seasonId, cityId);
+        if (challengeId !== undefined && !/^[a-z0-9:_-]{1,160}$/.test(challengeId)) throw new AtlasBlitzError('invalid', 'Beacon Blitz challenge id is invalid.');
+        return ranked(seasonId, cityId, challengeId);
       });
     },
 
@@ -198,31 +228,39 @@ export function createAtlasBlitzService(options: {
 
   function serialiseSnapshot(): AtlasBlitzSnapshot {
     return {
-      version: 1,
+      version: 2,
       tickets: [...tickets.values()].map((ticket) => structuredClone(ticket)),
       runs: [...runs.values()].map((run) => structuredClone(run)),
       usernames: [...usernameWallet.entries()].map(([key, value]) => {
         const separator = key.indexOf(':');
         return { seasonId: key.slice(0, separator), normalized: key.slice(separator + 1), ...value };
       }),
+      qualificationOutbox: [...qualificationOutbox.values()].map((item) => structuredClone(item)),
     };
   }
 
   function restoreSnapshot(raw: unknown): void {
-    if (!raw || typeof raw !== 'object' || (raw as { version?: unknown }).version !== 1) throw new AtlasBlitzError('invalid', 'Beacon Blitz snapshot is unsupported.');
-    const snapshot = raw as AtlasBlitzSnapshot;
+    if (!raw || typeof raw !== 'object' || ![1, 2].includes((raw as { version?: unknown }).version as number)) throw new AtlasBlitzError('invalid', 'Beacon Blitz snapshot is unsupported.');
+    const snapshot = raw as AtlasBlitzSnapshot & { version: 1 | 2 };
     if (!Array.isArray(snapshot.tickets) || !Array.isArray(snapshot.runs) || !Array.isArray(snapshot.usernames)) throw new AtlasBlitzError('invalid', 'Beacon Blitz snapshot is malformed.');
-    tickets.clear(); runs.clear(); best.clear(); usernameWallet.clear(); walletUsername.clear();
-    for (const ticket of snapshot.tickets) tickets.set(ticket.id, structuredClone(ticket));
+    tickets.clear(); runs.clear(); best.clear(); usernameWallet.clear(); walletUsername.clear(); qualificationOutbox.clear();
+    for (const ticket of snapshot.tickets) tickets.set(ticket.id, upgradeTicket(ticket));
     for (const stored of snapshot.runs) {
-      runs.set(stored.row.runId, structuredClone(stored));
-      const key = bestKey(stored.row);
+      const upgraded = { row: upgradeRow(stored.row), fingerprint: stored.fingerprint };
+      runs.set(upgraded.row.runId, structuredClone(upgraded));
+      const key = bestKey(upgraded.row);
       const current = best.get(key);
-      if (!current || compareRows(stored.row, current) < 0) best.set(key, structuredClone(stored.row));
+      if (!current || compareRows(upgraded.row, current) < 0) best.set(key, structuredClone(upgraded.row));
     }
     for (const item of snapshot.usernames) {
       usernameWallet.set(`${item.seasonId}:${item.normalized}`, { walletAddress: item.walletAddress, display: item.display });
       walletUsername.set(`${item.seasonId}:${item.walletAddress}`, item.normalized);
+    }
+    const outbox = (snapshot as AtlasBlitzSnapshot & { qualificationOutbox?: unknown }).qualificationOutbox;
+    if (Array.isArray(outbox)) {
+      for (const item of outbox) {
+        if (isQualificationOutboxItem(item)) qualificationOutbox.set(item.id, structuredClone(item));
+      }
     }
   }
 
@@ -239,21 +277,55 @@ export function createAtlasBlitzService(options: {
   }
 
   async function rankedRow(row: StoredRow): Promise<BlitzLeaderboardRow> {
-    const found = (await ranked(row.seasonId, row.cityId)).find((candidate) => candidate.runId === row.runId);
+    const found = (await ranked(row.seasonId, row.cityId, row.challengeId)).find((candidate) => candidate.runId === row.runId);
     if (found) return found;
     const bestForWallet = best.get(bestKey(row));
-    const rank = bestForWallet ? (await ranked(row.seasonId, row.cityId)).find((candidate) => candidate.walletAddress === row.walletAddress)?.rank ?? 0 : 0;
+    const rank = bestForWallet ? (await ranked(row.seasonId, row.cityId, row.challengeId)).find((candidate) => candidate.walletAddress === row.walletAddress)?.rank ?? 0 : 0;
     return { ...row, rank };
   }
 
-  function ranked(seasonId: string, cityId: BlitzCityId): BlitzLeaderboardRow[] {
-    const rows = [...best.values()].filter((row) => row.seasonId === seasonId && row.cityId === cityId).sort(compareRows);
+  function ranked(seasonId: string, cityId: BlitzCityId, challengeId?: string): BlitzLeaderboardRow[] {
+    const rows = [...best.values()].filter((row) => row.seasonId === seasonId && row.cityId === cityId && (challengeId === undefined || row.challengeId === challengeId)).sort(compareRows);
     let previous: StoredRow | null = null;
     return rows.map((row, index) => {
       const rank = previous && equalRank(row, previous) ? index : index + 1;
       previous = row;
       return { ...structuredClone(row), rank };
     });
+  }
+
+  function drainQualifications(): Promise<BlitzQualificationRetryResult> {
+    if (!options.daily) return Promise.resolve({ processed: 0, failed: 0, pending: 0 });
+    if (drainPromise) return drainPromise;
+    drainPromise = (async () => {
+      const due = await enqueue(async () => [...qualificationOutbox.values()].filter((item) => !item.completedAt && item.nextAttemptAt <= now()).map((item) => structuredClone(item)));
+      let processed = 0;
+      let failed = 0;
+      for (const item of due) {
+        try {
+          const result = await options.daily!.qualifyVerifiedRun({ actorId: item.actorId, walletAddress: item.walletAddress, source: item.source });
+          if (!result.accepted) throw new Error(result.reason ?? 'Daily qualification was refused.');
+          await enqueue(async () => {
+            const current = qualificationOutbox.get(item.id);
+            if (current) { qualificationOutbox.set(item.id, { ...current, completedAt: now(), lastError: undefined }); await persist(); }
+          });
+          processed++;
+        } catch (error) {
+          failed++;
+          await enqueue(async () => {
+            const current = qualificationOutbox.get(item.id);
+            if (current) {
+              const attempts = current.attempts + 1;
+              qualificationOutbox.set(item.id, { ...current, attempts, nextAttemptAt: now() + Math.min(15 * 60_000, 1_000 * 2 ** Math.min(attempts, 10)), lastError: error instanceof Error ? error.message : 'Qualification failed.' });
+              await persist();
+            }
+          });
+        }
+      }
+      const pending = await enqueue(async () => [...qualificationOutbox.values()].filter((item) => !item.completedAt).length);
+      return { processed, failed, pending };
+    })().finally(() => { drainPromise = null; });
+    return drainPromise;
   }
 }
 
@@ -265,8 +337,8 @@ function equalRank(left: StoredRow, right: StoredRow): boolean {
   return left.score === right.score && left.elapsedMs === right.elapsedMs && left.collisions === right.collisions;
 }
 
-function bestKey(row: Pick<StoredRow, 'seasonId' | 'cityId' | 'walletAddress'>): string {
-  return `${row.seasonId}:${row.cityId}:${row.walletAddress}`;
+function bestKey(row: Pick<StoredRow, 'seasonId' | 'cityId' | 'walletAddress' | 'challengeId'>): string {
+  return `${row.seasonId}:${row.cityId}:${row.challengeId}:${row.walletAddress}`;
 }
 
 function normalizeDisplayName(value: string): string {
@@ -288,4 +360,41 @@ function assertSubmission(input: BlitzSubmissionInput): void {
   normalizeDisplayName(input.username);
   assertSeason(input.seasonId);
   assertCity(input.cityId);
+  if (input.challengeId !== undefined && !/^[a-z0-9:_-]{1,160}$/.test(input.challengeId)) throw new AtlasBlitzError('invalid', 'Beacon Blitz challenge id is invalid.');
+  if (input.challengeDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(input.challengeDate)) throw new AtlasBlitzError('invalid', 'Beacon Blitz challenge date is invalid.');
+  if (input.rulesetVersion !== undefined && input.rulesetVersion !== BLITZ_DAILY_RULESET_VERSION) throw new AtlasBlitzError('invalid', 'Beacon Blitz ruleset is unsupported.');
+}
+
+function upgradeTicket(ticket: StoredTicket): StoredTicket {
+  if (ticket.challengeId && ticket.challengeDate && ticket.rulesetVersion) return structuredClone(ticket);
+  return {
+    ...structuredClone(ticket),
+    challengeId: `legacy:${ticket.seasonId}:${ticket.cityId}`,
+    challengeDate: '1970-01-01',
+    rulesetVersion: 'legacy-v1',
+  };
+}
+
+function upgradeRow(row: StoredRow): StoredRow {
+  if (row.challengeId && row.challengeDate && row.rulesetVersion) return structuredClone(row);
+  return {
+    ...structuredClone(row),
+    challengeId: `legacy:${row.seasonId}:${row.cityId}`,
+    challengeDate: '1970-01-01',
+    rulesetVersion: 'legacy-v1',
+  };
+}
+
+function isQualificationOutboxItem(value: unknown): value is BlitzQualificationOutboxItem {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.id === 'string'
+    && typeof item.actorId === 'string'
+    && typeof item.walletAddress === 'string'
+    && item.source === 'blitz-ranked'
+    && Number.isSafeInteger(item.attempts)
+    && Number(item.attempts) >= 0
+    && Number.isSafeInteger(item.nextAttemptAt)
+    && (item.lastError === undefined || typeof item.lastError === 'string')
+    && (item.completedAt === undefined || Number.isSafeInteger(item.completedAt));
 }

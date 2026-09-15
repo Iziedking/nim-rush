@@ -4,14 +4,16 @@ import { hashBlitzTrace, replayBlitzTrace } from '../shared/atlas/blitz/replay';
 import type { BlitzTraceFrame } from '../shared/atlas/blitz/types';
 import type { BlitzSubmissionInput } from '../shared/atlas/blitz/competition';
 import { createAtlasBlitzService } from '../server/atlas/blitz';
+import type { AtlasDailyService } from '../server/atlas/daily';
 import { createAtlasStateStore, type AtlasRepositorySnapshot, type AtlasStateStore } from '../server/atlas/persistence';
 
-async function fixture(stateStore?: AtlasStateStore) {
+async function fixture(stateStore?: AtlasStateStore, daily?: Pick<AtlasDailyService, 'qualifyVerifiedRun'>) {
   let clock = 1_000;
   let id = 0;
   let qualifications = 0;
+  const configuredDaily = daily ?? { qualifyVerifiedRun: async () => { qualifications++; return { accepted: true, eligible: true, date: '2026-09-15' }; } };
   const identity = { getBinding: (actorId: string, seasonId: string) => ({ actorId, seasonId, address: 'wallet-a', network: 'testalbatross' as const, publicKey: 'aa', boundAt: 0 }) };
-  const service = createAtlasBlitzService({ identity, stateStore, now: () => clock, randomId: () => `ticket-${++id}`, daily: { qualifyVerifiedRun: async () => { qualifications++; return { accepted: true, eligible: true, date: '2026-09-15' }; } } });
+  const service = createAtlasBlitzService({ identity, stateStore, now: () => clock, randomId: () => `ticket-${++id}`, daily: configuredDaily });
   const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: 'wallet-a', username: 'Rider', cityId: 'lagos', seasonId: 'test-season' });
   let state = createBlitzRun({ cityId: ticket.cityId, seed: ticket.seed });
   const frames: BlitzTraceFrame[] = [];
@@ -33,7 +35,7 @@ describe('Blitz integrity regressions', () => {
   });
 
   it('rejects controls appended after the authoritative finish', async () => {
-    const f = await fixture();
+    const f = await fixture(undefined, { qualifyVerifiedRun: async () => { throw new Error('reward service unavailable'); } });
     const frames = [...f.frames, { tick: f.frames.length, input: { steer: 0, drift: false, boost: false } }];
     expect(() => replayBlitzTrace({ cityId: 'lagos', seed: f.ticket.seed, frames })).toThrow(/after.*finish|terminal/i);
   });
@@ -67,6 +69,26 @@ describe('Blitz integrity regressions', () => {
     const results = await Promise.all(Array.from({ length: 8 }, () => f.service.submit(f.submission)));
     expect(results.filter((r) => !r.duplicate)).toHaveLength(1);
     expect(f.qualifications()).toBe(1);
+  });
+
+  it('keeps a durable qualification outbox when the reward service is unavailable', async () => {
+    const f = await fixture(undefined, { qualifyVerifiedRun: async () => { throw new Error('reward service unavailable'); } });
+    const original = f.service;
+    const pending = await original.submit(f.submission);
+    expect(pending.row.verified).toBe(true);
+    expect(original.serialise().qualificationOutbox).toMatchObject([{ id: 'run-a:blitz-ranked', attempts: 1, lastError: 'reward service unavailable' }]);
+
+    let retried = 0;
+    const restored = createAtlasBlitzService({
+      identity: { getBinding: (actorId, seasonId) => ({ actorId, seasonId, address: 'wallet-a', network: 'testalbatross', publicKey: 'aa', boundAt: 0 }) },
+      daily: { qualifyVerifiedRun: async () => { retried++; return { accepted: true, eligible: true, date: '2026-09-15' }; } },
+    });
+    restored.restore(original.serialise());
+    await expect(restored.retryPendingQualifications()).resolves.toEqual({ processed: 1, failed: 0, pending: 0 });
+    expect(retried).toBe(1);
+    expect(restored.serialise().qualificationOutbox[0]?.completedAt).toBeTypeOf('number');
+    await expect(restored.retryPendingQualifications()).resolves.toEqual({ processed: 0, failed: 0, pending: 0 });
+    expect(retried).toBe(1);
   });
 
   it('does not reuse a receipt for changed wallet metadata or changed controls', async () => {

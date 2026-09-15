@@ -33,7 +33,12 @@ describe('Beacon Blitz verified competition service', () => {
     const service = createAtlasBlitzService({ identity: identity({ 'season-1:actor-a': walletA }), now: () => 1_000, randomId: () => 'ticket-a' });
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     expect(ticket).toMatchObject({ id: 'ticket-a', cityId: 'lagos', seasonId: 'season-1', username: 'Sface' });
-    expect(ticket.seed).toBe('season-1:lagos:0');
+    expect(ticket).toMatchObject({
+      challengeId: 'season-1:lagos:1970-01-01:blitz-daily-v1',
+      challengeDate: '1970-01-01',
+      rulesetVersion: 'blitz-daily-v1',
+      seed: 'season-1:lagos:1970-01-01:blitz-daily-v1',
+    });
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletB, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' })).rejects.toThrow(/wallet binding/i);
   });
 
