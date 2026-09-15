@@ -569,27 +569,55 @@ export class BlitzApp {
   }
 
   /**
-   * What a verified run is worth today, in real NIM.
+   * What today's board would owe if it closed now.
    *
-   * Silent on failure: a pool that cannot be read is not worth a broken result
-   * screen, and the score and the board are true regardless of it.
+   * This used to read the daily standing and say "split between N qualified
+   * riders, X each", which described an equal split. The day pays its top
+   * three, so that sentence became a false statement to a rider the moment
+   * the allocator landed.
+   *
+   * Three states, kept apart on purpose. `unavailable` is not `unfunded`: a
+   * pool the server could not read is an unknown, and showing an unknown as
+   * "no pool today" is a claim about the treasury that nothing supports. The
+   * panel stays hidden for an unknown rather than inventing either answer.
    */
   private async presentDayPool(host: HTMLElement): Promise<void> {
     try {
-      const standing = await this.api.getDailyStanding();
-      if (!standing.rewardsEnabled || standing.poolLuna === null) return;
+      const table = await this.api.getBlitzPrizes(BLITZ_SEASON, this.cityId);
+      if (table.state === 'unavailable') return;
+
       host.replaceChildren();
       host.append(node('span', 'blitz-pool-label', "TODAY'S POOL / NIMIQ MAINNET"));
-      host.append(node('strong', 'blitz-pool-value', formatNim(standing.poolLuna)));
-      host.append(node('p', 'blitz-pool-note', standing.eligibleCount === 0
-        ? 'No rider has qualified yet today. Post a verified run and the pool is yours to share.'
-        : standing.shareLuna === null
-          ? `${standing.eligibleCount} riders qualified today.`
-          : `Split between ${standing.eligibleCount} qualified ${standing.eligibleCount === 1 ? 'rider' : 'riders'} — ${formatNim(standing.shareLuna)} each at the close of the day.`));
-      host.append(node('p', 'blitz-pool-note blitz-quiet', 'A share is paid to a wallet, so a ranked run is the only run that can earn one.'));
+
+      if (table.state === 'unfunded' || table.poolLuna === null || table.poolLuna === 0) {
+        host.append(node('strong', 'blitz-pool-value', 'No sponsored pool today'));
+        host.append(node('p', 'blitz-pool-note', 'The board still counts. A verified run sets your rank whether or not a pool is funded.'));
+        host.hidden = false;
+        return;
+      }
+
+      host.append(node('strong', 'blitz-pool-value', formatNim(table.poolLuna)));
+      host.append(node('p', 'blitz-pool-note', `Paid to the top three at the close of the day: ${table.splitBps.map(bpsLabel).join(' / ')}.`));
+
+      if (table.allocations.length === 0) {
+        host.append(node('p', 'blitz-pool-note', 'No rider has posted a verified run yet today. First place is open.'));
+      } else {
+        const standings = node('ol', 'blitz-pool-standings');
+        for (const entry of table.allocations) {
+          const row = node('li', 'blitz-pool-place');
+          row.append(node('b', '', `#${entry.rank}`), node('span', '', shortWallet(entry.walletAddress)), node('strong', '', formatNim(entry.luna)));
+          standings.append(row);
+        }
+        host.append(standings);
+        if (table.allocations.length < table.splitBps.length) {
+          host.append(node('p', 'blitz-pool-note blitz-quiet', `${table.splitBps.length - table.allocations.length} of the three places are still open.`));
+        }
+      }
+
+      host.append(node('p', 'blitz-pool-note blitz-quiet', 'Nothing is paid until the day closes and the transfer is reconciled on chain.'));
       host.hidden = false;
     } catch {
-      // Leave it hidden. The run still counted.
+      // Leave it hidden. The run still counted, and the board is still true.
     }
   }
 
@@ -791,6 +819,16 @@ function formatNim(luna: number): string {
 
 function formatUtcTime(timestampMs: number): string {
   return new Date(timestampMs).toISOString().slice(11, 16) + 'Z';
+}
+
+/**
+ * Basis points as a percentage a rider can read.
+ *
+ * The wire format is basis points because the payout arithmetic has to stay in
+ * integers; nobody wants to read "5000 bps" on a result screen.
+ */
+function bpsLabel(bps: number): string {
+  return `${(bps / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
 }
 
 function shortWallet(address: string): string {

@@ -148,6 +148,7 @@ export interface AtlasApiClient {
   getCompetition(): Promise<AtlasCompetitionSummary[]>;
   getCompetitiveLeaderboard(seasonId: string, role: AtlasRole): Promise<AtlasLeaderboardRow[]>;
   getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
+  getBlitzPrizes(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzPrizeTableSummary>;
   issueBlitzTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<ApiResult<BlitzTicket>>;
   submitBlitzRun(input: BlitzSubmissionInput): Promise<ApiResult<BlitzSubmitResult>>;
   issueCompetitiveTicket(input: { actorId: string; walletAddress: string; role: AtlasRole }): Promise<ApiResult<AtlasCompetitiveTicket>>;
@@ -177,6 +178,7 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     getCompetition: () => requestData(fetchImpl, `${baseUrl}/atlas/api/competition`, isCompetition),
     getCompetitiveLeaderboard: (seasonId, role) => requestData(fetchImpl, `${baseUrl}/atlas/api/competitive/leaderboard?seasonId=${encodeURIComponent(seasonId)}&role=${role}`, isLeaderboard),
     getBlitzLeaderboard: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzLeaderboard),
+    getBlitzPrizes: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/prizes?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzPrizeTable),
     issueBlitzTicket: (input) => authenticatedAtlasRequest<BlitzTicket>('/atlas/api/blitz/tickets', 'atlas.ticket.issue', input.actorId, input, isBlitzTicket, { apiBase: baseUrl, fetchImpl }),
     submitBlitzRun: (input) => authenticatedAtlasRequest<BlitzSubmitResult>('/atlas/api/blitz/runs', 'atlas.run.submit', input.actorId, input, isBlitzSubmitResult, { apiBase: baseUrl, fetchImpl }),
     issueCompetitiveTicket: (input) => authenticatedRequest<AtlasCompetitiveTicket>('/atlas/api/competitive/tickets', 'atlas.ticket.issue', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
@@ -256,6 +258,38 @@ function isLeaderboard(value: unknown): value is AtlasLeaderboardRow[] {
       && ['none', 'free-hint', 'purchased-hint', 'answer-reveal', 'debug'].includes(String(row.assistance))
       && typeof row.prizeEligible === 'boolean'
       && typeof row.replayHash === 'string';
+  });
+}
+
+/**
+ * What today's board would owe if it closed now.
+ *
+ * `state` is the field that matters: `unavailable` is not `unfunded`. A pool
+ * the server could not read is an unknown, and rendering an unknown as "no
+ * pool today" would be a claim the client cannot support either.
+ */
+export interface BlitzPrizeTableSummary {
+  state: 'unavailable' | 'unfunded' | 'funded';
+  poolLuna: number | null;
+  splitBps: number[];
+  allocations: Array<{ rank: number; walletAddress: string; luna: number; runId: string }>;
+  remainderLuna: number;
+  qualifiedRiders: number;
+}
+
+function isBlitzPrizeTable(value: unknown): value is BlitzPrizeTableSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const table = value as Record<string, unknown>;
+  if (!['unavailable', 'unfunded', 'funded'].includes(String(table.state))) return false;
+  if (!(table.poolLuna === null || Number.isSafeInteger(table.poolLuna))) return false;
+  if (!Number.isSafeInteger(table.remainderLuna) || !Number.isSafeInteger(table.qualifiedRiders)) return false;
+  if (!Array.isArray(table.splitBps) || !table.splitBps.every((bps) => Number.isSafeInteger(bps))) return false;
+  if (!Array.isArray(table.allocations)) return false;
+  return table.allocations.every((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const row = entry as Record<string, unknown>;
+    return Number.isSafeInteger(row.rank) && Number.isSafeInteger(row.luna)
+      && typeof row.walletAddress === 'string' && typeof row.runId === 'string';
   });
 }
 

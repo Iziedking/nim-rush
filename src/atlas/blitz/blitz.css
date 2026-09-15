@@ -287,3 +287,11 @@
 button:disabled { cursor: not-allowed; opacity: .48; }
 @media (max-width: 390px) { .blitz-mission-hud { top: max(106px, calc(env(safe-area-inset-top) + 92px)); width: min(198px, calc(100% - 28px)); } .blitz-mission-card { padding: 6px 8px 5px; } .blitz-mission-verb { margin: 3px 0 4px; font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .blitz-mission-card, .blitz-mission-meter-fill { transition: none; } }
+
+/* The top-three standings inside the pool panel. Monospace on the amounts and
+   the wallet, because both are things a rider can go and check. */
+.blitz-pool-standings { display: grid; gap: 5px; margin: 8px 0 0; padding: 0; list-style: none; }
+.blitz-pool-place { display: grid; grid-template-columns: 2.4rem 1fr auto; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 9px; background: rgb(255 255 255 / .05); }
+.blitz-pool-place b { color: #ffd166; font: 800 12px/1 ui-monospace, monospace; }
+.blitz-pool-place span { overflow: hidden; color: #9fb0d8; font: 700 12px/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-pool-place strong { color: #e8ecf8; font: 800 12px/1 ui-monospace, monospace; }

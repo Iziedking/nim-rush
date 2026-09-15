@@ -168,3 +168,52 @@ describe('the Beacon Blitz opening', () => {
     expect((onboarding.match(/aria-label="[^"]{12,}"/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 });
+
+/*
+ * The day's pool, on the screen where a rider has just earned a place in it.
+ *
+ * This panel used to read the daily standing and say "split between N
+ * qualified riders, X each", which described an equal split. The day pays its
+ * top three, so that sentence became a false statement to a rider the moment
+ * the allocator landed.
+ */
+describe('what the result screen says about the pool', () => {
+  it('reads the prize table rather than the equal-split standing', () => {
+    expect(app).toContain('getBlitzPrizes');
+    expect(app).not.toContain('getDailyStanding');
+  });
+
+  it('no longer claims the pool is split between every qualified rider', () => {
+    expect(app).not.toMatch(/Split between \$\{?standing/);
+    expect(app).not.toContain('each at the close of the day');
+  });
+
+  it('names the top-three split from the server, never a hardcoded one', () => {
+    // The split is an open product decision. The client renders whatever the
+    // server allocated with, so changing it stays a one-line server edit.
+    expect(app).toContain('table.splitBps.map(bpsLabel)');
+    expect(app).not.toMatch(/50\s*\/\s*30\s*\/\s*20/);
+  });
+
+  /*
+   * The distinction that matters most: a pool the server could not read is an
+   * unknown, and showing an unknown as "no pool today" is a claim about the
+   * treasury that nothing supports.
+   */
+  it('shows nothing at all when the pool state is unknown', () => {
+    expect(app).toMatch(/state === 'unavailable'\)\s*return/);
+  });
+
+  it('still says the board counts when no pool is funded', () => {
+    expect(app).toContain('No sponsored pool today');
+    expect(app).toContain('The board still counts');
+  });
+
+  it('says first place is open rather than inventing a leader', () => {
+    expect(app).toContain('No rider has posted a verified run yet today');
+  });
+
+  it('never calls an allocation paid before it is reconciled', () => {
+    expect(app).toContain('Nothing is paid until the day closes and the transfer is reconciled on chain');
+  });
+});
