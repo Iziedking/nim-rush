@@ -96,8 +96,11 @@ export class BlitzRenderer {
   private previousSpeedMps = 0;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-    this.renderer.shadowMap.enabled = true;
+    // The game is judged on a phone first. MSAA plus a large dynamic shadow
+    // map made the primitive-heavy hero scene look acceptable in a desktop
+    // screenshot while starving the actual controls on mobile.
+    this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = PCFShadowMap;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.12;
@@ -113,8 +116,7 @@ export class BlitzRenderer {
     this.scene.add(sky);
     const sun = new DirectionalLight(0xffe1b6, 2.2);
     sun.position.set(-12, 24, 10);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.castShadow = false;
     this.scene.add(sun);
   }
 
@@ -170,7 +172,7 @@ export class BlitzRenderer {
     const safeHeight = Math.max(1, Math.round(height));
     this.camera.aspect = safeWidth / safeHeight;
     this.camera.updateProjectionMatrix();
-    const maximumPixelRatio = safeWidth < 720 ? 1.25 : 1.6;
+    const maximumPixelRatio = safeWidth < 720 ? 1 : 1.25;
     this.renderer.setPixelRatio(MathUtils.clamp(pixelRatio, 0.75, maximumPixelRatio));
     this.renderer.setSize(safeWidth, safeHeight, false);
   }
@@ -201,6 +203,8 @@ export class BlitzRenderer {
     const pose = sampleBlitzRoute(state.cityId, state.distanceMeters, state.laneOffset);
     const event = state.lastEvent?.tick === state.tick ? state.lastEvent : null;
     const landingKick = event?.type === 'landing' ? event.intensity * 0.12 : 0;
+    const hardImpact = event?.type === 'impact';
+    const impactIntensity = event?.type === 'impact' ? event.intensity : 0;
     const speedEffect = MathUtils.clamp((state.speedMps - 12) / 26, 0, 1);
     const rush = speedEffect * speedEffect;
     const speedDelta = state.speedMps - this.previousSpeedMps;
@@ -208,17 +212,22 @@ export class BlitzRenderer {
     this.previousSpeedMps = state.speedMps;
     bike.root.position.set(pose.x, pose.y + 0.36 + state.heightMeters, pose.z);
     bike.root.rotation.y = pose.headingRadians;
-    bike.root.rotation.x = MathUtils.lerp(bike.root.rotation.x, -pose.slope * 0.24, 0.16);
+    const airPitch = state.airborne ? -MathUtils.clamp(state.verticalVelocityMps / 10, -0.42, 0.42) * 0.28 : 0;
+    bike.root.rotation.x = MathUtils.lerp(bike.root.rotation.x, -pose.slope * 0.24 + airPitch - impactIntensity * 0.16, 0.16);
     const targetLean = this.reducedMotion ? 0 : MathUtils.clamp(-steer * (state.driftActive ? 0.38 : 0.2) - pose.bend * 0.035, -0.46, 0.46);
     bike.body.rotation.z = MathUtils.lerp(bike.body.rotation.z, targetLean, 0.18);
     bike.body.rotation.y = MathUtils.lerp(bike.body.rotation.y, lateralVelocity * 0.018, 0.16);
+    const impactSide = Math.sign(lateralVelocity) || Math.sign(steer) || 1;
+    bike.body.position.x = MathUtils.lerp(bike.body.position.x, hardImpact ? -impactSide * 0.22 * impactIntensity : 0, hardImpact ? 0.78 : 0.16);
     bike.rider.rotation.z = MathUtils.lerp(bike.rider.rotation.z, targetLean * 0.72, 0.2);
-    bike.rider.rotation.x = MathUtils.lerp(bike.rider.rotation.x, 0.08 - speedEffect * 0.15 - MathUtils.clamp(speedDelta, -1, 1) * 0.07, 0.15);
+    bike.rider.rotation.x = MathUtils.lerp(bike.rider.rotation.x, 0.08 - speedEffect * 0.15 - MathUtils.clamp(speedDelta, -1, 1) * 0.07 + impactIntensity * 0.2, 0.15);
+    bike.rider.rotation.z = MathUtils.lerp(bike.rider.rotation.z, targetLean * 0.72 + (hardImpact ? impactSide * 0.13 : 0), 0.2);
     bike.rider.rotation.y = MathUtils.lerp(bike.rider.rotation.y, steer * 0.075, 0.16);
     bike.rider.position.x = MathUtils.lerp(bike.rider.position.x, -steer * 0.035, 0.18);
     const travelled = Math.max(0, state.distanceMeters - this.previousDistance);
     this.previousDistance = state.distanceMeters;
     for (const wheel of bike.wheels) wheel.rotation.x -= travelled / 0.34;
+    if (bike.wheels[1]) bike.wheels[1].rotation.y = MathUtils.lerp(bike.wheels[1].rotation.y, Math.PI / 2 + steer * 0.2, 0.24);
     for (const trail of bike.trail) {
       trail.visible = state.driftActive && state.surface !== 'pavement';
       trail.scale.z = state.driftActive ? 1 + Math.sin(state.tick * 0.7) * 0.22 : 0.1;
@@ -293,7 +302,7 @@ export class BlitzRenderer {
 
     const portrait = this.camera.aspect < 0.8;
     const speedLookahead = Math.min(1.45, state.speedMps / 20);
-    const focus = new Vector3(pose.x, pose.y + (portrait ? 1.62 : 0.96), pose.z).addScaledVector(forward, (portrait ? 1.72 : 1.88) + speedLookahead);
+    const focus = new Vector3(pose.x, pose.y + (portrait ? 1.62 : 0.96) + state.heightMeters * 0.35, pose.z).addScaledVector(forward, (portrait ? 1.72 : 1.88) + speedLookahead);
     /*
      * Lower and closer than it was (3.5 m up, 7.8 m back).
      *
@@ -302,7 +311,7 @@ export class BlitzRenderer {
      * the eye toward the road and pulling in puts the tarmac and the kerb in
      * the near field where they streak.
      */
-    const desired = new Vector3(pose.x, pose.y + (portrait ? 2.28 : 2.22) + landingKick, pose.z)
+    const desired = new Vector3(pose.x, pose.y + (portrait ? 2.28 : 2.22) + landingKick + impactIntensity * 0.14, pose.z)
       .addScaledVector(forward, portrait ? -4.95 : -5.2)
       .addScaledVector(right, this.reducedMotion ? 0 : -pose.bend * 0.16);
     if (!this.cameraReady) {
@@ -318,7 +327,7 @@ export class BlitzRenderer {
       this.camera.position.lerp(desired, this.reducedMotion ? 0.22 : state.boostActive ? 0.2 : 0.17);
     }
     this.camera.lookAt(focus);
-    this.camera.rotation.z = MathUtils.lerp(this.camera.rotation.z, this.reducedMotion ? 0 : -targetLean * 0.035 + pose.bend * 0.006, 0.14);
+    this.camera.rotation.z = MathUtils.lerp(this.camera.rotation.z, this.reducedMotion ? 0 : -targetLean * 0.035 + pose.bend * 0.006 + (hardImpact ? impactSide * 0.035 : 0), 0.14);
     /*
      * FOV is the strongest speed cue a racing game has, and this was barely
      * using it: 60 to 64.6 across the whole normal range. It now opens with

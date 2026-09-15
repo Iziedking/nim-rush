@@ -636,7 +636,7 @@ export class BlitzApp {
   };
 
   private resize = (): void => {
-    this.renderer.resize(window.innerWidth, window.innerHeight, Math.min(devicePixelRatio, 1.6));
+    this.renderer.resize(window.innerWidth, window.innerHeight, Math.min(devicePixelRatio, 1.25));
     if (!this.state) this.renderer.renderPreview(this.cityId);
   };
 }

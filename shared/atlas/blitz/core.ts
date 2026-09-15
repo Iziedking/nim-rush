@@ -101,7 +101,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const lateralAcceleration = steer * (driftActive ? 13 : 8) * surfaceProfile.grip;
   let lateralVelocityMps = clamp(state.lateralVelocityMps + lateralAcceleration / BLITZ_TICK_RATE, -12, 12);
   lateralVelocityMps *= driftActive ? 0.988 : Math.pow(surfaceProfile.grip, 0.35) * 0.94;
-  const laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
+  let laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
   const offRoad = Math.abs(laneOffset) > city.roadWidth * 0.5;
   const targetSpeed = offRoad ? 14 : city.baseSpeedMps * surfaceProfile.resistance + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0) - (brakeActive ? 8 : 0);
   // A bike should hook up immediately after GO. Keep the authoritative target
@@ -177,6 +177,13 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
       penaltyScore += 420;
       speedMps *= 0.56;
       boostEnergy = Math.max(0, boostEnergy - 15);
+      // A collision is not only a score event. Push the authoritative line
+      // away from the obstacle and reverse part of the lateral momentum so a
+      // rider cannot visually ghost through a vehicle and continue on the
+      // exact same trajectory.
+      const directionAway = Math.sign(laneOffset - obstacle.lane) || Math.sign(steer) || 1;
+      laneOffset = clamp(laneOffset + directionAway * 0.18, -city.roadWidth * 0.72, city.roadWidth * 0.72);
+      lateralVelocityMps = clamp(lateralVelocityMps + directionAway * 2.4, -12, 12);
       lastImpactTick = elapsedTicks;
       lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 1, surface };
     } else if (clearance < 1.7) {
