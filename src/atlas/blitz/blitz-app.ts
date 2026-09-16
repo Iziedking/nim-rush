@@ -500,10 +500,13 @@ export class BlitzApp {
     const screen = node('main', 'blitz-result');
     screen.setAttribute('data-blitz-screen', 'result');
     screen.append(node('div', 'blitz-brand', 'NIM RUSH / DAILY DESCENT'));
-    screen.append(node('p', 'blitz-result-kicker', state.phase === 'finished' ? `${city.circuit.toUpperCase()} CLEARED` : 'RUN ENDED'));
-    screen.append(node('h1', 'blitz-result-score', state.score.toLocaleString()));
-    screen.append(node('p', 'blitz-result-time', `${(state.elapsedMs / 1_000).toFixed(1)} SEC / ${state.collisions} CONTACTS / ${state.missions.filter((mission) => mission.status === 'complete').length}/3 CONTRACTS`));
-    screen.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
+    const resultHero = node('section', 'blitz-result-hero');
+    resultHero.append(node('p', 'blitz-result-kicker', state.phase === 'finished' ? `${city.circuit.toUpperCase()} CLEARED` : 'RUN ENDED'));
+    resultHero.append(node('span', 'blitz-result-score-label', 'TOTAL RUN SCORE'));
+    resultHero.append(node('h1', 'blitz-result-score', state.score.toLocaleString()));
+    resultHero.append(node('p', 'blitz-result-time', `${(state.elapsedMs / 1_000).toFixed(1)} SEC / ${state.collisions} CONTACTS / ${state.missions.filter((mission) => mission.status === 'complete').length}/3 CONTRACTS`));
+    resultHero.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
+    screen.append(resultHero, this.resultContracts(state));
     const breakdown = node('div', 'blitz-breakdown');
     const score = state.scoreBreakdown;
     breakdown.append(
@@ -585,6 +588,30 @@ export class BlitzApp {
     otherCourses.append(node('summary', 'blitz-competition-summary', 'OTHER CIRCUITS'), reveal);
     screen.append(otherCourses);
     this.ui.append(screen);
+  }
+
+  private resultContracts(state: BlitzRunState): HTMLElement {
+    const completed = state.missions.filter((mission) => mission.status === 'complete').length;
+    const host = node('section', 'blitz-contracts');
+    host.setAttribute('aria-label', 'Daily descent contracts');
+    const heading = node('div', 'blitz-contracts-heading');
+    heading.append(node('span', '', 'CONTRACTS CLEARED'), node('strong', 'blitz-contracts-count', `${completed}/3`));
+    const list = node('ol', 'blitz-contract-list');
+    for (const [index, mission] of state.missions.entries()) {
+      const resultContractStatus = mission.status === 'complete' ? 'CLEARED' : mission.status === 'failed' ? 'MISSED' : 'OPEN';
+      const item = node('li', `blitz-contract blitz-contract-${mission.status}`);
+      if (mission.status === 'complete') item.classList.add('is-complete');
+      if (mission.status === 'failed') item.classList.add('is-failed');
+      item.setAttribute('aria-label', `${mission.label}: ${resultContractStatus}`);
+      item.append(
+        node('span', 'blitz-contract-index', String(index + 1).padStart(2, '0')),
+        node('strong', 'blitz-contract-name', mission.label),
+        node('span', 'blitz-contract-state', resultContractStatus),
+      );
+      list.append(item);
+    }
+    host.append(heading, list);
+    return host;
   }
 
   private async prepareRankedStart(cityId: BlitzCityId, usernameInput: HTMLInputElement, buttonNode: HTMLButtonElement, status: HTMLElement): Promise<void> {

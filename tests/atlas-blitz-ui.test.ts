@@ -206,6 +206,18 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(css).toContain('.blitz-supply-glyph-gearbox');
   });
 
+  it('makes the finish feel like a scored game moment with contract badges', () => {
+    expect(app).toContain('blitz-result-hero');
+    expect(app).toContain('TOTAL RUN SCORE');
+    expect(app).toContain('CONTRACTS CLEARED');
+    expect(app).toContain('blitz-contract-list');
+    expect(app).toContain('resultContractStatus');
+    expect(css).toContain('.blitz-result-hero');
+    expect(css).toContain('.blitz-contract-list');
+    expect(css).toContain('.blitz-contract.is-complete');
+    expect(css).toContain('@media (prefers-reduced-motion: no-preference)');
+  });
+
   it('keeps every mobile action at least 52px and honours reduced motion', () => {
     expect(css).toMatch(/\.blitz-control[^}]+min-height:\s*56px/s);
     expect(css).toMatch(/\.blitz-pause[^}]+pointer-events:\s*auto/s);

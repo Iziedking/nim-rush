@@ -195,6 +195,7 @@ export const ATLAS_UI_TOKENS = Object.freeze({
   'atlas-selected-rgb': '76 201 240',
   'atlas-verified-rgb': '6 214 160',
   'atlas-treasury-rgb': '255 209 102',
+  'atlas-warn-rgb': '255 159 28',
 });
 
 export type AtlasUiToken = keyof typeof ATLAS_UI_TOKENS;
