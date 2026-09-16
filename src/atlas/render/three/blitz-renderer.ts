@@ -1154,6 +1154,16 @@ function createRelayGate(city: BlitzCityDefinition, index: number, corridorHalfW
   const span = new Mesh(new BoxGeometry(corridorHalfWidth * 2, .1, .12), lit);
   span.position.y = 2.35;
   gate.add(span);
+  /*
+   * A ring hung in the middle of the gate, at rider height.
+   *
+   * The posts say where the edges are; this says where to aim. A rider
+   * approaching at forty metres a second reads a shape in the centre of the
+   * road long before they read two uprights at its sides.
+   */
+  const ring = new Mesh(new TorusGeometry(Math.min(1.35, corridorHalfWidth * 0.62), .055, 5, 20), lit);
+  ring.position.y = 1.45;
+  gate.add(ring);
   return gate;
 }
 

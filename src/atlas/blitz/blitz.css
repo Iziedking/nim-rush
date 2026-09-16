@@ -80,8 +80,15 @@
 .blitz-steer-zone { height: 82px; display: grid; align-content: center; gap: 10px; padding: 10px 18px; color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; text-align: center; touch-action: none; }
 .blitz-steer-rail { position: relative; height: 5px; border-radius: 5px; background: rgb(var(--atlas-ink-rgb) / .2); }
 .blitz-steer-thumb { position: absolute; top: 50%; left: calc(50% - 15px); width: 30px; height: 30px; border: 4px solid var(--atlas-ink); border-radius: 50%; background: var(--atlas-selected); box-shadow: 0 0 18px rgb(var(--atlas-selected-rgb) / .55); transform: translateY(-50%); transition: transform .05s linear; }
-.blitz-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.blitz-actions .blitz-control { height: 82px; padding: 0 7px; color: var(--atlas-ink); font: 900 11px/1 ui-monospace, monospace; letter-spacing: .04em; }
+/*
+ * Four tools in two rows now that the bike no longer holds its own speed.
+ * TUCK spans the width of the lower row: it is the one a rider holds for most
+ * of the descent, so it is the one the thumb should find without looking.
+ */
+.blitz-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.blitz-actions .blitz-tuck { grid-column: 1 / -1; background: rgb(var(--atlas-selected-rgb, 111 227 255) / .22); }
+.blitz-actions .blitz-tuck.is-held { background: rgb(var(--atlas-selected-rgb, 111 227 255) / .45); }
+.blitz-actions .blitz-control { height: 62px; padding: 0 7px; color: var(--atlas-ink); font: 900 11px/1 ui-monospace, monospace; letter-spacing: .04em; }
 .blitz-drift.is-held { background: var(--atlas-explorer); color: var(--atlas-on-accent); transform: translateY(2px); }
 .blitz-brake.is-held { background: var(--atlas-paper); color: var(--atlas-ink); transform: translateY(2px); box-shadow: inset 0 0 0 3px var(--atlas-ink); }
 .blitz-boost.is-held { background: var(--atlas-verified); color: var(--atlas-on-accent); transform: translateY(2px); }
@@ -378,3 +385,164 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .blitz-ladder-meter { height: 7px; margin-top: 4px; overflow: hidden; border-radius: 5px; background: rgb(255 255 255 / .08); }
 .blitz-ladder-fill { display: block; height: 100%; background: linear-gradient(90deg, #ffd166, #6fe3a1); }
 .blitz-ladder-next { margin: 0; max-width: 46ch; color: #9fb0d8; font: 600 12px/1.4 system-ui, sans-serif; }
+
+/*
+ * NIM RUSH visual direction: night-race broadcast.
+ *
+ * The old result page treated a downhill run like a dashboard: one narrow
+ * column, repeated rounded cards, and no authored object to remember. This
+ * layer makes the game itself the composition. The 3D road stays visible,
+ * the copy rides a transparent editorial rail, and the custom vector mark is
+ * the only illustration the menu needs to own.
+ */
+.blitz-ui {
+  --rush-deep: #0a1516;
+  --rush-ink: #f5ead4;
+  --rush-muted: #b8c1b2;
+  --rush-lime: #c4e86b;
+  --rush-sun: #f0b35d;
+  --rush-coral: #f47762;
+  --rush-teal: #74d5ca;
+  --rush-line: rgb(245 234 212 / .2);
+  --rush-panel: rgb(8 20 21 / .76);
+  padding: max(22px, env(safe-area-inset-top)) max(26px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(26px, env(safe-area-inset-left));
+}
+.blitz-fullscreen-page { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: none; max-height: none; margin: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--rush-sun) transparent; }
+.blitz-fullscreen-page::after { content: ''; position: fixed; inset: 0; z-index: -2; border: 1px solid rgb(245 234 212 / .08); pointer-events: none; }
+.blitz-rush-logo { position: relative; color: var(--rush-ink); filter: drop-shadow(0 8px 20px rgb(0 0 0 / .3)); }
+.blitz-rush-logo svg { display: block; width: 100%; height: auto; overflow: visible; }
+.blitz-rush-logo-hero { width: min(100%, 465px); }
+.blitz-rush-logo-compact { width: min(100%, 270px); }
+.blitz-logo-skyline, .blitz-logo-bike, .blitz-logo-rider, .blitz-logo-wheel, .blitz-logo-badge { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.blitz-logo-skyline { stroke: var(--rush-teal); stroke-width: 6; opacity: .9; }
+.blitz-logo-sun { fill: var(--rush-sun); stroke: none; }
+.blitz-logo-wheel { stroke: var(--rush-sun); stroke-width: 6; }
+.blitz-logo-bike { stroke: var(--rush-ink); stroke-width: 7; }
+.blitz-logo-rider { stroke: var(--rush-coral); stroke-width: 8; }
+.blitz-logo-badge { stroke: var(--rush-lime); stroke-width: 3; opacity: .85; }
+.blitz-logo-wordmark { fill: currentColor; font: 900 37px/1 ui-monospace, monospace; letter-spacing: 8px; }
+.blitz-logo-subtitle { fill: var(--rush-lime); font: 900 13px/1 ui-monospace, monospace; letter-spacing: 5px; }
+.blitz-powered { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--rush-muted); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
+.blitz-powered .blitz-nimiq-lockup { width: auto; height: 17px; }
+
+.blitz-intro.blitz-fullscreen-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 430px); grid-template-rows: 1fr auto; align-items: end; gap: 22px clamp(28px, 7vw, 110px); padding: clamp(24px, 5vw, 76px); overflow: auto; }
+.blitz-intro.blitz-fullscreen-page::before, .blitz-result.blitz-fullscreen-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(90deg, rgb(5 15 16 / .93), rgb(5 15 16 / .58) 46%, rgb(5 15 16 / .12) 78%, transparent); pointer-events: none; }
+.blitz-intro-masthead { grid-column: 1; grid-row: 1 / span 2; align-self: center; max-width: 560px; }
+.blitz-intro-masthead .blitz-edition { margin-top: 19px; border-color: var(--rush-sun); background: transparent; color: var(--rush-sun); }
+.blitz-intro-masthead .blitz-title { margin-top: 14px; color: var(--rush-ink); font-size: clamp(68px, 11vw, 150px); line-height: .7; letter-spacing: -.04em; text-shadow: 7px 8px 0 rgb(4 13 14 / .55); }
+.blitz-intro-masthead .blitz-tagline { max-width: 27ch; margin-top: 24px; color: var(--rush-ink); font-size: clamp(17px, 2vw, 22px); line-height: 1.18; }
+.blitz-intro-masthead .blitz-daily-meta { margin-top: 18px; color: var(--rush-lime); }
+.blitz-intro-command { position: relative; grid-column: 2; grid-row: 1; align-self: end; padding: clamp(18px, 3vw, 28px); border-left: 2px solid var(--rush-lime); background: var(--rush-panel); clip-path: polygon(0 0, 96% 0, 100% 9%, 100% 100%, 0 100%); }
+.blitz-intro-command::before { content: 'DROP 01 / LAGOS'; display: block; margin-bottom: 16px; color: var(--rush-teal); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .2em; }
+.blitz-intro-command .blitz-intro-stats { margin-top: 0; }
+.blitz-intro-command .blitz-stat { border: 0; border-top: 1px solid var(--rush-line); border-radius: 0; background: transparent; }
+.blitz-intro-command .blitz-stat strong { color: var(--rush-ink); font-size: 19px; }
+.blitz-intro-command .blitz-stat span { color: var(--rush-muted); }
+.blitz-intro-command .blitz-difficulty { margin-top: 22px; }
+.blitz-intro-command .blitz-difficulty legend { color: var(--rush-muted); }
+.blitz-intro-command .blitz-difficulty-option { border-color: var(--rush-line) !important; border-radius: 0; background: transparent; color: var(--rush-muted); }
+.blitz-intro-command .blitz-difficulty-option.is-selected { border-color: var(--rush-lime) !important; background: rgb(196 232 107 / .12); color: var(--rush-lime); }
+.blitz-intro-command .blitz-start { width: 100%; margin-top: 20px; border-radius: 0; background: var(--rush-lime); box-shadow: 8px 8px 0 rgb(7 18 19 / .52); color: var(--rush-deep) !important; }
+.blitz-intro-command .blitz-quiet { color: var(--rush-muted); }
+.blitz-intro-command .blitz-ranked-launch { border-color: var(--rush-line); border-radius: 0; background: transparent; }
+.blitz-intro-command .blitz-ranked-label { color: var(--rush-teal); }
+.blitz-intro-utility { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.blitz-intro-utility .blitz-help { margin-top: 0; color: var(--rush-ink); }
+.blitz-intro-utility .blitz-sound { color: var(--rush-muted); }
+.blitz-intro-utility .blitz-powered { margin-left: auto; }
+.blitz-intro > .blitz-pending-run { grid-column: 1 / -1; grid-row: 2; }
+
+.blitz-run.blitz-fullscreen-page { overflow: hidden; }
+.blitz-run .blitz-hud > * { border: 0; border-bottom: 1px solid var(--rush-line); border-radius: 0; background: rgb(8 20 21 / .68); box-shadow: none; }
+.blitz-run .blitz-city-name { color: var(--rush-ink); }
+.blitz-run .blitz-timer { color: var(--rush-sun); }
+.blitz-run .blitz-score { color: var(--rush-lime); }
+.blitz-run .blitz-controls { max-width: 780px; margin-right: auto; margin-left: auto; }
+.blitz-run .blitz-control { border-radius: 10px; background: rgb(8 20 21 / .72); box-shadow: 0 8px 22px rgb(0 0 0 / .22); }
+.blitz-run .blitz-actions .blitz-tuck { background: rgb(116 213 202 / .18); }
+
+.blitz-result.blitz-fullscreen-page { display: grid; grid-template-columns: minmax(280px, .76fr) minmax(0, 1.24fr); grid-template-rows: minmax(0, 1fr) auto; align-content: stretch; gap: 20px clamp(26px, 6vw, 88px); padding: clamp(24px, 5vw, 72px); border: 0; border-radius: 0; background: linear-gradient(90deg, rgb(5 15 16 / .97), rgb(5 15 16 / .91) 58%, rgb(5 15 16 / .84)); box-shadow: none; }
+.blitz-result-primary { grid-column: 1; grid-row: 1 / span 2; align-self: center; max-width: 520px; }
+.blitz-result-primary .blitz-rush-logo { margin-bottom: 30px; }
+.blitz-result-hero { margin-top: 0; padding: 0 0 20px; border: 0; border-bottom: 2px solid var(--rush-lime); border-radius: 0; background: transparent; }
+.blitz-result-kicker { color: var(--rush-lime); }
+.blitz-result-score-label { margin-top: 26px; color: var(--rush-muted); }
+.blitz-result-score { color: var(--rush-ink); font-size: clamp(74px, 10vw, 152px); line-height: .72; text-shadow: 7px 8px 0 rgb(4 13 14 / .55); }
+.blitz-result-best { color: var(--rush-sun); }
+.blitz-contracts { margin-top: 18px; padding: 0 0 3px; border: 0; border-radius: 0; background: transparent; }
+.blitz-contracts-heading { color: var(--rush-muted); }
+.blitz-contract-list { gap: 8px; }
+.blitz-contract { min-height: 78px; padding: 10px; border: 1px solid var(--rush-line); border-radius: 0; background: rgb(8 20 21 / .5); }
+.blitz-contract.is-complete { border-color: var(--rush-lime); background: rgb(196 232 107 / .12); }
+.blitz-contract.is-failed { border-color: var(--rush-coral); background: rgb(244 119 98 / .08); }
+.blitz-contract.is-complete .blitz-contract-state { color: var(--rush-lime); }
+.blitz-contract.is-failed .blitz-contract-state { color: var(--rush-coral); }
+.blitz-result-ledger { grid-column: 2; grid-row: 1; align-self: center; padding: clamp(16px, 3vw, 28px); border-left: 1px solid var(--rush-line); background: rgb(8 20 21 / .94); }
+.blitz-result-ledger .blitz-breakdown { margin-top: 0; }
+.blitz-result-ledger .blitz-breakdown .blitz-stat { min-height: 64px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--rush-line); border-radius: 0; background: transparent; }
+.blitz-result-ledger .blitz-breakdown .blitz-stat strong { color: var(--rush-ink); font-size: 16px; }
+.blitz-result-ledger .blitz-breakdown .blitz-stat span { color: var(--rush-muted); }
+.blitz-result-ledger .blitz-supplies, .blitz-result-ledger .blitz-ladder { margin-top: 22px; padding: 16px 0 0; border: 0; border-top: 1px solid var(--rush-line); border-radius: 0; background: transparent; }
+.blitz-result-ledger .blitz-supplies-label, .blitz-result-ledger .blitz-ladder-label { color: var(--rush-teal); }
+.blitz-result-ledger .blitz-supply { border-radius: 0; background: rgb(245 234 212 / .06); }
+.blitz-result-ledger .blitz-ladder-unlock, .blitz-result-ledger .blitz-ladder-next { color: var(--rush-ink); }
+.blitz-result-actions { grid-column: 2; grid-row: 2; display: flex; align-items: center; gap: 18px; }
+.blitz-result-actions .blitz-rematch { flex: 1; margin-top: 0; border-radius: 0; background: var(--rush-lime); box-shadow: 8px 8px 0 rgb(7 18 19 / .52); color: var(--rush-deep) !important; }
+.blitz-result-actions .blitz-sound { margin-top: 0; color: var(--rush-muted); }
+.blitz-result-actions .blitz-powered { margin-left: auto; }
+.blitz-result > .blitz-pool, .blitz-result > .blitz-rewards, .blitz-result > .blitz-competition, .blitz-result > details.blitz-competition { grid-column: 2; }
+.blitz-result > .blitz-pool, .blitz-result > .blitz-rewards { align-self: start; }
+.blitz-result > .blitz-competition { align-self: start; }
+
+@media (max-width: 720px) {
+  .blitz-ui { padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .blitz-intro.blitz-fullscreen-page { grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 18px; padding: clamp(18px, 5vw, 34px); }
+  .blitz-intro-masthead { grid-column: 1; grid-row: 1; align-self: end; }
+  .blitz-intro-command { grid-column: 1; grid-row: 2; }
+  .blitz-intro-utility { grid-column: 1; grid-row: 3; }
+  .blitz-intro-masthead .blitz-title { font-size: clamp(70px, 21vw, 118px); }
+  .blitz-intro-command { padding: 16px; }
+  .blitz-intro > .blitz-pending-run { grid-column: 1; grid-row: 4; }
+  .blitz-result.blitz-fullscreen-page { display: flex; flex-direction: column; gap: 18px; padding: 18px 16px 24px; }
+  .blitz-result-primary, .blitz-result-ledger, .blitz-result-actions { width: 100%; max-width: none; }
+  .blitz-result-primary { align-self: auto; }
+  .blitz-result-primary .blitz-rush-logo { margin-bottom: 18px; }
+  .blitz-result-ledger { padding: 16px 0 0; border-top: 1px solid var(--rush-line); border-left: 0; }
+  .blitz-result-actions { flex-wrap: wrap; }
+  .blitz-result-actions .blitz-powered { width: 100%; justify-content: center; margin-left: 0; }
+  .blitz-result > .blitz-pool, .blitz-result > .blitz-rewards, .blitz-result > .blitz-competition, .blitz-result > details.blitz-competition { width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .blitz-intro-masthead, .blitz-intro-command, .blitz-result-primary, .blitz-result-ledger { animation: blitz-editorial-enter 420ms cubic-bezier(.2, .8, .25, 1) both; }
+  .blitz-intro-command, .blitz-result-ledger { animation-delay: 80ms; }
+  .blitz-intro-utility, .blitz-result-actions { animation: blitz-editorial-enter 420ms cubic-bezier(.2, .8, .25, 1) 140ms both; }
+}
+@keyframes blitz-editorial-enter { from { transform: translateY(14px); } to { transform: translateY(0); } }
+
+/*
+ * The speed layer. See updateRunHud() in blitz-app.ts.
+ *
+ * Painted, never blurred. A backdrop-filter here would cost a full-screen pass
+ * every frame on a phone, and an earlier attempt at one tiled the frame in
+ * headless capture. Three stacked gradients do the same job for free: the
+ * frame darkens and narrows at the edges as the bike speeds up, while the
+ * centre - the part a rider is actually reading - stays untouched.
+ */
+.blitz-speed-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: var(--rush, 0);
+  background:
+    linear-gradient(90deg, rgb(6 8 20 / .72) 0%, rgb(6 8 20 / 0) 22%),
+    linear-gradient(270deg, rgb(6 8 20 / .72) 0%, rgb(6 8 20 / 0) 22%),
+    linear-gradient(0deg, rgb(6 8 20 / .34) 0%, rgb(6 8 20 / 0) 14%);
+  box-shadow: inset 0 0 130px 30px rgb(6 8 20 / .5);
+  transition: opacity 90ms linear;
+}
+/* Boost tints the closing frame, so the fastest state is also the loudest. */
+.blitz-speed-veil.is-boosting { box-shadow: inset 0 0 150px 34px rgb(15 60 82 / .58); }
+@media (prefers-reduced-motion: reduce) {
+  .blitz-speed-veil { display: none; }
+}

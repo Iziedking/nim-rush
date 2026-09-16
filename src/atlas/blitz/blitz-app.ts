@@ -16,6 +16,8 @@ import { BlitzInputController } from './blitz-input';
 import { BlitzFrameGovernor } from './frame-governor';
 import { BLITZ_ONBOARDING_BEATS, blitzOnboardingSeen, markBlitzOnboardingSeen } from './blitz-onboarding';
 import { createBlitzPendingRunStore, type BlitzPendingRunStore, type BlitzPendingSubmission } from './pending-run';
+import { BlitzVoice, blitzCallout } from './blitz-callouts';
+import { createNimiqPoweredBy, createRushLogo } from './blitz-brand';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
 /* Shared with the server's maintenance worker; see shared/atlas/blitz/daily.ts. */
@@ -42,6 +44,13 @@ export class BlitzApp {
   private previousTimestamp: number | null = null;
   private accumulator = 0;
   private lastPhysicsAudioTick = -1;
+  /*
+   * The race voice. Speaks only what a rider cannot see at speed - a contact,
+   * the last gearbox, ten seconds left - and refuses a line rather than
+   * queueing it, because a callout that arrives late describes a part of the
+   * hill the rider has already left.
+   */
+  private readonly voice = new BlitzVoice((text) => this.audio.narrate(text));
   private scoreNode: HTMLElement | null = null;
   private timerNode: HTMLElement | null = null;
   private speedNode: HTMLElement | null = null;
@@ -49,6 +58,7 @@ export class BlitzApp {
   private boostNode: HTMLElement | null = null;
   private gearHost: HTMLElement | null = null;
   private driftWindowNode: HTMLElement | null = null;
+  private speedVeil: HTMLElement | null = null;
   private missionHost: HTMLElement | null = null;
   private countdownNode: HTMLElement | null = null;
   private feedbackNode: HTMLElement | null = null;
@@ -133,9 +143,9 @@ export class BlitzApp {
     }
     this.input.clearBindings();
     this.ui.replaceChildren();
-    const screen = node('main', 'blitz-onboarding');
+    const screen = node('main', 'blitz-onboarding blitz-fullscreen-page');
     screen.setAttribute('data-blitz-screen', 'onboarding');
-    screen.append(node('div', 'blitz-brand', 'NIM ATLAS / BEACON BLITZ'));
+    screen.append(createRushLogo('compact'));
 
     const art = node('div', 'blitz-onboarding-art');
     // Authored SVG from blitz-onboarding.ts, not player input.
@@ -179,9 +189,9 @@ export class BlitzApp {
     this.setAudioScene('menu');
     this.input.clearBindings();
     this.ui.replaceChildren();
-    const screen = node('main', 'blitz-intro');
+    const screen = node('main', 'blitz-intro blitz-fullscreen-page');
     screen.setAttribute('data-blitz-screen', 'intro');
-    const brand = node('div', 'blitz-brand', 'NIM RUSH');
+    const logo = createRushLogo('hero');
     const edition = node('span', 'blitz-edition', 'DAILY DESCENT');
     const title = node('h1', 'blitz-title', 'RIDGE\nRUN');
     const line = node('p', 'blitz-tagline', 'Find your line. Ride the ridge. Prove your run.');
@@ -224,9 +234,15 @@ export class BlitzApp {
      * path and nowhere else.
      */
     const note = node('p', 'blitz-quiet', 'No wallet needed to play. Ranked runs are replay-verified.');
-    screen.append(brand, edition, title, line, dailyMeta, stats, difficultyChooser, start, note, ranked);
-    screen.append(button('How to ride', 'blitz-help', () => this.renderOnboarding(blitzOnboardingSeen(safeLocalStorage()) ? 1 : 0)));
-    screen.append(this.soundControl());
+    const masthead = node('section', 'blitz-intro-masthead');
+    masthead.append(logo, edition, title, line, dailyMeta);
+    const command = node('section', 'blitz-intro-command');
+    command.setAttribute('aria-label', 'Daily descent launch');
+    command.append(stats, difficultyChooser, start, note, ranked);
+    const utility = node('nav', 'blitz-intro-utility');
+    utility.setAttribute('aria-label', 'Game utilities');
+    utility.append(button('How to ride', 'blitz-help', () => this.renderOnboarding(blitzOnboardingSeen(safeLocalStorage()) ? 1 : 0)), this.soundControl(), createNimiqPoweredBy());
+    screen.append(masthead, command, utility);
     const pending = this.pendingRunStore.read();
     if (pending) {
       const recovery = node('section', 'blitz-pending-run');
@@ -262,6 +278,7 @@ export class BlitzApp {
     this.lastPhysicsAudioTick = -1;
     this.paused = false;
     this.input.reset();
+    this.voice.reset();
     // The scene has to be built for the ruleset this run is judged under, or
     // a rider swerves around obstacles that are not there and rides through
     // ones that are.
@@ -345,18 +362,38 @@ export class BlitzApp {
     const thumb = node('i', 'blitz-steer-thumb');
     steerRail.append(thumb);
     steerZone.append(node('span', '', 'STEER'), steerRail);
+    /*
+     * Four tools, each with a cost.
+     *
+     * TUCK is the biggest and sits nearest the thumb, because it is the one a
+     * rider holds most of the run: the bike coasts without it. BRAKE is its
+     * opposite and sits beside it. DRIFT and BOOST are the two that spend
+     * supplies, so they share the row above.
+     */
     const actions = node('div', 'blitz-actions');
     const drift = button('DRIFT', 'blitz-control blitz-drift', () => undefined);
     const brake = button('BRAKE', 'blitz-control blitz-brake', () => undefined);
     const boostButton = button('BOOST', 'blitz-control blitz-boost', () => undefined);
-    actions.append(drift, brake, boostButton);
+    const tuck = button('TUCK', 'blitz-control blitz-tuck', () => undefined);
+    actions.append(drift, boostButton, brake, tuck);
     controls.append(steerZone, actions);
     this.input.bindSteering(steerZone, thumb);
     this.input.bindHold(drift, 'drift');
     this.input.bindHold(brake, 'brake');
     this.input.bindHold(boostButton, 'boost');
+    this.input.bindHold(tuck, 'tuck');
 
-    screen.append(top, speedBox, progress, boost, this.missionHost, this.feedbackNode, this.countdownNode, this.pauseOverlay, controls);
+    /*
+     * The speed layer.
+     *
+     * A camera that only moves faster does not read as faster - what sells
+     * speed is the frame closing in at the edges while the centre stays
+     * readable. Painted rather than blurred: a real backdrop-filter costs a
+     * full-screen pass every frame on a phone, and this has to be free.
+     */
+    this.speedVeil = node('div', 'blitz-speed-veil');
+    this.speedVeil.setAttribute('aria-hidden', 'true');
+    screen.append(top, speedBox, progress, boost, this.missionHost, this.feedbackNode, this.speedVeil, this.countdownNode, this.pauseOverlay, controls);
     this.ui.append(screen);
   }
 
@@ -381,6 +418,9 @@ export class BlitzApp {
         this.audio.playPhysicsCue(next.lastEvent);
         this.lastPhysicsAudioTick = next.lastEvent.tick;
       }
+      // Offered every step; the channel decides. Comparing the two states is
+      // what keeps a line tied to something that actually just happened.
+      this.voice.offer(blitzCallout(this.previousRenderState, next));
       this.accumulator -= STEP_MS;
       steps += 1;
     }
@@ -411,6 +451,16 @@ export class BlitzApp {
      */
     if (this.boostNode) this.boostNode.style.width = `${Math.min(100, state.boostEnergy / state.boostCapacity * 100)}%`;
     this.updateSupplyHud(state);
+    /*
+     * Nothing below 26 m/s, everything by 45. The low end is where a rider
+     * coasts, and closing the frame in on a rider who is already slow would
+     * read as a penalty rather than as speed.
+     */
+    if (this.speedVeil) {
+      const rush = Math.max(0, Math.min(1, (state.speedMps - 26) / 19));
+      this.speedVeil.style.setProperty('--rush', (rush * rush).toFixed(3));
+      this.speedVeil.classList.toggle('is-boosting', state.boostActive);
+    }
     this.audio.setBikeSpeed(state.speedMps);
     if (this.countdownNode) {
       this.countdownNode.textContent = state.phase === 'countdown' ? String(Math.max(1, Math.ceil(state.countdownTicks / BLITZ_TICK_RATE))) : 'GO';
@@ -497,16 +547,19 @@ export class BlitzApp {
     this.recordSkillUnlock(state);
     const nextUnlocked = this.isCityUnlocked(nextCityId);
     this.ui.replaceChildren();
-    const screen = node('main', 'blitz-result');
+    const screen = node('main', 'blitz-result blitz-fullscreen-page');
     screen.setAttribute('data-blitz-screen', 'result');
-    screen.append(node('div', 'blitz-brand', 'NIM RUSH / DAILY DESCENT'));
+    const primary = node('section', 'blitz-result-primary');
+    primary.append(createRushLogo('compact'));
     const resultHero = node('section', 'blitz-result-hero');
     resultHero.append(node('p', 'blitz-result-kicker', state.phase === 'finished' ? `${city.circuit.toUpperCase()} CLEARED` : 'RUN ENDED'));
     resultHero.append(node('span', 'blitz-result-score-label', 'TOTAL RUN SCORE'));
     resultHero.append(node('h1', 'blitz-result-score', state.score.toLocaleString()));
     resultHero.append(node('p', 'blitz-result-time', `${(state.elapsedMs / 1_000).toFixed(1)} SEC / ${state.collisions} CONTACTS / ${state.missions.filter((mission) => mission.status === 'complete').length}/3 CONTRACTS`));
     resultHero.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
-    screen.append(resultHero, this.resultContracts(state));
+    primary.append(resultHero, this.resultContracts(state));
+    screen.append(primary);
+    const ledger = node('section', 'blitz-result-ledger');
     const breakdown = node('div', 'blitz-breakdown');
     const score = state.scoreBreakdown;
     breakdown.append(
@@ -519,7 +572,7 @@ export class BlitzApp {
       stat(`-${score.collisionPenalties.toLocaleString()}`, 'COLLISION PENALTIES'),
       stat(`-${score.missedGatePenalties.toLocaleString()}`, 'MISSED-GATE PENALTIES'),
     );
-    screen.append(breakdown);
+    ledger.append(breakdown);
     /*
      * Supplies, then the ladder. A rider has just spent a run's worth of both,
      * so this is the moment the two systems are worth explaining - and the
@@ -535,10 +588,12 @@ export class BlitzApp {
     );
     supplies.append(supplyRow);
     supplies.append(node('p', 'blitz-pool-note blitz-quiet', 'Boost and drift only come off the road. The line you take is the fuel you finish with.'));
-    screen.append(supplies);
-    screen.append(this.riderLadder());
-    screen.append(button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)));
-    screen.append(this.soundControl());
+    ledger.append(supplies, this.riderLadder());
+    screen.append(ledger);
+    const resultActions = node('nav', 'blitz-result-actions');
+    resultActions.setAttribute('aria-label', 'Result actions');
+    resultActions.append(button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)), this.soundControl(), createNimiqPoweredBy());
+    screen.append(resultActions);
     /*
      * The day's pool, on the screen where a player has just earned a place in
      * it. Appended empty and filled when the standing arrives, because the
@@ -943,9 +998,10 @@ export class BlitzApp {
   private renderUnavailable(): void {
     this.input.clearBindings();
     this.ui.replaceChildren();
-    const screen = node('main', 'blitz-unavailable');
-    screen.append(node('div', 'blitz-brand', 'NIM ATLAS'), node('h1', '', 'BIKE IS IN THE SHOP'), node('p', '', 'This device could not start the 3D circuit. Reload once, or use a WebGL-capable browser.'));
+    const screen = node('main', 'blitz-unavailable blitz-fullscreen-page');
+    screen.append(createRushLogo('compact'), node('h1', '', 'BIKE IS IN THE SHOP'), node('p', '', 'This device could not start the 3D circuit. Reload once, or use a WebGL-capable browser.'));
     screen.append(button('Reload', 'blitz-start', () => location.reload()));
+    screen.append(createNimiqPoweredBy());
     this.ui.append(screen);
   }
 

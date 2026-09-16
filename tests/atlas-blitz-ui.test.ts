@@ -8,6 +8,7 @@ const renderer = readFileSync(new URL('../src/atlas/render/three/blitz-renderer.
 const bike = readFileSync(new URL('../src/atlas/render/three/rush-bike.ts', import.meta.url), 'utf8');
 const course = readFileSync(new URL('../src/atlas/render/three/rush-course.ts', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/atlas/blitz/blitz.css', import.meta.url), 'utf8');
+const brand = readFileSync(new URL('../src/atlas/blitz/blitz-brand.ts', import.meta.url), 'utf8');
 
 describe('Beacon Blitz public arcade experience', () => {
   it('makes Blitz the default and keeps the earlier Atlas behind an explicit legacy route', () => {
@@ -19,7 +20,7 @@ describe('Beacon Blitz public arcade experience', () => {
   it('launches Lagos from one dominant action and keeps the run HUD lean', () => {
     expect(app).toContain('Ride now');
     expect(app).toContain('Find your line. Ride the ridge. Prove your run.');
-    expect(app).toContain("'NIM RUSH'");
+    expect(app).toContain('createRushLogo');
     /*
      * check / approve / confirm used to be taught in a brief block on this
      * screen, which is the opposite of "one dominant action": it put a label,
@@ -216,6 +217,17 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(css).toContain('.blitz-contract-list');
     expect(css).toContain('.blitz-contract.is-complete');
     expect(css).toContain('@media (prefers-reduced-motion: no-preference)');
+  });
+
+  it('uses an authored full-screen game identity instead of a generic card stack', () => {
+    expect(app).toContain('createRushLogo');
+    expect(app).toContain('createNimiqPoweredBy');
+    expect(brand).toContain('RIDE THE RIDGE');
+    expect(brand).toContain('createNimiqMark');
+    expect(css).toContain('.blitz-rush-logo');
+    expect(css).toContain('.blitz-powered');
+    expect(css).toContain('.blitz-fullscreen-page');
+    expect(css).toContain('orientation: landscape');
   });
 
   it('keeps every mobile action at least 52px and honours reduced motion', () => {

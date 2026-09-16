@@ -143,7 +143,7 @@ const CONTROLS_ART = `
        a sentence. The labels say which card is which. -->
   <g fill="${DIM}" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" font-weight="700" letter-spacing="2" text-anchor="middle">
     <text x="58" y="158">STEER</text>
-    <text x="160" y="158">DRIFT</text>
+    <text x="160" y="158">TUCK</text>
     <text x="262" y="158">BOOST</text>
   </g>
 </svg>`;
@@ -188,7 +188,7 @@ export const BLITZ_ONBOARDING_BEATS: readonly BlitzOnboardingBeat[] = [
     id: 'controls',
     kicker: 'THE RIDE',
     title: 'Steer. Drift. Boost.',
-    body: 'Drag to steer. A gearbox buys one slide, and a slide earns nitro back. Spend the nitro on the straights.',
+    body: 'Hold TUCK to make speed and BRAKE to make grip - the bike coasts if you do neither. A gearbox buys one slide, and a slide earns nitro back.',
     art: CONTROLS_ART,
   },
   {
