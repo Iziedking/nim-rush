@@ -19,6 +19,25 @@ export interface BlitzObstacle {
 }
 
 /**
+ * Supplies lying on the road.
+ *
+ * Boost and drift are no longer free, so this is where both come from. A
+ * bottle is nitro and a gearbox buys a slide, and because they sit in lanes
+ * rather than on the centre line, the line a rider takes is the same decision
+ * as how much fuel they finish with. Authored, never random: the server
+ * re-simulates every ranked run, so a supply that appeared by chance would put
+ * the two simulations out of step.
+ */
+export interface BlitzPickup {
+  readonly id: string;
+  readonly distance01: number;
+  readonly lane: number;
+  readonly kind: BlitzPickupKind;
+}
+
+export type BlitzPickupKind = 'nitro' | 'gearbox';
+
+/**
  * Where a run is judged on its racing line.
  *
  * One list, read by the simulation and by the renderer. These were two lists
@@ -62,6 +81,7 @@ export interface BlitzCityDefinition {
   readonly surfaceSegments: readonly BlitzSurfaceSegment[];
   readonly terrainFeatures: readonly BlitzTerrainFeature[];
   readonly obstacles: readonly BlitzObstacle[];
+  readonly pickups: readonly BlitzPickup[];
 }
 
 export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
@@ -111,6 +131,30 @@ export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
       { id: 'lagos-rock-20', distance01: 0.93, lane: -2.1 },
       { id: 'lagos-crate-21', distance01: 0.93, lane: 1.9, tier: 'pro' },
     ],
+    pickups: [
+      // The first bottle is dead centre: fuel is what holding a line is for.
+      { id: 'lagos-nitro-a', distance01: 0.03, lane: 0, kind: 'nitro' },
+      { id: 'lagos-gear-a', distance01: 0.078, lane: 1.2, kind: 'gearbox' },
+      { id: 'lagos-nitro-b', distance01: 0.122, lane: -1.7, kind: 'nitro' },
+      { id: 'lagos-nitro-c', distance01: 0.172, lane: 0.8, kind: 'nitro' },
+      { id: 'lagos-gear-b', distance01: 0.25, lane: -1.2, kind: 'gearbox' },
+      { id: 'lagos-nitro-d', distance01: 0.315, lane: 1.8, kind: 'nitro' },
+      { id: 'lagos-nitro-e', distance01: 0.358, lane: -0.6, kind: 'nitro' },
+      // Wide, past the pinch: the greedy inside line does not get this one.
+      { id: 'lagos-gear-c', distance01: 0.41, lane: 2.0, kind: 'gearbox' },
+      { id: 'lagos-nitro-f', distance01: 0.455, lane: -1.4, kind: 'nitro' },
+      // On the 0.5 gate. Centre is already the scored line; now it is fuel too.
+      { id: 'lagos-nitro-g', distance01: 0.5, lane: 0, kind: 'nitro' },
+      { id: 'lagos-gear-d', distance01: 0.575, lane: -2.0, kind: 'gearbox' },
+      { id: 'lagos-nitro-h', distance01: 0.622, lane: 1.6, kind: 'nitro' },
+      { id: 'lagos-nitro-i', distance01: 0.665, lane: 0.2, kind: 'nitro' },
+      // Just before the boardwalk launch, so a slide can be spent on the air.
+      { id: 'lagos-gear-e', distance01: 0.732, lane: -1.4, kind: 'gearbox' },
+      { id: 'lagos-nitro-j', distance01: 0.768, lane: 0, kind: 'nitro' },
+      { id: 'lagos-nitro-k', distance01: 0.822, lane: 1.2, kind: 'nitro' },
+      { id: 'lagos-gear-f', distance01: 0.865, lane: -1.8, kind: 'gearbox' },
+      { id: 'lagos-nitro-l', distance01: 0.958, lane: -0.4, kind: 'nitro' },
+    ],
   },
   {
     id: 'london', name: 'London', circuit: 'London Relay', callout: 'Wet corners. Red signals. Hold the line.',
@@ -143,6 +187,26 @@ export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
       { id: 'london-cab-17', distance01: 0.872, lane: 1.8 },
       { id: 'london-bus-18', distance01: 0.918, lane: -1.6 },
       { id: 'london-cab-19', distance01: 0.918, lane: 1.7, tier: 'pro' },
+    ],
+    pickups: [
+      { id: 'london-nitro-a', distance01: 0.03, lane: 0, kind: 'nitro' },
+      { id: 'london-gear-a', distance01: 0.082, lane: -0.4, kind: 'gearbox' },
+      { id: 'london-nitro-b', distance01: 0.13, lane: 1.6, kind: 'nitro' },
+      { id: 'london-nitro-c', distance01: 0.175, lane: -1.4, kind: 'nitro' },
+      { id: 'london-gear-b', distance01: 0.255, lane: -1.0, kind: 'gearbox' },
+      { id: 'london-nitro-d', distance01: 0.3, lane: 0.2, kind: 'nitro' },
+      { id: 'london-nitro-e', distance01: 0.352, lane: 1.7, kind: 'nitro' },
+      { id: 'london-gear-c', distance01: 0.437, lane: 1.9, kind: 'gearbox' },
+      { id: 'london-nitro-f', distance01: 0.5, lane: 0, kind: 'nitro' },
+      { id: 'london-nitro-g', distance01: 0.568, lane: -1.6, kind: 'nitro' },
+      { id: 'london-gear-d', distance01: 0.61, lane: 1.7, kind: 'gearbox' },
+      { id: 'london-nitro-h', distance01: 0.658, lane: -0.5, kind: 'nitro' },
+      { id: 'london-nitro-i', distance01: 0.74, lane: 0, kind: 'nitro' },
+      { id: 'london-gear-e', distance01: 0.805, lane: 1.8, kind: 'gearbox' },
+      { id: 'london-nitro-j', distance01: 0.85, lane: -1.5, kind: 'nitro' },
+      { id: 'london-nitro-k', distance01: 0.895, lane: 0.3, kind: 'nitro' },
+      { id: 'london-gear-f', distance01: 0.94, lane: 1.6, kind: 'gearbox' },
+      { id: 'london-nitro-l', distance01: 0.975, lane: -0.8, kind: 'nitro' },
     ],
   },
   {
@@ -177,6 +241,26 @@ export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
       { id: 'dubai-coupe-18', distance01: 0.915, lane: 2.1 },
       { id: 'dubai-van-19', distance01: 0.915, lane: -1.9, tier: 'pro' },
       { id: 'dubai-coupe-20', distance01: 0.958, lane: 0.7 },
+    ],
+    pickups: [
+      { id: 'dubai-nitro-a', distance01: 0.03, lane: 0, kind: 'nitro' },
+      { id: 'dubai-gear-a', distance01: 0.08, lane: 0.6, kind: 'gearbox' },
+      { id: 'dubai-nitro-b', distance01: 0.128, lane: -2.0, kind: 'nitro' },
+      { id: 'dubai-nitro-c', distance01: 0.178, lane: 1.4, kind: 'nitro' },
+      { id: 'dubai-gear-b', distance01: 0.228, lane: -1.2, kind: 'gearbox' },
+      { id: 'dubai-nitro-d', distance01: 0.275, lane: -0.4, kind: 'nitro' },
+      { id: 'dubai-nitro-e', distance01: 0.32, lane: 2.2, kind: 'nitro' },
+      { id: 'dubai-gear-c', distance01: 0.365, lane: -2.2, kind: 'gearbox' },
+      { id: 'dubai-nitro-f', distance01: 0.5, lane: 0, kind: 'nitro' },
+      { id: 'dubai-nitro-g', distance01: 0.568, lane: -0.6, kind: 'nitro' },
+      { id: 'dubai-gear-d', distance01: 0.615, lane: 2.3, kind: 'gearbox' },
+      { id: 'dubai-nitro-h', distance01: 0.7, lane: -1.4, kind: 'nitro' },
+      { id: 'dubai-nitro-i', distance01: 0.74, lane: 0, kind: 'nitro' },
+      { id: 'dubai-gear-e', distance01: 0.805, lane: 0.4, kind: 'gearbox' },
+      { id: 'dubai-nitro-j', distance01: 0.85, lane: -2.2, kind: 'nitro' },
+      { id: 'dubai-nitro-k', distance01: 0.892, lane: 1.0, kind: 'nitro' },
+      { id: 'dubai-gear-f', distance01: 0.94, lane: -1.0, kind: 'gearbox' },
+      { id: 'dubai-nitro-l', distance01: 0.98, lane: 1.8, kind: 'nitro' },
     ],
   },
 ];

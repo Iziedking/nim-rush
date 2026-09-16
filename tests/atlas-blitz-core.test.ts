@@ -196,7 +196,10 @@ describe('Beacon Blitz deterministic arcade core', () => {
        * drift, one obstacle of planning - so this is a floor, not a ceiling.
        */
       for (let tick = 0; tick < BLITZ_TICK_RATE * 90 && state.phase !== 'finished'; tick += 1) {
-        state = stepBlitzRun(state, blitzRiderInput(state, { boost: tick % 120 < 24 }));
+        // Boost when there is fuel, which is what a rider does now that fuel
+        // is finite. The old fixed rhythm was written for a tank that refilled
+        // on its own and no longer describes anybody.
+        state = stepBlitzRun(state, blitzRiderInput(state));
       }
       expect(state.collisions, city.id).toBeLessThanOrEqual(2);
       expect(state.phase, city.id).toBe('finished');

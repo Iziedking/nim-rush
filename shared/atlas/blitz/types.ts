@@ -13,7 +13,8 @@ export type BlitzPhysicsEvent =
   | { readonly type: 'skid'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
   | { readonly type: 'surface-change'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
   | { readonly type: 'boost-start'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
-  | { readonly type: 'boost-end'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface };
+  | { readonly type: 'boost-end'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
+  | { readonly type: 'pickup'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface; readonly pickup: 'nitro' | 'gearbox' };
 
 export interface BlitzInput {
   readonly steer: number;
@@ -97,6 +98,32 @@ export interface BlitzRunState {
   readonly boostEnergy: number;
   readonly boostActive: boolean;
   readonly driftActive: boolean;
+  /*
+   * Supplies.
+   *
+   * Boost and drift are carried now, not granted. The capacities come from the
+   * rider's loadout at the moment the run was created and never change during
+   * it, so a run is a closed system: what a rider finishes with is what they
+   * picked up off the road.
+   */
+  readonly boostCapacity: number;
+  readonly driftCharges: number;
+  readonly driftCapacity: number;
+  /** How long one gearbox holds a slide open. Fixed for the run. */
+  readonly driftWindowTicks: number;
+  /** Ticks left in the slide this gearbox bought. Zero when not sliding. */
+  readonly driftTicksLeft: number;
+  /**
+   * The drift button has been held since the last slide ran out.
+   *
+   * Without this, holding the button would spend every gearbox back to back
+   * the instant each window closed. A slide has to be asked for.
+   */
+  readonly driftLatched: boolean;
+  readonly pickupReach: number;
+  readonly collectedPickupIds: readonly string[];
+  readonly nitroTaken: number;
+  readonly gearboxTaken: number;
   readonly distanceScore: number;
   readonly lineScore: number;
   readonly controlScore: number;

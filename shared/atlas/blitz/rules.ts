@@ -21,12 +21,12 @@ export interface BlitzDifficultyRules {
 
 export const BLITZ_DIFFICULTY_RULES: Readonly<Record<BlitzDifficulty, BlitzDifficultyRules>> = {
   rookie: {
-    difficulty: 'rookie', rulesetVersion: 'rush-course-v6-rookie', obstacleTier: 'core',
+    difficulty: 'rookie', rulesetVersion: 'rush-supplies-v7-rookie', obstacleTier: 'core',
     lineTolerance: 0.52, controlSpeedCapMps: 22, controlExitSpeedMps: 18,
     riskWindowStart: 0.64, riskWindowEnd: 0.73,
   },
   pro: {
-    difficulty: 'pro', rulesetVersion: 'rush-course-v6-pro', obstacleTier: 'all',
+    difficulty: 'pro', rulesetVersion: 'rush-supplies-v7-pro', obstacleTier: 'all',
     lineTolerance: 0.38, controlSpeedCapMps: 20, controlExitSpeedMps: 20,
     riskWindowStart: 0.61, riskWindowEnd: 0.77,
   },

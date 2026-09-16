@@ -1,4 +1,5 @@
 import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles } from './cities';
+import { BLITZ_BASE_LOADOUT, type BlitzLoadout } from './rider';
 import { missionWindow, selectBlitzMissions } from './missions';
 import { blitzRules, type BlitzDifficultyRules } from './rules';
 import { blitzSurface } from './surfaces';
@@ -11,14 +12,32 @@ const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
 // The gates a rider can see. One list, shared with the renderer, because a
 // rider threading the gate in front of them must be the rider being scored.
 const LINE_GATE_FRACTIONS = BLITZ_LINE_GATES;
-const BOOST_MAX = 60;
 const BOOST_DRAIN = 0.55;
-const BOOST_IDLE_REGEN = 0.1;
+/*
+ * There is no idle regen any more.
+ *
+ * A tank that refilled on its own made boost a button rather than a decision:
+ * a rider who did nothing had the same fuel as a rider who took the harder
+ * line for a bottle. Nitro now comes off the road, or out of a slide, and from
+ * nowhere else.
+ */
 const BOOST_DRIFT_REGEN = 0.45;
 const BOOST_ENGAGE_ENERGY = 9;
+/** What one bottle is worth: about a second of boost. */
+export const BLITZ_NITRO_BOTTLE = 18;
 
-export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; difficulty?: BlitzDifficulty }): BlitzRunState {
+/**
+ * Start a run.
+ *
+ * `loadout` defaults to the base one on purpose. `replayBlitzTrace` calls this
+ * with the city and the seed alone, so every ranked run is verified against the
+ * base loadout whatever the client believed it was riding with - a client that
+ * handed itself a bigger tank produces a trace the server disagrees with, and
+ * the run is refused rather than ranked.
+ */
+export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; difficulty?: BlitzDifficulty; loadout?: BlitzLoadout }): BlitzRunState {
   const difficulty = input.difficulty ?? 'rookie';
+  const loadout = input.loadout ?? BLITZ_BASE_LOADOUT;
   const rules = blitzRules(difficulty);
   const city = blitzCity(input.cityId);
   const missions: BlitzMissionState[] = selectBlitzMissions(input.seed, difficulty).map((mission) => {
@@ -57,9 +76,19 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
     airborne: false,
     surface: 'pavement',
     lastEvent: null,
-    boostEnergy: 28,
+    boostEnergy: Math.min(loadout.startingBoost, loadout.boostCapacity),
     boostActive: false,
     driftActive: false,
+    boostCapacity: loadout.boostCapacity,
+    driftCharges: Math.min(loadout.startingDrift, loadout.driftCapacity),
+    driftCapacity: loadout.driftCapacity,
+    driftWindowTicks: loadout.driftWindowTicks,
+    driftTicksLeft: 0,
+    driftLatched: false,
+    pickupReach: loadout.pickupReach,
+    collectedPickupIds: [],
+    nitroTaken: 0,
+    gearboxTaken: 0,
     distanceScore: 0,
     lineScore: 0,
     controlScore: 0,
@@ -93,7 +122,38 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const rules = blitzRules(state.difficulty);
   const elapsedTicks = state.elapsedTicks + 1;
   const elapsedMs = Math.round(elapsedTicks * 1_000 / BLITZ_TICK_RATE);
-  const driftActive = input.drift && Math.abs(input.steer) >= 0.2 && state.speedMps >= 8;
+  /*
+   * A slide costs a gearbox.
+   *
+   * Drift used to be free and unlimited, which made it the obvious input at
+   * every corner and therefore not a choice. One gearbox buys one window; the
+   * button has to be released before another can be spent, or holding it would
+   * empty the frame in a second and a half.
+   */
+  const wantsDrift = input.drift && Math.abs(input.steer) >= 0.2 && state.speedMps >= 8;
+  let driftCharges = state.driftCharges;
+  let driftTicksLeft = 0;
+  let driftLatched = state.driftLatched;
+  let driftActive = false;
+  if (!input.drift) {
+    driftLatched = false;
+  } else if (!wantsDrift) {
+    // Asking for a slide too slowly, or without steering into it. The window
+    // is held rather than thrown away: this is a rider mid-corner, not a
+    // rider who let go.
+    driftTicksLeft = state.driftTicksLeft;
+    driftLatched = state.driftLatched;
+  } else if (state.driftTicksLeft > 0) {
+    driftTicksLeft = state.driftTicksLeft - 1;
+    driftActive = true;
+    if (driftTicksLeft === 0) driftLatched = true;
+  } else if (!driftLatched && driftCharges > 0) {
+    driftCharges -= 1;
+    driftTicksLeft = Math.max(0, state.driftWindowTicks - 1);
+    driftActive = true;
+  } else {
+    driftLatched = true;
+  }
   const brakeActive = input.brake === true;
   const routeSurface = surfaceAt(city, state.distanceMeters);
   const surface = Math.abs(state.laneOffset) > city.roadWidth * 0.5 ? 'grass' : routeSurface;
@@ -120,7 +180,9 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     speedMps = Math.max(0, state.speedMps + acceleration / BLITZ_TICK_RATE);
   }
   if (state.airborne && !brakeActive) speedMps = state.speedMps;
-  let boostEnergy = clamp(state.boostEnergy + (driftActive ? BOOST_DRIFT_REGEN : BOOST_IDLE_REGEN) - (boostActive ? BOOST_DRAIN : 0), 0, BOOST_MAX);
+  // Sliding still feeds the tank, which is what makes a gearbox worth
+  // spending: a slide is how a rider turns control into fuel.
+  let boostEnergy = clamp(state.boostEnergy + (driftActive ? BOOST_DRIFT_REGEN : 0) - (boostActive ? BOOST_DRAIN : 0), 0, state.boostCapacity);
   let distanceMeters = Math.min(city.lengthMeters, state.distanceMeters + speedMps / BLITZ_TICK_RATE);
   let distanceScore = Math.floor(distanceMeters * 10);
   let lineScore = state.lineScore;
@@ -136,6 +198,9 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   let lastImpactTick = state.lastImpactTick;
   const processedObstacleIds = [...state.processedObstacleIds];
   const processedFeatureIds = [...state.processedFeatureIds];
+  const collectedPickupIds = [...state.collectedPickupIds];
+  let nitroTaken = state.nitroTaken;
+  let gearboxTaken = state.gearboxTaken;
   let missions = state.missions.map((mission) => ({ ...mission }));
   let heightMeters = state.heightMeters;
   let verticalVelocityMps = state.verticalVelocityMps;
@@ -217,6 +282,32 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     }
   }
   distanceScore += nearMisses * 180;
+
+  /*
+   * Supplies taken off the road.
+   *
+   * Placed after the obstacle pass on purpose: a rider knocked off their line
+   * by a collision misses the bottle they were reaching for, so contact costs
+   * fuel as well as points. Airborne riders still collect - taking a bottle
+   * off a jump is one of the better things in the game.
+   */
+  for (const pickup of city.pickups) {
+    if (collectedPickupIds.includes(pickup.id)) continue;
+    const at = pickup.distance01 * city.lengthMeters;
+    // The tick the bike crosses it, and only that tick.
+    if (state.distanceMeters > at || distanceMeters < at) continue;
+    if (Math.abs(laneOffset - pickup.lane) > state.pickupReach) continue;
+    collectedPickupIds.push(pickup.id);
+    if (pickup.kind === 'nitro') {
+      boostEnergy = Math.min(state.boostCapacity, boostEnergy + BLITZ_NITRO_BOTTLE);
+      nitroTaken += 1;
+    } else {
+      // A gearbox over the cap is lost. The cap is the point of the cap.
+      driftCharges = Math.min(state.driftCapacity, driftCharges + 1);
+      gearboxTaken += 1;
+    }
+    lastEvent = { type: 'pickup', tick: state.tick + 1, intensity: 1, surface, pickup: pickup.kind };
+  }
   for (const fraction of LINE_GATE_FRACTIONS) {
     const gateId = `line-gate-${fraction}`;
     const gateDistance = city.lengthMeters * fraction;
@@ -256,6 +347,12 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     boostEnergy,
     boostActive,
     driftActive,
+    driftCharges,
+    driftTicksLeft,
+    driftLatched,
+    collectedPickupIds,
+    nitroTaken,
+    gearboxTaken,
     distanceScore,
     lineScore,
     controlScore,

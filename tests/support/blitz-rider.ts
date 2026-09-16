@@ -20,6 +20,8 @@ import type { BlitzInput, BlitzRunState } from '../../shared/atlas/blitz/types';
 const LOOKAHEAD_METRES = 34;
 /** The simulation's own collision margin. See the obstacle loop in core.ts. */
 const HIT_MARGIN = 0.32;
+/** Narrower than this and the rider will not commit to a corridor. */
+const MIN_CORRIDOR = 1.2;
 
 export function blitzRacingLine(state: BlitzRunState): number {
   const city = blitzCity(state.cityId);
@@ -34,37 +36,84 @@ export function blitzRacingLine(state: BlitzRunState): number {
     .filter((entry) => entry.to > entry.from)
     .sort((left, right) => left.from - right.from);
 
-  // Nothing ahead: hold the centre, which is also where the line gates score.
-  let target = 0;
-  if (blocked.length > 0) {
-    let widest = -1;
-    let cursor = -edge;
-    const consider = (from: number, to: number) => {
-      const width = to - from;
-      // Ties go to the gap nearer the bike, so the rider does not cross the
-      // road for a corridor no better than the one beside it.
-      const better = width > widest + 0.01
-        || (Math.abs(width - widest) <= 0.01 && Math.abs((from + to) / 2 - state.laneOffset) < Math.abs(target - state.laneOffset));
-      if (width > 0 && better) { widest = Math.max(widest, width); target = (from + to) / 2; }
-    };
-    for (const span of blocked) {
-      if (span.from > cursor) consider(cursor, span.from);
-      cursor = Math.max(cursor, span.to);
-    }
-    consider(cursor, edge);
-    // Stay a little inside the shoulder: leaving the road is its own penalty.
-    target = Math.max(-edge + 0.3, Math.min(edge - 0.3, target));
+  // Every clear corridor between here and the lookahead.
+  const gaps: { from: number; to: number }[] = [];
+  let cursor = -edge;
+  for (const span of blocked) {
+    if (span.from > cursor) gaps.push({ from: cursor, to: span.from });
+    cursor = Math.max(cursor, span.to);
   }
+  if (cursor < edge) gaps.push({ from: cursor, to: edge });
+
+  const supply = nearestSupplyLane(state, city);
+  /*
+   * Nothing ahead: hold the centre, which is also where the line gates score,
+   * unless there is a supply worth reaching for.
+   *
+   * With obstacles ahead, take the corridor that has the supply in it if one
+   * of them does and is wide enough to ride. That ordering is the whole point
+   * of where the supplies were placed: a rider should not have to choose
+   * between collecting and surviving, and if this rider ever has to, the
+   * placement is wrong and the course tests will say so.
+   */
+  let target = supply ?? 0;
+  if (gaps.length > 0) {
+    const rideable = gaps.filter((gap) => gap.to - gap.from >= MIN_CORRIDOR);
+    const withSupply = supply === null ? undefined : rideable.find((gap) => supply >= gap.from && supply <= gap.to);
+    if (withSupply) {
+      target = Math.max(withSupply.from + 0.2, Math.min(withSupply.to - 0.2, supply!));
+    } else {
+      const choices = rideable.length > 0 ? rideable : gaps;
+      const best = choices.reduce((left, right) => {
+        const width = (gap: { from: number; to: number }) => gap.to - gap.from;
+        if (width(right) > width(left) + 0.01) return right;
+        if (width(left) > width(right) + 0.01) return left;
+        // Ties go to the corridor nearer the bike, so the rider does not
+        // cross the road for a gap no better than the one beside it.
+        const near = (gap: { from: number; to: number }) => Math.abs((gap.from + gap.to) / 2 - state.laneOffset);
+        return near(right) < near(left) ? right : left;
+      });
+      target = (best.from + best.to) / 2;
+    }
+  }
+  // Stay a little inside the shoulder: leaving the road is its own penalty.
+  target = Math.max(-edge + 0.3, Math.min(edge - 0.3, target));
 
   const correction = (target - state.laneOffset) * 1.6;
   return Math.max(-1, Math.min(1, correction));
 }
 
-/** The rider's full input for a tick, with a boost rhythm a person could hold. */
-export function blitzRiderInput(state: BlitzRunState, options: { boost?: boolean } = {}): BlitzInput {
+/**
+ * The next supply this rider would reach for, as a lane to aim at.
+ *
+ * Only the nearest one, and only when it is close enough to matter. Chasing a
+ * bottle forty metres away would have the rider weaving across the road for
+ * the whole run, which is neither realistic nor a fair test of the course.
+ */
+function nearestSupplyLane(state: BlitzRunState, city: ReturnType<typeof blitzCity>): number | null {
+  let best: { lane: number; distance: number } | null = null;
+  for (const pickup of city.pickups) {
+    if (state.collectedPickupIds.includes(pickup.id)) continue;
+    const at = pickup.distance01 * city.lengthMeters;
+    const gap = at - state.distanceMeters;
+    if (gap < 0 || gap > LOOKAHEAD_METRES) continue;
+    if (!best || gap < best.distance) best = { lane: pickup.lane, distance: gap };
+  }
+  return best ? best.lane : null;
+}
+
+/**
+ * The rider's full input for a tick.
+ *
+ * Drift is spent the way a person would spend it: into a corner, when there is
+ * a gearbox to spend and the bike is fast enough for the slide to do anything.
+ * Boost is held whenever there is fuel, because that is what fuel is for.
+ */
+export function blitzRiderInput(state: BlitzRunState, options: { boost?: boolean; drift?: boolean } = {}): BlitzInput {
+  const steer = blitzRacingLine(state);
   return {
-    steer: blitzRacingLine(state),
-    drift: false,
-    boost: options.boost ?? state.tick % 140 < 24,
+    steer,
+    drift: options.drift ?? (state.driftCharges > 0 && Math.abs(steer) > 0.55 && state.speedMps >= 12),
+    boost: options.boost ?? state.boostEnergy > 12,
   };
 }
