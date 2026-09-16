@@ -3,7 +3,15 @@ import type { BlitzDifficulty } from './types';
 export interface BlitzDifficultyRules {
   readonly difficulty: BlitzDifficulty;
   readonly rulesetVersion: string;
-  readonly obstacleLimit: number;
+  /**
+   * Which obstacle tier is solid.
+   *
+   * This was a count, and the renderer did not honour it: a rookie run drew
+   * four obstacles and collided with two, so half of what a rider swerved
+   * around was scenery. A tier is read by the simulation and the renderer
+   * alike, so what is drawn and what is solid cannot drift apart.
+   */
+  readonly obstacleTier: 'core' | 'all';
   readonly lineTolerance: number;
   readonly controlSpeedCapMps: number;
   readonly controlExitSpeedMps: number;
@@ -13,12 +21,12 @@ export interface BlitzDifficultyRules {
 
 export const BLITZ_DIFFICULTY_RULES: Readonly<Record<BlitzDifficulty, BlitzDifficultyRules>> = {
   rookie: {
-    difficulty: 'rookie', rulesetVersion: 'rush-missions-v5-rookie', obstacleLimit: 2,
+    difficulty: 'rookie', rulesetVersion: 'rush-course-v6-rookie', obstacleTier: 'core',
     lineTolerance: 0.52, controlSpeedCapMps: 22, controlExitSpeedMps: 18,
     riskWindowStart: 0.64, riskWindowEnd: 0.73,
   },
   pro: {
-    difficulty: 'pro', rulesetVersion: 'rush-missions-v5-pro', obstacleLimit: Number.POSITIVE_INFINITY,
+    difficulty: 'pro', rulesetVersion: 'rush-course-v6-pro', obstacleTier: 'all',
     lineTolerance: 0.38, controlSpeedCapMps: 20, controlExitSpeedMps: 20,
     riskWindowStart: 0.61, riskWindowEnd: 0.77,
   },

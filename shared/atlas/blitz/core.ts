@@ -1,4 +1,4 @@
-import { blitzCity } from './cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles } from './cities';
 import { missionWindow, selectBlitzMissions } from './missions';
 import { blitzRules, type BlitzDifficultyRules } from './rules';
 import { blitzSurface } from './surfaces';
@@ -8,7 +8,9 @@ import type { BlitzCityId, BlitzDifficulty, BlitzInput, BlitzMissionState, Blitz
 export const BLITZ_TICK_RATE = 30;
 export const BLITZ_LIMIT_SECONDS = 90;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
-const LINE_GATE_FRACTIONS = [0.26, 0.5, 0.74] as const;
+// The gates a rider can see. One list, shared with the renderer, because a
+// rider threading the gate in front of them must be the rider being scored.
+const LINE_GATE_FRACTIONS = BLITZ_LINE_GATES;
 const BOOST_MAX = 60;
 const BOOST_DRAIN = 0.55;
 const BOOST_IDLE_REGEN = 0.1;
@@ -175,7 +177,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     lastImpactTick = elapsedTicks;
   }
 
-  const enabledObstacleIds = new Set(city.obstacles.slice(0, rules.obstacleLimit).map((obstacle) => obstacle.id));
+  const enabledObstacleIds = new Set(blitzEnabledObstacles(city, rules.difficulty).map((obstacle) => obstacle.id));
   for (const obstacle of nearbyCourseColliders(city.id, state.distanceMeters)) {
     if (!obstacle.roadside && !enabledObstacleIds.has(obstacle.id)) continue;
     const nearFace = obstacle.distance - obstacle.halfLength - 1.1;

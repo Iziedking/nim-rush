@@ -6,6 +6,7 @@ import type { BlitzSubmissionInput } from '../shared/atlas/blitz/competition';
 import { createAtlasBlitzService } from '../server/atlas/blitz';
 import type { AtlasDailyService } from '../server/atlas/daily';
 import { createAtlasStateStore, type AtlasRepositorySnapshot, type AtlasStateStore } from '../server/atlas/persistence';
+import { blitzRiderInput } from './support/blitz-rider';
 
 async function fixture(stateStore?: AtlasStateStore, daily?: Pick<AtlasDailyService, 'qualifyVerifiedRun'>) {
   let clock = 1_000;
@@ -18,7 +19,9 @@ async function fixture(stateStore?: AtlasStateStore, daily?: Pick<AtlasDailyServ
   let state = createBlitzRun({ cityId: ticket.cityId, seed: ticket.seed });
   const frames: BlitzTraceFrame[] = [];
   while (state.phase !== 'finished' && state.phase !== 'timeout') {
-    const input = { steer: 0, drift: false, boost: false };
+    // A ridden trace, so the fixture is a run the server would actually
+    // accept rather than a minute of collisions.
+    const input = blitzRiderInput(state, { boost: false });
     frames.push({ tick: frames.length, input });
     state = stepBlitzRun(state, input);
   }

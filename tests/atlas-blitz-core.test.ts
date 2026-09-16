@@ -4,6 +4,7 @@ import { BLITZ_TICK_RATE, createBlitzRun, getBlitzScoreBreakdown, sampleBlitzRou
 import { BLITZ_CITIES, nextBlitzCity } from '../shared/atlas/blitz/cities';
 import { selectBlitzMissions } from '../shared/atlas/blitz/missions';
 import type { BlitzInput, BlitzRunState } from '../shared/atlas/blitz/types';
+import { blitzRiderInput } from './support/blitz-rider';
 
 const idle: BlitzInput = { steer: 0, drift: false, boost: false };
 
@@ -24,14 +25,20 @@ function advance(state: BlitzRunState, ticks: number, input: BlitzInput = idle):
  * fast because its speed changes.
  */
 describe('the boost economy', () => {
-  const boost: BlitzInput = { steer: 0, drift: false, boost: true };
+  /*
+   * Boost, while riding the course rather than into it. Holding a dead-straight
+   * line is now a series of collisions, and a collision drains the tank on
+   * purpose - so a straight-line rider would measure the impact model here
+   * instead of the boost economy.
+   */
+  const boost = (state: BlitzRunState): BlitzInput => blitzRiderInput(state, { boost: true });
   const running = () => advance(createBlitzRun({ cityId: 'lagos', seed: 'boost' }), BLITZ_TICK_RATE * 3 + 2);
 
   it('holds a boost for seconds, not for one', () => {
     let state = running();
     let boostingTicks = 0;
     for (let tick = 0; tick < BLITZ_TICK_RATE * 6; tick += 1) {
-      state = stepBlitzRun(state, boost);
+      state = stepBlitzRun(state, boost(state));
       if (state.boostActive) boostingTicks += 1;
     }
     expect(boostingTicks / BLITZ_TICK_RATE).toBeGreaterThan(1.8);
@@ -41,7 +48,7 @@ describe('the boost economy', () => {
     let state = running();
     let fastest = 0;
     for (let tick = 0; tick < BLITZ_TICK_RATE * 4; tick += 1) {
-      state = stepBlitzRun(state, boost);
+      state = stepBlitzRun(state, boost(state));
       fastest = Math.max(fastest, state.speedMps);
     }
     // Dirt reduces Lagos cruise to 27 m/s; boost still adds 8.5 m/s.
@@ -61,11 +68,11 @@ describe('the boost economy', () => {
      * read as a judder. So this measures the shortest episode instead.
      */
     let state = running();
-    for (let tick = 0; tick < BLITZ_TICK_RATE * 30; tick += 1) state = stepBlitzRun(state, boost);
+    for (let tick = 0; tick < BLITZ_TICK_RATE * 30; tick += 1) state = stepBlitzRun(state, boost(state));
     const episodes: number[] = [];
     let current = 0;
     for (let tick = 0; tick < BLITZ_TICK_RATE * 20; tick += 1) {
-      state = stepBlitzRun(state, boost);
+      state = stepBlitzRun(state, boost(state));
       if (state.boostActive) current += 1;
       else if (current > 0) { if (state.elapsedTicks - state.lastImpactTick > BLITZ_TICK_RATE) episodes.push(current); current = 0; }
     }
@@ -145,7 +152,9 @@ describe('Beacon Blitz deterministic arcade core', () => {
     let sawSurface = false;
     let visitedNonPavement = false;
     for (let tick = 0; tick < BLITZ_TICK_RATE * 35 && state.phase === 'running'; tick += 1) {
-      state = stepBlitzRun(state, idle);
+      // Ridden rather than held: a rider who ploughs into the first rock never
+      // reaches the market kicker inside the window this checks.
+      state = stepBlitzRun(state, blitzRiderInput(state, { boost: false }));
       sawLaunch ||= state.lastEvent?.type === 'launch';
       sawLanding ||= state.lastEvent?.type === 'landing';
       sawSurface ||= state.lastEvent?.type === 'surface-change';
@@ -179,9 +188,17 @@ describe('Beacon Blitz deterministic arcade core', () => {
   it('finishes every launch city in 55–75 seconds on a clean strong run', () => {
     for (const city of BLITZ_CITIES) {
       let state = createBlitzRun({ cityId: city.id, seed: `${city.id}-clean-finish` });
+      /*
+       * Ridden, not held. `steer: 0` was a fair model of a course with four
+       * obstacles on it; against eighteen it is a rider ploughing through
+       * every one of them, which proves nothing about whether a city can be
+       * finished. The test rider is deliberately unskilled - no braking, no
+       * drift, one obstacle of planning - so this is a floor, not a ceiling.
+       */
       for (let tick = 0; tick < BLITZ_TICK_RATE * 90 && state.phase !== 'finished'; tick += 1) {
-        state = stepBlitzRun(state, { steer: 0, drift: false, boost: tick % 120 < 24 });
+        state = stepBlitzRun(state, blitzRiderInput(state, { boost: tick % 120 < 24 }));
       }
+      expect(state.collisions, city.id).toBeLessThanOrEqual(2);
       expect(state.phase, city.id).toBe('finished');
       expect(state.elapsedMs, city.id).toBeGreaterThanOrEqual(55_000);
       expect(state.elapsedMs, city.id).toBeLessThanOrEqual(75_000);

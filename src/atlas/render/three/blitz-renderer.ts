@@ -32,10 +32,11 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { blitzCity, type BlitzCityDefinition } from '../../../../shared/atlas/blitz/cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles, type BlitzCityDefinition } from '../../../../shared/atlas/blitz/cities';
+import { blitzRules } from '../../../../shared/atlas/blitz/rules';
 import { sampleBlitzRoute } from '../../../../shared/atlas/blitz/core';
 import { buildBlitzRoadRibbon } from '../../../../shared/atlas/blitz/road-ribbon';
-import type { BlitzCityId, BlitzRunState } from '../../../../shared/atlas/blitz/types';
+import type { BlitzCityId, BlitzDifficulty, BlitzRunState } from '../../../../shared/atlas/blitz/types';
 import { createBlitzRun } from '../../../../shared/atlas/blitz/core';
 import { courseTerrainHeight } from '../../../../shared/atlas/blitz/course';
 import { RushBike } from './rush-bike';
@@ -80,9 +81,14 @@ export class BlitzRenderer {
   private readonly renderer: WebGLRenderer;
   private cityRoot: Group | null = null;
   private bike: RushBike | null = null;
-  private relayGates: Group[] = [];
   private crowd: CityCrowd | null = null;
   private activeCity: BlitzCityId | null = null;
+  /*
+   * Part of the scene's identity, not a detail. The course a rider is shown has
+   * to be the course the simulation runs, and the two differ by difficulty, so
+   * reusing a rookie scene for a pro run would draw the wrong course.
+   */
+  private activeDifficulty: BlitzDifficulty = 'rookie';
   private reducedMotion = false;
   private cameraReady = false;
   private previousDistance = 0;
@@ -123,8 +129,8 @@ export class BlitzRenderer {
     this.scene.add(sun, sun.target);
   }
 
-  async loadCity(cityId: BlitzCityId): Promise<void> {
-    if (this.activeCity === cityId && this.cityRoot) return;
+  async loadCity(cityId: BlitzCityId, difficulty: BlitzDifficulty = 'rookie'): Promise<void> {
+    if (this.activeCity === cityId && this.activeDifficulty === difficulty && this.cityRoot) return;
     if (this.cityRoot) {
       this.cityRoot.removeFromParent();
       disposeTree(this.cityRoot);
@@ -132,7 +138,7 @@ export class BlitzRenderer {
     const city = blitzCity(cityId);
     this.scene.background = new Color(city.sky);
     this.scene.fog = new Fog(city.fog, 65, 225);
-    this.cityRoot = createCity(city);
+    this.cityRoot = createCity(city, difficulty);
     this.scene.add(this.cityRoot);
     this.crowd = cityId === 'lagos' ? null : createCityCrowd(city);
     if (this.crowd) {
@@ -142,15 +148,22 @@ export class BlitzRenderer {
     }
     this.bike = new RushBike();
     this.cityRoot.add(this.bike.root, this.bike.particles, this.bike.shadow);
-    this.relayGates = [0.24, 0.51, 0.77].map((distance01, index) => {
-      const gate = createRelayGate(city, index);
+    /*
+     * The line gates, at the exact fractions the simulation scores. They used
+     * to stand at 0.24 / 0.51 / 0.77 against a score taken at 0.26 / 0.5 /
+     * 0.74, so a rider who threaded the posts in front of them was marked
+     * several car-lengths later, on a line they never saw.
+     */
+    const corridor = Math.min(city.roadWidth * blitzRules(difficulty).lineTolerance, city.roadWidth / 2);
+    BLITZ_LINE_GATES.forEach((distance01, index) => {
+      const gate = createRelayGate(city, index, corridor);
       const pose = sampleBlitzRoute(city.id, city.lengthMeters * distance01);
       gate.position.set(pose.x, pose.y, pose.z);
       gate.rotation.y = pose.headingRadians;
       this.cityRoot!.add(gate);
-      return gate;
     });
     this.activeCity = cityId;
+    this.activeDifficulty = difficulty;
     this.cameraReady = false;
     this.previousDistance = 0;
   }
@@ -240,14 +253,19 @@ export class BlitzRenderer {
     const targetFov = this.reducedMotion ? 60 : 58 + speed * 9 + (state.boostActive ? 3 : 0);
     this.camera.fov = MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.exp(-dt * 5));
     this.camera.updateProjectionMatrix();
-    this.relayGates.forEach((gate, index) => { gate.visible = state.missions[index]?.status !== 'complete'; });
+    /*
+     * Always visible. These are scoring gates, and hiding one because an
+     * unrelated mission happened to complete removed the only cue a rider had
+     * for where their racing line was about to be judged. Mission progress has
+     * its own HUD.
+     */
     if (this.crowd) updateCityCrowd(this.crowd, state.tick);
     if (state.cityId === 'lagos' && this.cityRoot) updateRushCourse(this.cityRoot, state.distanceMeters);
   }
 }
 
-function createCity(city: BlitzCityDefinition): Group {
-  if (city.id === 'lagos') return createRushCourse(city.id);
+function createCity(city: BlitzCityDefinition, difficulty: BlitzDifficulty): Group {
+  if (city.id === 'lagos') return createRushCourse(city.id, difficulty);
   const root = new Group();
   root.name = `atlas-blitz-city-${city.id}`;
     const ground = new Mesh(new PlaneGeometry(1200, 1200), new MeshStandardMaterial({ color: city.fog, roughness: 1 }));
@@ -265,7 +283,9 @@ function createCity(city: BlitzCityDefinition): Group {
   createHeroDressing(root, city);
   createCourseFeatures(root, city);
   createBeacon(root, city);
-  for (const obstacle of city.obstacles) {
+  // Only what is solid. Drawing an obstacle the simulation ignores teaches a
+  // rider to swerve around nothing, and to mistrust the ones that are real.
+  for (const obstacle of blitzEnabledObstacles(city, difficulty)) {
     const pose = sampleBlitzRoute(city.id, city.lengthMeters * obstacle.distance01, obstacle.lane);
     const traffic = createTrafficVehicle(city, obstacle.id);
     traffic.position.set(pose.x, pose.y + 0.26, pose.z);
@@ -1047,19 +1067,38 @@ function createRoadHazard(city: BlitzCityDefinition, id: string): Group {
   return hazard;
 }
 
-function createRelayGate(city: BlitzCityDefinition, index: number): Group {
+/*
+ * A line gate.
+ *
+ * Two posts said "something happens here" without saying what. The scored
+ * condition is staying inside a corridor, so the gate now draws that corridor:
+ * a lit bar across the road at the width actually being judged, with the posts
+ * standing at its edges rather than off in the scenery.
+ */
+function createRelayGate(city: BlitzCityDefinition, index: number, corridorHalfWidth: number): Group {
   const gate = new Group();
   gate.name = `nim-rush-course-marker-${index}`;
   const pole = new MeshStandardMaterial({ color: 0x454a40, roughness: .9 });
   const flag = new MeshStandardMaterial({ color: city.accent, roughness: .85, side: 2 });
+  const lit = new MeshBasicMaterial({ color: city.signal, transparent: true, opacity: .62 });
   for (const side of [-1, 1]) {
     const upright = new Mesh(new CylinderGeometry(.025, .025, 2.6, 6), pole);
     upright.position.set(side * (city.roadWidth / 2 + .5), 1.3, 0);
     const cloth = new Mesh(new PlaneGeometry(.4, 1.5), flag);
     cloth.position.set(side * (city.roadWidth / 2 + .72), 1.7, 0);
     cloth.rotation.y = side * .3;
-    gate.add(upright, cloth);
+    // The edge of the scored corridor, marked on the road itself: a rider
+    // reading the line does not have to look up to find it.
+    const edge = new Mesh(new BoxGeometry(.16, .02, 2.2), lit);
+    edge.position.set(side * corridorHalfWidth, .03, 0);
+    const marker = new Mesh(new CylinderGeometry(.045, .045, 1.5, 6), lit);
+    marker.position.set(side * corridorHalfWidth, .75, 0);
+    gate.add(upright, cloth, edge, marker);
   }
+  // One bar overhead spanning the corridor, so the gate reads from a distance.
+  const span = new Mesh(new BoxGeometry(corridorHalfWidth * 2, .1, .12), lit);
+  span.position.y = 2.35;
+  gate.add(span);
   return gate;
 }
 

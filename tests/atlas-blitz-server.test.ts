@@ -4,6 +4,7 @@ import { BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../shared/atlas/b
 import { hashBlitzTrace } from '../shared/atlas/blitz/replay';
 import type { BlitzCityId, BlitzTraceFrame } from '../shared/atlas/blitz/types';
 import { createAtlasBlitzService } from '../server/atlas/blitz';
+import { blitzRiderInput } from './support/blitz-rider';
 
 const walletA = 'NQ12 TEST WALLET A';
 const walletB = 'NQ34 TEST WALLET B';
@@ -19,7 +20,7 @@ async function completeTrace(cityId: BlitzCityId, seed: string): Promise<{ frame
   const frames: BlitzTraceFrame[] = [];
   let state = createBlitzRun({ cityId, seed });
   while (state.phase !== 'finished' && state.phase !== 'timeout') {
-    const input = { steer: 0, drift: false, boost: state.tick % 140 < 24 };
+    const input = blitzRiderInput(state);
     frames.push({ tick: frames.length, input });
     state = stepBlitzRun(state, input);
   }

@@ -144,6 +144,8 @@ export function nearbyCourseColliders(id: BlitzCityId, distance: number): readon
 
 export function obstacleShape(id: string): { halfWidth: number; halfLength: number; height: number } {
   if (id.includes('rock')) return { halfWidth: 0.8, halfLength: 0.85, height: 1.15 };
+  // A van blocks a lane without walling the road the way a double-decker does.
+  if (id.includes('van')) return { halfWidth: 0.72, halfLength: 1.05, height: 1.5 };
   if (id.includes('log')) return { halfWidth: 1.1, halfLength: 0.32, height: 0.6 };
   if (id.includes('bus')) return { halfWidth: 0.7, halfLength: 1.25, height: id.includes('london') ? 2.1 : 1.3 };
   if (id.includes('barrier')) return { halfWidth: 0.9, halfLength: 0.15, height: 1.35 };
