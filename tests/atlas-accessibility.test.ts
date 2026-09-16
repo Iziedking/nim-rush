@@ -11,7 +11,7 @@ describe('NIM Atlas mobile and offline boundary', () => {
   it('registers the Atlas shell and keeps write-capable routes out of the cache', () => {
     expect(main).toContain("from './app/atlas-app'");
     expect(app).toContain("navigator.serviceWorker.register('/service-worker.js'");
-    expect(serviceWorker).toContain('sface-atlas-shell-');
+    expect(serviceWorker).toContain('nim-rush-shell-');
     expect(serviceWorker).not.toContain('sface-relay-shell-');
     expect(serviceWorker).toContain('/atlas/api');
     expect(serviceWorker).toContain("event.request.method !== 'GET'");
@@ -26,7 +26,7 @@ describe('NIM Atlas mobile and offline boundary', () => {
   });
 
   it('keeps the public app installable and accessible at portrait sizes', () => {
-    expect(JSON.parse(manifest)).toMatchObject({ name: 'NIM Atlas', display: 'standalone' });
+    expect(JSON.parse(manifest)).toMatchObject({ name: 'NIM RUSH', display: 'standalone' });
     expect(css).toContain('env(safe-area-inset-top)');
     expect(css).toContain('min-height: 44px');
     expect(css).toContain(':focus-visible');

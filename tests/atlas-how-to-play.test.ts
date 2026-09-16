@@ -58,8 +58,10 @@ describe('NIM Atlas clarity pass', () => {
     expect(css).toContain('.atlas-how-to-play');
     expect(css).toContain('.atlas-snapshot-grid');
     expect(css).toContain('min-height: 44px');
-    expect(readme).toContain('## The player loop');
-    expect(readme).toContain('atlas-390-pay-harbor.png');
+    // The README is NIM RUSH's now and carries its own captures. What has to
+    // stay true is that it explains the game and shows the real surface.
+    expect(readme).toContain('## The game');
+    expect(readme).toContain('nim-rush/screenshots/');
     expect(guideDoc).toContain('# How to play NIM Atlas');
     expect(guideDoc).toContain('Ask');
     expect(guideDoc).toContain('atlas-390-payment-review.png');

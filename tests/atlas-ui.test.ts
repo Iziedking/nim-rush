@@ -8,7 +8,9 @@ describe('NIM Atlas public first district UI', () => {
     expect(index).toContain('/src/atlas/main.ts');
     expect(index).toContain('/src/atlas/atlas.css');
     expect(index).not.toContain('/src/relay/main.ts');
-    expect(index).toContain('Race 90-second Nimiq relay circuits through Lagos, London, and Dubai.');
+    // The shipped description, not a pinned sentence: what must hold is that
+    // the page says what the game is, so a rename is not read as a regression.
+    expect(index).toContain('NIM RUSH is a daily downhill skill race');
   });
 
   it('ships semantic controls and required portrait accessibility policies', () => {
@@ -67,7 +69,7 @@ describe('NIM Atlas public first district UI', () => {
      * Mini App.
      */
     const parsed = JSON.parse(manifest) as { name: string; description: string };
-    expect(parsed.name).toBe('NIM Atlas');
+    expect(parsed.name).toBe('NIM RUSH');
     expect(parsed.description, 'the maker is not credited').toContain('Sface');
     expect(parsed.description, 'Nimiq Pay is not named').toContain('Nimiq Pay');
     expect(app).toContain('PRACTICE MODE / PLAYABLE WITHOUT A WALLET');
@@ -247,7 +249,7 @@ describe('NIM Atlas public first district UI', () => {
     const llms = readFileSync(new URL('../public/llms.txt', import.meta.url), 'utf8');
     expect(robots).toContain('User-agent: *');
     expect(robots).toContain('Allow: /');
-    expect(llms).toContain('# NIM Atlas');
+    expect(llms).toContain('# NIM RUSH');
     expect(llms).toContain('Nimiq Pay Mini App game');
   });
 });

@@ -107,6 +107,13 @@ use the browser probe with its public capture flag:
 node scripts/probe-rush-browser.mjs --origin=http://127.0.0.1:5173 --public-screenshots
 ```
 
+## Atlas adventure reference
+
+The earlier NIM Atlas adventure is still in the build and still reachable at
+[/?atlas=legacy](/?atlas=legacy). It is kept as a reference for the payment
+evidence flow - ask, permission, current network record - which NIM RUSH
+reuses for its verified runs. It is not the default game and is not ranked.
+
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Every

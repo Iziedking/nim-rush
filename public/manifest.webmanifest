@@ -1,7 +1,7 @@
 {
   "name": "NIM RUSH",
   "short_name": "NIM RUSH",
-  "description": "A daily downhill skill race for Nimiq Mini Apps. Hold the line, manage speed, and prove the cleanest descent.",
+  "description": "A daily downhill skill race by Sface for the Nimiq Pay Mini App. Hold the line, manage speed, and prove the cleanest descent.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#101430",

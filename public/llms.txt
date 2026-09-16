@@ -1,6 +1,7 @@
 # NIM RUSH
 
-NIM RUSH is a daily downhill skill-racing Mini App built for Nimiq. Each run
+NIM RUSH is a Nimiq Pay Mini App game by Sface: a daily downhill skill race.
+Each run
 asks the rider to read the ridge, manage speed, choose a racing line, and
 recover from mistakes before the finish.
 

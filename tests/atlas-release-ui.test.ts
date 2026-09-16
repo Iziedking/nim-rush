@@ -64,9 +64,9 @@ describe('NIM Atlas release-quality UI contract', () => {
   });
 
   it('introduces the active racer and labels the retained Atlas adventure', () => {
-    const firstSection = readme.slice(0, readme.indexOf('## The player loop'));
-    expect(firstSection).toContain('The default game is Beacon Blitz');
-    expect(firstSection).toContain('## Atlas adventure reference');
-    expect(firstSection).toContain('?atlas=legacy');
+    expect(readme).toContain('NIM RUSH');
+    // The legacy Atlas adventure is still reachable in the shipped app, so the
+    // README has to say how. A route nobody can find is a route nobody has.
+    expect(readme).toContain('?atlas=legacy');
   });
 });
