@@ -419,13 +419,72 @@ function createWebAudioBackend(): AtlasAudioBackend {
     engineOscillator.frequency.setTargetAtTime(52 + normalized * 82, now, 0.045);
     engineHarmonic.frequency.setTargetAtTime(104 + normalized * 164, now, 0.045);
     engineFilter.frequency.setTargetAtTime(220 + normalized * 1_160, now, 0.06);
-    engineGain.gain.setTargetAtTime(normalized * .0015, now, 0.08);
+    // Audible. At .0015 against wind at .075 the bike itself could not be
+  // heard at all, which is most of why the ride sounded thin.
+    engineGain.gain.setTargetAtTime((.006 + normalized * .026), now, 0.08);
     windFilter?.frequency.setTargetAtTime(380 + normalized * 2_400, now, 0.12);
     windFilter?.Q.setTargetAtTime(0.4 + normalized * 0.9, now, 0.12);
     windGain?.gain.setTargetAtTime(normalized * normalized * .075, now, .16);
     rollingFilter?.frequency.setTargetAtTime(bikeSurface === 'grass' ? 430 : bikeSurface === 'gravel' ? 2100 : bikeSurface === 'wood' ? 330 : bikeSurface === 'pavement' ? 650 : 1200, now, .08);
-    rollingGain?.gain.setTargetAtTime(bikeAirborne ? 0 : normalized * (.045 + Math.min(1, bikeSlip / 8) * .045) * (bikeSurface === 'grass' ? .55 : 1), now, .045);
+    // Tyre on surface, louder than it was: this is the layer that tells a
+  // rider what they are riding on.
+    rollingGain?.gain.setTargetAtTime(bikeAirborne ? 0 : normalized * (.075 + Math.min(1, bikeSlip / 8) * .08) * (bikeSurface === 'grass' ? .6 : 1), now, .045);
     rollingSource?.playbackRate.setTargetAtTime(.65 + normalized * .6, now, .08);
+  }
+
+  /** Filtered noise with a swept cutoff: the shape of most bike sounds. */
+  function noiseBurst(now: number, options: { output: GainNode; type: BiquadFilterType; from: number; to: number; peak: number; duration: number; q?: number; offset?: number }): void {
+    if (!context || !windSource?.buffer) return;
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    source.buffer = windSource.buffer;
+    filter.type = options.type;
+    filter.frequency.setValueAtTime(options.from, now);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(40, options.to), now + options.duration);
+    if (options.q !== undefined) filter.Q.value = options.q;
+    gain.gain.setValueAtTime(0.0001, now);
+    // A 12ms attack rather than a step, which would click on every event.
+    gain.gain.exponentialRampToValueAtTime(options.peak, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + options.duration);
+    source.connect(filter); filter.connect(gain); gain.connect(options.output);
+    source.start(now, (options.offset ?? 0) * Math.max(0, source.buffer.duration - options.duration - 0.05));
+    source.stop(now + options.duration + 0.02);
+    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+  }
+
+  /** A falling pitch with a body to it: the weight under an impact. */
+  function thud(now: number, output: GainNode, from: number, to: number, peak: number, duration: number, type: OscillatorType = 'sine'): void {
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(from, now);
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, to), now + duration);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    oscillator.connect(gain); gain.connect(output);
+    oscillator.start(now);
+    oscillator.stop(now + duration + 0.02);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  }
+
+  /** A clean note. Triangle rather than sine so it carries over the wind. */
+  function chime(at: number, output: GainNode, frequency: number, peak: number, duration: number): void {
+    if (!context) return;
+    const now = Math.max(at, context.currentTime);
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(frequency, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    oscillator.connect(gain); gain.connect(output);
+    oscillator.start(now);
+    oscillator.stop(now + duration + 0.02);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
   }
 
   function startEngine(): void {
@@ -491,22 +550,80 @@ function createWebAudioBackend(): AtlasAudioBackend {
   return {
     debugSnapshot: () => ({ context: context?.state ?? 'unavailable', samples: [...playing.keys()], bike: engineOscillator !== null }),
     setBikeContact: (surface, airborne, slip) => { bikeSurface = surface; bikeAirborne = airborne; bikeSlip = Math.abs(slip); },
+    /*
+     * Every physics event gets a voice.
+     *
+     * This used to answer impact and landing and return for everything else -
+     * and because playPhysicsCue hands the event to this backend and returns,
+     * the oscillator fallback never ran. Skids, launches, boosts and pickups
+     * were silent. A racing game that goes quiet when the rider does something
+     * well is the wrong way round.
+     *
+     * Noise through a filter, not a tone sweep: a bike on dirt is broadband,
+     * and a sine pitch-slide reads as a menu beep.
+     */
     physicsContact: (event) => {
-      if (!context || !windSource?.buffer || (event.type !== 'impact' && event.type !== 'landing')) return;
-      const now = context.currentTime;
-      if (now - impactAt < .14) return;
-      impactAt = now;
+      if (!context || !windSource?.buffer) return;
       const output = buses.get('events');
       if (!output) return;
-      const source = context.createBufferSource(), filter = context.createBiquadFilter(), gain = context.createGain();
-      source.buffer = windSource.buffer;
-      filter.type = 'lowpass'; filter.frequency.value = event.type === 'landing' ? 340 : 1100;
-      const duration = .08 + event.intensity * .17;
-      gain.gain.setValueAtTime(.04 + event.intensity * .32, now);
-      gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-      source.connect(filter); filter.connect(gain); gain.connect(output);
-      source.start(now, (event.tick % 40) / 40); source.stop(now + duration);
-      source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+      const now = context.currentTime;
+
+      if (event.type === 'impact' || event.type === 'landing') {
+        // Two impacts a tenth of a second apart are one impact to an ear.
+        if (now - impactAt < .14) return;
+        impactAt = now;
+        noiseBurst(now, {
+          output,
+          type: 'lowpass',
+          from: event.type === 'landing' ? 340 : 1100,
+          to: event.type === 'landing' ? 150 : 260,
+          peak: .12 + event.intensity * .34,
+          duration: .1 + event.intensity * .2,
+          offset: (event.tick % 40) / 40,
+        });
+        // The body of the hit. Noise alone reads as a hiss, not a collision.
+        thud(now, output, event.type === 'landing' ? 78 : 104, event.type === 'landing' ? 44 : 38, .16 + event.intensity * .2, .22);
+        return;
+      }
+
+      if (event.type === 'skid') {
+        // Resonant and mid-band: rubber letting go, not a crash.
+        noiseBurst(now, { output, type: 'bandpass', from: 1500, to: 900, peak: .05 + event.intensity * .12, duration: .2, q: 5.5, offset: (event.tick % 40) / 40 });
+        return;
+      }
+
+      if (event.type === 'launch') {
+        // Rising, because the bike is leaving the ground.
+        noiseBurst(now, { output, type: 'bandpass', from: 380, to: 2400, peak: .1, duration: .26, q: 1.2, offset: .2 });
+        return;
+      }
+
+      if (event.type === 'boost-start') {
+        // A whoosh with a note underneath it, so boost is felt as thrust.
+        noiseBurst(now, { output, type: 'bandpass', from: 260, to: 3200, peak: .13, duration: .34, q: 0.9, offset: .05 });
+        thud(now, output, 120, 300, .05, .3, 'sawtooth');
+        return;
+      }
+
+      if (event.type === 'boost-end') {
+        noiseBurst(now, { output, type: 'lowpass', from: 2200, to: 400, peak: .06, duration: .22, offset: .3 });
+        return;
+      }
+
+      if (event.type === 'surface-change') {
+        // A short tick, the width of a tyre crossing an edge.
+        noiseBurst(now, { output, type: 'bandpass', from: 900, to: 520, peak: .05, duration: .09, q: 2.4, offset: .45 });
+        return;
+      }
+
+      /*
+       * A supply. Two notes, because one is a blip and three is a jingle - and
+       * the two kinds take different intervals so a rider can tell what they
+       * picked up without looking down at the HUD.
+       */
+      const nitro = event.pickup === 'nitro';
+      chime(now, output, nitro ? 784 : 523, .055, .07);
+      chime(now + .075, output, nitro ? 1175 : 392, .05, .1);
     },
     unlock: () => {
       // Native Web Audio, MDN best practices read 2026-09-15. Autoplay may
