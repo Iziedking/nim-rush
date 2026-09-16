@@ -1,199 +1,117 @@
-# sFace / Beacon Blitz
+# NIM RUSH
 
-The default game is Beacon Blitz: ride a 90-second city circuit, steer around
-traffic, brake into corners, manage drift and boost, and feel authored surfaces,
-jumps and landings while answering short Nimiq route questions.
-Practice starts without a wallet. Ranked runs use wallet-bound tickets and
-server replay. NIM RUSH is the next development direction, not a claim that
-the proposed downhill physics already ships.
+[![NIM RUSH checks](https://github.com/Iziedking/sFace/actions/workflows/ci.yml/badge.svg)](https://github.com/Iziedking/sFace/actions/workflows/ci.yml)
 
-Play the current build at [sface.site](https://sface.site). The product is
-free and playable without a wallet. Practice mode is the default.
+NIM RUSH is a daily downhill skill-racing Mini App for Nimiq. Ride the ridge,
+read the terrain, and prove a cleaner descent than your last run.
 
-Last reviewed: 2026-09-15.
+[Play NIM RUSH](https://sface.site/) · [Nimiq Mini Apps](https://nimiq.dev/mini-apps/)
 
-## Ranked result integrity
+## The game
 
-The server reconstructs the result from the exact recorded controls. It rejects
-forged scores, mismatched wallet/ticket metadata, reused tickets, controls after
-finish, and runs received before their simulated duration could have elapsed.
-Ticket consumption and result storage are serialized within one service
-instance. A failed storage write does not publish an accepted result.
-Ranked tickets carry a versioned UTC daily challenge identity, so a leaderboard
-row belongs to one reproducible course seed and cannot silently mix days.
-If the browser loses the network after a run, the signed-ticket submission is
-kept locally and can be retried without creating a second run.
-Reward qualification is recorded as a durable server outbox after verification;
-reward-service outages do not remove a score or create a second eligibility.
+Every run is a short, deterministic descent over the Ridge Run course. Your
+speed is only useful when you can control it. The course rewards a clean line,
+late braking, stable landings, and deliberate risk.
 
-Run `npm run prove:blitz` for local replay, refusal and CPU timing evidence.
-These checks prove a legal simulation, not human play, wallet-host behavior or
-a chain payout. Multi-worker operation requires transactional storage. The
-public [current state report](docs/nim-atlas-current-state.md) records the
-verified product boundary and remaining release gates.
+The loop is:
 
-## Atlas adventure reference
+1. Choose the daily descent and its fixed ranked rules.
+2. Read the surface, corner, jump, and obstacle ahead.
+3. Steer, brake, drift, boost, or tuck to shape the run.
+4. Complete three physical mission contracts: one line, one control, and one risk contract.
+5. Review the result ledger and return with one clear improvement to chase.
 
-The sections below describe the retained adventure at `?atlas=legacy`.
-They are not a description of the default Blitz racing screen.
+## Controls
 
-## The player loop
+| Action | Keyboard | Touch |
+| --- | --- | --- |
+| Steer | Left / Right arrows or A / D | Drag the steering pad |
+| Drift | Space | Drift |
+| Boost | Shift | Boost |
+| Brake | Down arrow or S | Brake |
+| Tuck | Up arrow or W | Tuck |
+| Pause | P or Escape | Pause |
 
-Choose a role, enter Beacon Commons, follow the route marker, and use a Nimiq
-idea to solve a problem. The city changes only after the required evidence is
-present.
+The surface changes grip and speed. Dirt invites a different line from wood;
+ramps create airtime; landings preserve or destroy momentum; collisions cost
+score and time. The rider has full control, with only a small recovery guard to
+prevent a bad landing from becoming an unrecoverable input lock.
 
-- Explorer follows Mara's Last Lantern route and learns how a payment moves
-  from request to confirmation.
-- Builder repairs the same route, predicts provider observations, and works
-  through safe, allowlisted trials.
-- Daily Atlas gives one date-based field puzzle. Completion is stored locally;
-  reward eligibility is decided by the server when that feature is enabled.
-- The Living Knowledge Book turns the five payment verbs into short teach-backs:
-  Ask, Check, Approve, Confirm, and Unlock.
-- The Verified Core Run is a deterministic 22-action replay that can be
-  connected to wallet identity and server verification when competitive gates
-  are enabled.
+## Scoring
 
-The game explains Lunas at the moment they matter. One NIM is 100,000 Lunas;
-the practice lantern uses 10,000 Lunas, or 0.1 NIM. Practice mode never sends
-that amount.
+The finish screen exposes the complete score instead of hiding it behind a
+single number:
 
-## What is in the build
+- finish time
+- racing-line quality
+- braking and control
+- airtime and landing quality
+- mission completion
+- drift and control
+- collision penalties
+- missed-gate penalties
 
-| Surface | Current behavior |
-| --- | --- |
-| Beacon Commons | Full-screen procedural 3D city with player movement, camera orbit, route guidance, colliders, NPCs, LOD, city map, and local audio cues. |
-| Pay Harbor | Mara's Last Lantern mission. Practice mode shows the exact request and local evidence path. A separately configured TestAlbatross path can request wallet approval, then waits for server confirmation. |
-| District Atlas | A replayable curriculum route across Genesis Garden, Light Forest, Pay Harbor, Albatross Causeway, Validator Peaks, Builder City, and Beacon Core. |
-| Daily Atlas | A date-selected field puzzle with local completion persistence and server-owned competitive eligibility. |
-| Living Knowledge Book | Short explanations, examples, failure cases, and teach-back questions tied to the game loop. |
-| Verified Core Run | A local deterministic run with an optional wallet-binding, ticket, replay submission, and verified result path. |
+Ranked riders use equal fixed loadouts. Progression is earned through skill;
+there is no paid physics advantage or pay-to-win boost.
 
-The 3D city is the current playable focus. Pay Harbor's mission logic and
-payment review remain the authority boundary for Nimiq lessons. Not every
-curriculum district has a separate production 3D scene yet.
+## Verified competition
 
-## Architecture
+Practice is playable without a wallet. For ranked participation, Nimiq can
+provide identity and signed participation while the server issues a scoped run
+ticket and verifies the deterministic input trace. The browser's score is a
+claim; the verified replay is the result. A future friend challenge can compare
+verified asynchronous ghost runs without pretending to be live multiplayer.
 
-The build has four boundaries:
+Rewards are shown only when they are genuinely funded, transparent, and
+reconciled. NIM RUSH does not use gambling, chance-based rewards, fake players,
+or fake prize pools.
 
-```text
-shared/atlas       deterministic rules, curriculum, replay, economy, types
-        |           imported by both client and server
-src/atlas          Vite client, input, renderers, audio, screens, wallet seam
-        |           optional HTTP calls and Nimiq Pay provider calls
-server/atlas       validated routes, tickets, replay grading, persistence,
-                    chain lookup, leaderboard and reward gates
-public/atlas       generated manifests and checked-in public art assets
-```
+## Screenshots
 
-The shared modules do not use the DOM, canvas, network, storage, or wall clock.
-That lets the server rebuild a replay from the same definitions the client
-used. `src/atlas/app/atlas-app.ts` owns screen transitions. The renderer reads
-state but does not decide whether a payment or score is true. The server is the
-authority for competitive results, reward status, and canonical payment
-evidence.
+These snapshots come from the local PC browser capture flow and are checked in
+so the public repository shows the actual game surface.
 
-The Nimiq provider is isolated behind `src/atlas/wallet.ts` and the payment
-controller. Client callbacks and transaction lookups are evidence to inspect,
-not proof on their own. A live payment can unlock the world only after the
-server matches the network, recipient, integer Luna amount, success state, and
-confirmation threshold.
+<p>
+  <img src="public/nim-rush/screenshots/intro-landscape.png" width="720" alt="NIM RUSH daily descent launch screen" />
+</p>
+<p>
+  <img src="public/nim-rush/screenshots/course-355.png" width="720" alt="NIM RUSH rider approaching a course section" />
+</p>
+<p>
+  <img src="public/nim-rush/screenshots/result.png" width="720" alt="NIM RUSH result screen with score ledger and mission contracts" />
+</p>
 
-See [the current state](docs/nim-atlas-current-state.md) and [the architecture
-notes](docs/nim-atlas-architecture.md) for module ownership, failure states,
-and the current capability boundary.
+## Run locally
 
-## Local development
+Requirements: Node.js 20.19 or newer.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-The client works without a server and falls back to local practice content.
-Copy `.env.example` to `.env` only when you need local service or TestAlbatross
-configuration. `VITE_` values are public and must never contain secrets.
+Open the local address printed by Vite. The game starts in practice mode and
+does not require a wallet.
 
-Run the release checks:
+Release checks:
 
 ```bash
 npm run check
 npm run build
-npm run verify:atlas:contrast
 ```
 
-`verify:atlas:contrast` and `shoot:atlas` need a served build. In a second
-terminal:
+To capture fresh PC snapshots after a visual change, run the local server and
+use the browser probe with its public capture flag:
 
 ```bash
-npm run build
-npm run preview -- --host 127.0.0.1 --port 4173
-npm run shoot:atlas
-npm run verify:atlas:contrast
+node scripts/probe-rush-browser.mjs --origin=http://127.0.0.1:5173 --public-screenshots
 ```
 
-The screenshot command drives a real browser through
-`scripts/shoot-atlas.mjs`. It captures the welcome, How to play, Pay Harbor,
-payment review, Beacon Commons, Daily Atlas, District Atlas, and Core Run
-surfaces at the checked mobile viewports. The images are evidence for review,
-not hand-made mockups.
+## Contributing
 
-## Configuration boundaries
-
-The safe defaults are all off:
-
-- `ATLAS_TESTNET_ENABLED` and `VITE_ATLAS_TESTNET_ENABLED` enable the separate
-  TestAlbatross payment path only when recipient, price, RPC URLs, and
-  confirmation rules are present.
-- `ATLAS_COMPETITIVE_ENABLED` enables server-issued competitive tickets only
-  after the season, challenge, seed, and ruleset hashes are pinned.
-- `ATLAS_REWARDS_ENABLED` stays off until the owner has approved the reward
-  account, payout rules, reconciliation, and recovery runbook.
-- `ATLAS_DURABLE_REPOSITORY_ENABLED` must be on before a deployment may present
-  durable competitive or reward state.
-
-The declared first-season allocation is 5,000,000,000 Lunas, or 50,000 NIM.
-That is a planning allocation, not proof that funds are present or that a
-player has earned a payout.
-
-## Screenshots
-
-The current generated set is kept in [docs/shots](docs/shots) and mirrored to
-`public/atlas/screenshots` for review pages.
-
-<table>
-  <tr>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-welcome.png" width="180" alt="NIM Atlas welcome screen"><br><sub>Welcome</sub></td>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-beacon-commons.png" width="180" alt="Beacon Commons city"><br><sub>Beacon Commons</sub></td>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-pay-harbor.png" width="180" alt="Pay Harbor mission"><br><sub>Pay Harbor</sub></td>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-payment-review.png" width="180" alt="Payment review screen"><br><sub>Payment review</sub></td>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-daily.png" width="180" alt="Daily Atlas puzzle"><br><sub>Daily Atlas</sub></td>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-district-atlas.png" width="180" alt="District Atlas curriculum"><br><sub>District Atlas</sub></td>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><img src="docs/shots/atlas-390-core-run.png" width="180" alt="Verified Core Run"><br><sub>Verified Core Run</sub></td>
-    <td></td>
-    <td></td>
-  </tr>
-</table>
-
-The capture recipe is the source of truth. Re-run `npm run shoot:atlas` after a
-visual change instead of replacing an image by hand.
-
-## Release and submission
-
-Use [the current state report](docs/nim-atlas-current-state.md) for what has
-been verified. Use [the deployment runbook](docs/deploy.md) for environment
-boundaries and [the submission checklist](docs/submission.md) for the owner
-actions that still require a real Nimiq Pay device, the competition portal, or
-explicit treasury approval.
-
-The repository keeps the former Cycle I market game and its plans for context.
-Those files are marked historical. They are not the current product contract.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Every
+gameplay change should explain the player-facing rule, add a focused test, and
+include the verification command used.
 
 ## License
 

@@ -1,21 +1,23 @@
-# NIM Atlas
+# NIM RUSH
 
-> Sface is a Nimiq Pay Mini App game that teaches Nimiq payment and network concepts through a playable adventure. NIM Atlas is the world explored by the player.
+NIM RUSH is a daily downhill skill-racing Mini App built for Nimiq. Each run
+asks the rider to read the ridge, manage speed, choose a racing line, and
+recover from mistakes before the finish.
 
-## Product
+## How it works
 
-- [Play Sface](https://sface.site/): Enter Pay Harbor, choose Explorer or Builder, and begin The Last Lantern.
-- [Source and engineering notes](https://github.com/iziedking/sface): Review the public implementation and safety boundaries.
-- [Nimiq Mini Apps](https://nimiq.dev/mini-apps/): Official platform documentation used by the learning content.
+- Steer left and right across the course.
+- Brake before corners and rough approaches.
+- Drift through controlled turns, boost on clean exits, and tuck on straights.
+- Use jumps and landings to build airtime without losing control.
+- Complete three physical mission contracts: line, control, and risk.
+- Review a transparent result: time, line, control, airtime, missions, drift,
+  collisions, and missed gates.
 
-## Important boundaries
+Practice is available without a wallet. Ranked participation uses equal fixed
+loadouts and server-side replay verification. A browser-submitted score is not
+accepted as proof by itself.
 
-- The free core adventure works in local practice mode without a wallet.
-- Live TestAlbatross payment mode requires an explicit player action in Nimiq Pay.
-- A provider lookup or transaction hash is never treated as payment proof.
-- Scores, shared-world progress, ranks, and rewards are shown only when server-verified data is available.
-- Mainnet expansions and payouts remain disabled until their named owner gates are approved.
-
-## Historical material
-
-The repository preserves former Cycle I and Rescue Relay source and records for administrator-only historical access. They are not the current public Sface experience.
+Play: https://sface.site/
+Source: https://github.com/Iziedking/sFace
+Nimiq Mini Apps: https://nimiq.dev/mini-apps/

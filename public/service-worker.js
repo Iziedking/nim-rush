@@ -1,4 +1,4 @@
-const CACHE_PREFIX = 'sface-atlas-shell-';
+const CACHE_PREFIX = 'nim-rush-shell-';
 const CACHE_NAME = `${CACHE_PREFIX}v1`;
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
 const CACHEABLE_PREFIXES = [

@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible problem in NIM RUSH.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please remove wallet addresses, secrets, and personal data before submitting.
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: Desktop Chrome 1280x720 or Android Chrome
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: Tell us what you pressed and what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add a screenshot, recording, console error, or run identifier without private data.

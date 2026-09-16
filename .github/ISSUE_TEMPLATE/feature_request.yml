@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a focused improvement to the NIM RUSH player loop.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Player problem
+      description: What decision, frustration, or motivation should this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: fairness
+    attributes:
+      label: Fairness and verification impact
+      description: Explain whether this changes ranked rules, replay verification, or rewards.
+    validations:
+      required: true

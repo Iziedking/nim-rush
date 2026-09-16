@@ -1,21 +1,24 @@
-Sface is a Nimiq Pay Mini App game. NIM Atlas is the adventure inside it: a
-living city where broken payment routes strand people who need help.
+# NIM RUSH
 
-You enter Beacon Commons, meet the residents behind each route, and learn how
-Nimiq works by making the right decision at the right place. Explorer follows a
-payment from request to confirmation. Builder repairs the provider path and
-predicts the evidence the network should produce. Both paths turn Ask, Check,
-Approve, Confirm, and Unlock into actions rather than a glossary.
+NIM RUSH is a daily downhill skill-racing Mini App for Nimiq. The player rides
+a fixed Ridge Run course where speed is useful only when it stays under
+control. Dirt, wood, ramps, landings, corners, and obstacles each ask for a
+different decision.
 
-The first mission is The Last Lantern. Mara's harbor shop is closed because
-one payment route cannot be trusted. Follow the marker to Pay Harbor, review the
-network, recipient, and exact amount, then find the matching evidence and carry
-the lantern to the tower. Practice mode uses a local fixture, so the game is
-playable without a wallet and does not send NIM.
+The player steers, brakes, drifts, boosts, and tucks through a short descent.
+Each daily run presents three physical mission contracts: a racing-line goal,
+a control goal, and a risk goal. The finish screen shows the complete ledger:
+time, line quality, braking, airtime, landing quality, mission completion,
+drift control, collisions, and missed gates.
 
-The game also includes a daily field puzzle, a Living Knowledge Book, a
-replayable District Atlas curriculum, and a deterministic Verified Core Run.
-Optional competitive and reward paths stay behind server and owner gates.
+Practice starts immediately without a wallet. Ranked riders use equal fixed
+loadouts, so progression comes from skill rather than paid physics advantages.
+For competitive participation, Nimiq can provide identity and signed
+participation while a server-issued ticket and deterministic replay verification
+decide whether a result is valid. A browser-submitted score is never treated as
+proof by itself.
 
-NIM Atlas makes Lunas concrete: 1 NIM is 100,000 Lunas, and the practice
-lantern costs 10,000 Lunas, or 0.1 NIM.
+The game is built around a simple return loop: ride, compete, prove, improve,
+and come back for a cleaner line. Future friend challenges can use verified
+asynchronous ghost runs. Rewards belong only to real, funded, transparent, and
+reconciled programs.

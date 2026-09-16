@@ -11,8 +11,11 @@ const origin = value('origin', 'http://127.0.0.1:4174');
 const device = process.argv.some(a => a.startsWith('--cdp='));
 const contactOnly = process.argv.includes('--contact-only');
 const captureEnabled = !process.argv.includes('--no-screenshots');
+const publicScreenshots = process.argv.includes('--public-screenshots');
 const bridge = value('cdp', 'http://127.0.0.1:9338');
-const output = join(process.cwd(), 'docs/superpowers/rush-review');
+const output = process.argv.includes('--public-screenshots')
+  ? join(process.cwd(), 'public/nim-rush/screenshots')
+  : join(process.cwd(), 'docs/superpowers/rush-review');
 await mkdir(output, { recursive: true });
 let chrome;
 let socket;
@@ -113,7 +116,7 @@ try {
   });
   await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
   await send('Page.enable'); await send('Runtime.enable');
-  if (!device) await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  if (!device && !publicScreenshots) await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await send('Page.navigate', { url: origin });
   let ready = false;
   for (let retry = 0; retry < 50; retry++) {
@@ -123,12 +126,12 @@ try {
   }
   if (!ready) throw new Error('The course did not load within ten seconds.');
   if (!device) {
-    await send('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
+    await send('Emulation.setDeviceMetricsOverride', { width: publicScreenshots ? 1440 : 844, height: publicScreenshots ? 900 : 390, deviceScaleFactor: 1, mobile: !publicScreenshots });
     await delay(400);
     await screenshot('intro-landscape');
     const visible = await evaluate(`(() => { const r=document.querySelector('.blitz-start').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&r.right<=innerWidth; })()`);
     if (!visible) throw new Error('The ride action is clipped in landscape.');
-    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    if (!publicScreenshots) await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await delay(400);
   }
   await screenshot('intro');
@@ -224,7 +227,7 @@ try {
   const result = { device, contactOnly, captureEnabled, grassRollingAndRecovery: contactOnly, shoulderEvidence, menuAudio, ridingAudio: steering.audio, pauseAudio: pausedAgain.audio, mute: true, finished, sawAirborne, sawImpact, pause: true, steering: true, rematchMs: contactOnly ? null : rematchMs, brake: true, metrics, idleFrameControl, faults,
     maxCalls: snapshots.length ? Math.max(...snapshots.map(s => s.renderer.render.calls)) : null, maxTriangles: snapshots.length ? Math.max(...snapshots.map(s => s.renderer.render.triangles)) : null,
     limitations: ['Desktop rendering is not a physical phone benchmark.', 'No wallet signing or reward transfer is exercised.'] };
-  await writeFile(join(output, contactOnly ? 'contact-report.json' : 'report.json'), JSON.stringify(result, null, 2));
+  if (!publicScreenshots) await writeFile(join(output, contactOnly ? 'contact-report.json' : 'report.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (!contactOnly && (!finished || !sawAirborne) || faults.length) process.exitCode = 1;
 } finally {
