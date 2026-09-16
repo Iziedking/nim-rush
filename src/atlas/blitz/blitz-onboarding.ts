@@ -15,7 +15,7 @@
  * flat-shape language as the game itself. Nothing is generated.
  */
 
-export type BlitzOnboardingBeatId = 'job' | 'controls' | 'checks';
+export type BlitzOnboardingBeatId = 'job' | 'controls' | 'supplies' | 'checks';
 
 export interface BlitzOnboardingBeat {
   readonly id: BlitzOnboardingBeatId;
@@ -72,6 +72,50 @@ const JOB_ART = `
  * is the slider that is really on screen, drift is the arc it leaves, boost is
  * the stack of chevrons behind the bike.
  */
+/*
+ * The supplies.
+ *
+ * Two silhouettes on a strip of road, in their lanes, because the lesson is
+ * that they have to be gone to and not that they exist. Drawn at the
+ * proportions the 3D objects use - a bottle that is tall and narrow, a gear
+ * that is round and wide - so the first one a rider sees on the road is one
+ * they have already been told about.
+ */
+const SUPPLIES_ART = `
+<svg viewBox="0 0 320 170" role="img" aria-label="Nitro bottles and gearboxes lying in the lanes" focusable="false">
+  <path d="M40 160 L108 18 L212 18 L280 160 Z" fill="${ROAD}" opacity=".9"/>
+  <path d="M40 160 L108 18" stroke="${INK}" stroke-width="2" opacity=".55" fill="none"/>
+  <path d="M280 160 L212 18" stroke="${INK}" stroke-width="2" opacity=".55" fill="none"/>
+  <g stroke="${DIM}" stroke-width="3" stroke-linecap="round" opacity=".5">
+    <path d="M160 26 L160 44"/><path d="M160 62 L160 88"/><path d="M160 112 L160 150"/>
+  </g>
+  <!-- A nitro bottle in the left lane: tank, shoulder, neck, lit band. -->
+  <g transform="translate(96 84)">
+    <ellipse cx="0" cy="46" rx="22" ry="7" fill="${CYAN}" opacity=".3"/>
+    <path d="M-13 34 L-13 2 Q-13 -6 -6 -10 L-6 -22 L6 -22 L6 -10 Q13 -6 13 2 L13 34 Z" fill="${CYAN}" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="-14" y="12" width="28" height="7" rx="3" fill="${INK}" opacity=".55"/>
+    <rect x="-7" y="-30" width="14" height="9" rx="3" fill="${INK}"/>
+  </g>
+  <!-- A gearbox in the right lane: a toothed disc, flat on. -->
+  <g transform="translate(216 96)">
+    <ellipse cx="0" cy="38" rx="24" ry="7" fill="${GOLD}" opacity=".3"/>
+    <g fill="${GOLD}" stroke="${INK}" stroke-width="2.5">
+      <rect x="-4" y="-30" width="8" height="10" rx="2"/><rect x="-4" y="20" width="8" height="10" rx="2"/>
+      <rect x="-30" y="-4" width="10" height="8" rx="2"/><rect x="20" y="-4" width="10" height="8" rx="2"/>
+      <rect x="-24" y="-24" width="9" height="9" rx="2" transform="rotate(45 -19.5 -19.5)"/>
+      <rect x="15" y="15" width="9" height="9" rx="2" transform="rotate(45 19.5 19.5)"/>
+      <rect x="15" y="-24" width="9" height="9" rx="2" transform="rotate(-45 19.5 -19.5)"/>
+      <rect x="-24" y="15" width="9" height="9" rx="2" transform="rotate(-45 -19.5 19.5)"/>
+    </g>
+    <circle cx="0" cy="0" r="22" fill="${GOLD}" stroke="${INK}" stroke-width="3"/>
+    <circle cx="0" cy="0" r="8" fill="${ROAD}" stroke="${INK}" stroke-width="3"/>
+  </g>
+  <g fill="${DIM}" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" font-weight="700" letter-spacing="2" text-anchor="middle">
+    <text x="96" y="164">NITRO</text>
+    <text x="216" y="164">GEARBOX</text>
+  </g>
+</svg>`;
+
 const CONTROLS_ART = `
 <svg viewBox="0 0 320 170" role="img" aria-label="Steer, drift and boost" focusable="false">
   <g transform="translate(12 30)">
@@ -144,8 +188,15 @@ export const BLITZ_ONBOARDING_BEATS: readonly BlitzOnboardingBeat[] = [
     id: 'controls',
     kicker: 'THE RIDE',
     title: 'Steer. Drift. Boost.',
-    body: 'Drag to steer. Hold drift through a corner to earn boost, then spend it on the straights.',
+    body: 'Drag to steer. A gearbox buys one slide, and a slide earns nitro back. Spend the nitro on the straights.',
     art: CONTROLS_ART,
+  },
+  {
+    id: 'supplies',
+    kicker: 'THE SUPPLIES',
+    title: 'Fuel is on the road.',
+    body: 'Nitro bottles and gearboxes lie in the lanes. Nothing refills on its own, so the line you take is the speed you finish with.',
+    art: SUPPLIES_ART,
   },
   {
     id: 'checks',

@@ -24,6 +24,7 @@ import {
   PointLight,
   Points,
   PCFShadowMap,
+  RingGeometry,
   Scene,
   SphereGeometry,
   TorusGeometry,
@@ -32,7 +33,7 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles, type BlitzCityDefinition } from '../../../../shared/atlas/blitz/cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles, type BlitzCityDefinition, type BlitzPickup } from '../../../../shared/atlas/blitz/cities';
 import { blitzRules } from '../../../../shared/atlas/blitz/rules';
 import { sampleBlitzRoute } from '../../../../shared/atlas/blitz/core';
 import { buildBlitzRoadRibbon } from '../../../../shared/atlas/blitz/road-ribbon';
@@ -89,6 +90,14 @@ export class BlitzRenderer {
    * reusing a rookie scene for a pro run would draw the wrong course.
    */
   private activeDifficulty: BlitzDifficulty = 'rookie';
+  /*
+   * Every supply still lying on the road, by id.
+   *
+   * Kept rather than rebuilt because a collected bottle has to disappear the
+   * instant the simulation says it was taken - a supply the rider has already
+   * banked but can still see is worse than no supply at all.
+   */
+  private pickupNodes = new Map<string, Group>();
   private reducedMotion = false;
   private cameraReady = false;
   private previousDistance = 0;
@@ -133,7 +142,15 @@ export class BlitzRenderer {
     if (this.activeCity === cityId && this.activeDifficulty === difficulty && this.cityRoot) return;
     if (this.cityRoot) {
       this.cityRoot.removeFromParent();
+      /*
+       * This disposes every geometry and material under the old city, and the
+       * supply parts are shared across all eighteen of them - so the cache has
+       * to be dropped here too, or the next city would attach geometry the GPU
+       * has already released.
+       */
       disposeTree(this.cityRoot);
+      nitroParts = null;
+      gearboxParts = null;
     }
     const city = blitzCity(cityId);
     this.scene.background = new Color(city.sky);
@@ -162,6 +179,25 @@ export class BlitzRenderer {
       gate.rotation.y = pose.headingRadians;
       this.cityRoot!.add(gate);
     });
+    /*
+     * Supplies. Added here rather than inside createCity because Lagos builds
+     * its own course and returns early, and a bottle that exists in two cities
+     * but not the third is exactly the kind of drift that costs a rider fuel
+     * they thought they had.
+     */
+    this.pickupNodes = new Map();
+    for (const pickup of city.pickups) {
+      const node = createPickup(city, pickup);
+      const pose = sampleBlitzRoute(city.id, city.lengthMeters * pickup.distance01, pickup.lane);
+      node.position.set(pose.x, pose.y, pose.z);
+      node.rotation.y = pose.headingRadians;
+      // Kept on the node so culling is a subtraction rather than a lookup.
+      node.userData.distance = city.lengthMeters * pickup.distance01;
+      node.visible = false;
+      this.cityRoot!.add(node);
+      this.pickupNodes.set(pickup.id, node);
+    }
+
     this.activeCity = cityId;
     this.activeDifficulty = difficulty;
     this.cameraReady = false;
@@ -259,6 +295,25 @@ export class BlitzRenderer {
      * for where their racing line was about to be judged. Mission progress has
      * its own HUD.
      */
+    /*
+     * A supply spins and bobs so it reads as a thing to take rather than as
+     * scenery, and vanishes the tick the simulation banks it.
+     */
+    for (const [id, node] of this.pickupNodes) {
+      /*
+       * Only the ones a rider could act on. A city carries eighteen supplies
+       * and the fog closes at 225 metres, so drawing all of them spends the
+       * draw-call budget on objects nobody can see. Behind the bike they are
+       * gone for good; far ahead they are not worth submitting yet.
+       */
+      const ahead = (node.userData.distance as number) - state.distanceMeters;
+      const shown = !state.collectedPickupIds.includes(id) && ahead > -6 && ahead < 150;
+      if (node.visible !== shown) node.visible = shown;
+      if (!shown || this.reducedMotion) continue;
+      const body = node.children[0]!;
+      body.rotation.y = state.tick * 0.09;
+      body.position.y = 0.78 + Math.sin(state.tick * 0.11) * 0.07;
+    }
     if (this.crowd) updateCityCrowd(this.crowd, state.tick);
     if (state.cityId === 'lagos' && this.cityRoot) updateRushCourse(this.cityRoot, state.distanceMeters);
   }
@@ -1100,6 +1155,94 @@ function createRelayGate(city: BlitzCityDefinition, index: number, corridorHalfW
   span.position.y = 2.35;
   gate.add(span);
   return gate;
+}
+
+/*
+ * A supply on the road.
+ *
+ * Two silhouettes a rider can tell apart in peripheral vision at 100 km/h,
+ * which is the only test that matters here: a bottle stands upright and tall,
+ * a gear sits flat and wide. Both hover over a ring painted on the road, so
+ * the lane a rider has to be in is readable before the object itself is.
+ */
+/*
+ * One set of geometries and materials for every supply of a kind.
+ *
+ * Eighteen bottles that each built their own cylinder would be eighteen
+ * uploads of the same vertices, and eighteen materials the renderer has to
+ * switch between. Built once, lazily, and shared.
+ */
+const PICKUP_PARTS: Record<'nitro' | 'gearbox', ReturnType<typeof buildPickupParts>> = {
+  get nitro() { return (nitroParts ??= buildPickupParts('nitro')); },
+  get gearbox() { return (gearboxParts ??= buildPickupParts('gearbox')); },
+};
+let nitroParts: ReturnType<typeof buildPickupParts> | null = null;
+let gearboxParts: ReturnType<typeof buildPickupParts> | null = null;
+
+function buildPickupParts(kind: 'nitro' | 'gearbox') {
+  const glow = kind === 'nitro' ? 0x5fe3ff : 0xffc247;
+  return {
+    primary: kind === 'nitro'
+      ? new CylinderGeometry(0.12, 0.21, 0.68, 10)
+      : new CylinderGeometry(0.28, 0.28, 0.12, 14).rotateX(Math.PI / 2),
+    accent: kind === 'nitro'
+      ? new CylinderGeometry(0.085, 0.085, 0.09, 7)
+      : new TorusGeometry(0.31, 0.075, 4, 8),
+    trim: kind === 'nitro' ? new TorusGeometry(0.195, 0.038, 5, 12) : new TorusGeometry(0.11, 0.042, 5, 10),
+    shell: new MeshStandardMaterial({
+      color: kind === 'nitro' ? 0x1d4f63 : 0x4a4436,
+      roughness: kind === 'nitro' ? 0.34 : 0.42,
+      metalness: kind === 'nitro' ? 0.5 : 0.72,
+      emissive: new Color(glow),
+      emissiveIntensity: kind === 'nitro' ? 0.32 : 0.22,
+    }),
+    lit: new MeshBasicMaterial({ color: glow }),
+    halo: new RingGeometry(0.34, 0.5, 14),
+    haloMaterial: new MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.4, side: 2 }),
+  };
+}
+
+function createPickup(city: BlitzCityDefinition, pickup: BlitzPickup): Group {
+  const root = new Group();
+  root.name = `nim-rush-pickup-${pickup.id}`;
+  const body = new Group();
+  body.position.y = 0.78;
+  root.add(body);
+
+  const parts = PICKUP_PARTS[pickup.kind];
+  if (pickup.kind === 'nitro') {
+    /*
+     * A bottle: tapered from a wide base to a narrow neck, with a cap on top.
+     * The taper is what stops it reading as a barrel, and a barrel reads as
+     * something to swerve around rather than something to collect.
+     */
+    const tank = new Mesh(parts.primary, parts.shell);
+    const cap = new Mesh(parts.accent, parts.lit);
+    cap.position.y = 0.4;
+    // One lit band, low on the tank: the part that catches the eye first.
+    const band = new Mesh(parts.trim, parts.lit);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = -0.04;
+    body.add(tank, cap, band);
+  } else {
+    /*
+     * A gear, flat on. The teeth are an eight-sided ring rather than eight
+     * separate boxes: at the size a rider sees this, the silhouette is
+     * identical and it costs one draw call instead of nine.
+     */
+    const disc = new Mesh(parts.primary, parts.shell);
+    const teeth = new Mesh(parts.accent, parts.shell);
+    const hub = new Mesh(parts.trim, parts.lit);
+    body.add(disc, teeth, hub);
+  }
+
+  // The road marking. A rider reading the surface still sees which lane.
+  const halo = new Mesh(parts.halo, parts.haloMaterial);
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.y = 0.035;
+  root.add(halo);
+  void city;
+  return root;
 }
 
 function seeded(seed: string): () => number {

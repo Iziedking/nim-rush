@@ -1,5 +1,7 @@
 import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
-import { blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
+import { BLITZ_CITIES, blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
+import { blitzLoadoutFor, blitzNextRiderLevel, blitzRiderLevel } from '../../../shared/atlas/blitz/rider';
+import { blitzRules } from '../../../shared/atlas/blitz/rules';
 import type { BlitzCityId, BlitzDifficulty, BlitzRunState, BlitzTraceFrame } from '../../../shared/atlas/blitz/types';
 import type { BlitzTicket } from '../../../shared/atlas/blitz/competition';
 import { BLITZ_SEASON_ID, getBlitzDailyChallenge } from '../../../shared/atlas/blitz/daily';
@@ -45,6 +47,8 @@ export class BlitzApp {
   private speedNode: HTMLElement | null = null;
   private progressNode: HTMLElement | null = null;
   private boostNode: HTMLElement | null = null;
+  private gearHost: HTMLElement | null = null;
+  private driftWindowNode: HTMLElement | null = null;
   private missionHost: HTMLElement | null = null;
   private countdownNode: HTMLElement | null = null;
   private feedbackNode: HTMLElement | null = null;
@@ -244,7 +248,15 @@ export class BlitzApp {
     const seed = rankedTicket?.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
     // Ranked keeps one visible, equal loadout and the shared Rookie ruleset
     // until the server ticket contract carries Pro as an explicit version.
-    this.state = createBlitzRun({ cityId, seed, difficulty: rankedTicket ? 'rookie' : this.difficulty });
+    /*
+     * A ranked run takes the base loadout, whatever this rider has earned.
+     * The board compares riding, not hours played. This is not the only thing
+     * holding that line - the server rebuilds every ranked run from the city
+     * and seed alone, so a client that handed itself a bigger tank would fail
+     * verification - but the client should not be the thing that tries.
+     */
+    const loadout = blitzLoadoutFor({ careerScore: this.careerScore(), ranked: Boolean(rankedTicket) });
+    this.state = createBlitzRun({ cityId, seed, difficulty: rankedTicket ? 'rookie' : this.difficulty, loadout });
     this.previousRenderState = null;
     this.frames = [];
     this.lastPhysicsAudioTick = -1;
@@ -283,12 +295,32 @@ export class BlitzApp {
     const progress = node('div', 'blitz-progress');
     this.progressNode = node('i', 'blitz-progress-fill');
     progress.append(this.progressNode);
+    /*
+     * The supply rack.
+     *
+     * Both supplies are finite now, so both have to be readable without
+     * looking away from the road: a bar that empties, and pips that go out.
+     * The pips carry a count as text too, because a pip that is nearly the
+     * same colour as its empty state is no information at all.
+     */
     const boost = node('div', 'blitz-boost-wrap');
-    boost.append(node('span', '', 'BOOST'));
+    boost.append(node('span', '', 'NITRO'));
     const boostTrack = node('div', 'blitz-boost-meter');
     this.boostNode = node('i', 'blitz-boost-fill');
     boostTrack.append(this.boostNode);
     boost.append(boostTrack);
+    const gearWrap = node('div', 'blitz-gear-wrap');
+    gearWrap.append(node('span', '', 'GEARBOX'));
+    this.gearHost = node('div', 'blitz-gear-pips');
+    this.gearHost.setAttribute('aria-label', 'Gearboxes left for drifting');
+    gearWrap.append(this.gearHost);
+    // How much of the current slide is left. Hidden until a slide is running.
+    const driftTrack = node('div', 'blitz-drift-window');
+    this.driftWindowNode = node('i', 'blitz-drift-window-fill');
+    driftTrack.append(this.driftWindowNode);
+    driftTrack.hidden = true;
+    gearWrap.append(driftTrack);
+    boost.append(gearWrap);
 
     this.missionHost = node('section', 'blitz-mission-hud');
     this.missionHost.setAttribute('aria-label', 'Physical mission contracts');
@@ -372,7 +404,13 @@ export class BlitzApp {
     if (this.scoreNode) this.scoreNode.textContent = Math.round(state.score).toString().padStart(6, '0');
     if (this.speedNode) this.speedNode.textContent = Math.round(state.speedMps * 3.6).toString().padStart(3, '0');
     if (this.progressNode) this.progressNode.style.width = `${Math.min(100, state.distanceMeters / city.lengthMeters * 100)}%`;
-    if (this.boostNode) this.boostNode.style.width = `${state.boostEnergy}%`;
+    /*
+     * A fraction of the tank this rider actually carries. Reading the raw
+     * energy as a percentage was only ever right for a 60-unit tank, and a
+     * levelled rider carries 84.
+     */
+    if (this.boostNode) this.boostNode.style.width = `${Math.min(100, state.boostEnergy / state.boostCapacity * 100)}%`;
+    this.updateSupplyHud(state);
     this.audio.setBikeSpeed(state.speedMps);
     if (this.countdownNode) {
       this.countdownNode.textContent = state.phase === 'countdown' ? String(Math.max(1, Math.ceil(state.countdownTicks / BLITZ_TICK_RATE))) : 'GO';
@@ -479,6 +517,23 @@ export class BlitzApp {
       stat(`-${score.missedGatePenalties.toLocaleString()}`, 'MISSED-GATE PENALTIES'),
     );
     screen.append(breakdown);
+    /*
+     * Supplies, then the ladder. A rider has just spent a run's worth of both,
+     * so this is the moment the two systems are worth explaining - and the
+     * only honest place to say that ranked ignores the ladder.
+     */
+    const total = (kind: 'nitro' | 'gearbox') => city.pickups.filter((pickup) => pickup.kind === kind).length;
+    const supplies = node('section', 'blitz-supplies');
+    supplies.append(node('span', 'blitz-supplies-label', 'SUPPLIES TAKEN'));
+    const supplyRow = node('div', 'blitz-supply-row');
+    supplyRow.append(
+      supplyStat('nitro', `${state.nitroTaken}/${total('nitro')}`, 'NITRO'),
+      supplyStat('gearbox', `${state.gearboxTaken}/${total('gearbox')}`, 'GEARBOX'),
+    );
+    supplies.append(supplyRow);
+    supplies.append(node('p', 'blitz-pool-note blitz-quiet', 'Boost and drift only come off the road. The line you take is the fuel you finish with.'));
+    screen.append(supplies);
+    screen.append(this.riderLadder());
     screen.append(button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)));
     screen.append(this.soundControl());
     /*
@@ -755,6 +810,65 @@ export class BlitzApp {
     host.append(board);
   }
 
+  /*
+   * Gearboxes and the slide they are paying for.
+   *
+   * Pips are rebuilt only when the count or the capacity changes: this runs
+   * every frame, and replacing five nodes thirty times a second to show the
+   * same five nodes is how a HUD ends up costing more than the city does.
+   */
+  private updateSupplyHud(state: BlitzRunState): void {
+    if (this.gearHost && this.gearHost.childElementCount !== state.driftCapacity) {
+      this.gearHost.replaceChildren();
+      for (let index = 0; index < state.driftCapacity; index += 1) this.gearHost.append(node('i', 'blitz-gear-pip'));
+    }
+    if (this.gearHost) {
+      this.gearHost.setAttribute('data-gearboxes', String(state.driftCharges));
+      [...this.gearHost.children].forEach((pip, index) => {
+        pip.classList.toggle('is-spent', index >= state.driftCharges);
+      });
+    }
+    const window = this.driftWindowNode?.parentElement;
+    if (window) {
+      const sliding = state.driftTicksLeft > 0;
+      window.hidden = !sliding;
+      if (sliding && this.driftWindowNode) {
+        this.driftWindowNode.style.width = `${Math.min(100, state.driftTicksLeft / Math.max(1, state.driftWindowTicks) * 100)}%`;
+      }
+    }
+  }
+
+  /**
+   * The rider's rung, and the next one.
+   *
+   * Career score is the sum of their best run in each city, so the ladder is
+   * climbed by riding better rather than by riding more - a rider cannot grind
+   * a bad line a hundred times into a level.
+   */
+  private riderLadder(): HTMLElement {
+    const career = this.careerScore();
+    const level = blitzRiderLevel(career);
+    const next = blitzNextRiderLevel(career);
+    const host = node('section', 'blitz-ladder');
+    host.append(node('span', 'blitz-ladder-label', `RIDER LEVEL ${level.level} / ${level.title.toUpperCase()}`));
+    if (level.unlock) host.append(node('p', 'blitz-ladder-unlock', level.unlock));
+    if (next) {
+      const track = node('div', 'blitz-ladder-meter');
+      const span = Math.max(1, next.level.requiredScore - level.requiredScore);
+      const fill = node('i', 'blitz-ladder-fill');
+      fill.style.width = `${Math.max(0, Math.min(100, (career - level.requiredScore) / span * 100))}%`;
+      track.append(fill);
+      host.append(track);
+      host.append(node('p', 'blitz-ladder-next', `${next.remaining.toLocaleString()} more career points for ${next.level.title}: ${next.level.unlock}`));
+    } else {
+      host.append(node('p', 'blitz-ladder-next', 'Every rider quality is unlocked. The board is the only thing left to climb.'));
+    }
+    // Said plainly, because a rider who thinks their level is worth places on
+    // the board would be right to feel cheated when it is not.
+    host.append(node('p', 'blitz-pool-note blitz-quiet', 'Levels change free rides only. Every ranked run is ridden on the same equipment.'));
+    return host;
+  }
+
   private saveBest(state: BlitzRunState): number {
     const key = `nim-atlas:blitz:best:${state.rulesetVersion}:${state.cityId}`;
     let previous = 0;
@@ -770,6 +884,28 @@ export class BlitzApp {
     const unlocked = state.cityId === 'lagos' && completed >= 2 && state.collisions <= 2 ? 'london' : state.cityId === 'london' && completed >= 2 && state.collisions <= 1 ? 'dubai' : null;
     if (!unlocked) return;
     try { safeLocalStorage()?.setItem(`nim-rush:unlock:${unlocked}`, state.rulesetVersion); } catch { /* Progress remains playable without storage. */ }
+  }
+
+  /**
+   * A rider's career score: their best run in each city, added up.
+   *
+   * Built from the bests already kept for the result screen rather than from a
+   * new counter, so a rider who has been playing arrives at their real level
+   * instead of being reset to one. Keyed by ruleset version like the bests
+   * are, so a course change starts the ladder again rather than crediting
+   * scores set on a different course.
+   */
+  private careerScore(): number {
+    const storage = safeLocalStorage();
+    if (!storage) return 0;
+    let total = 0;
+    for (const city of BLITZ_CITIES) {
+      try {
+        const value = Number(storage.getItem(`nim-atlas:blitz:best:${blitzRules(this.difficulty).rulesetVersion}:${city.id}`) ?? 0);
+        if (Number.isFinite(value) && value > 0) total += value;
+      } catch { /* A rider with no storage simply starts at level one. */ }
+    }
+    return total;
   }
 
   private isCityUnlocked(cityId: BlitzCityId): boolean {
@@ -892,6 +1028,18 @@ function formatNim(luna: number): string {
 
 function formatUtcTime(timestampMs: number): string {
   return new Date(timestampMs).toISOString().slice(11, 16) + 'Z';
+}
+
+/*
+ * A supply tally with its own glyph, so the result screen uses the same two
+ * silhouettes the road does rather than two words a rider has to map back.
+ */
+function supplyStat(kind: 'nitro' | 'gearbox', value: string, label: string): HTMLElement {
+  const cell = node('div', `blitz-supply blitz-supply-${kind}`);
+  cell.append(node('i', `blitz-supply-glyph blitz-supply-glyph-${kind}`));
+  cell.append(node('strong', 'blitz-supply-value', value));
+  cell.append(node('span', 'blitz-supply-label', label));
+  return cell;
 }
 
 /** How many past days of receipts a result screen shows before it gets long. */

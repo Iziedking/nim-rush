@@ -154,6 +154,58 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(css).toContain('.blitz-reward-attention');
   });
 
+  /*
+   * Supplies, on the screen and in the HUD.
+   *
+   * Boost and drift are finite now, so a rider has to be able to see how much
+   * of each they are carrying without looking away from the road, and has to
+   * have been told where both come from before the first one goes past.
+   */
+  it('shows both supplies while riding, and teaches them before the first run', () => {
+    // The tank is a fraction of what this rider carries, not a raw number
+    // read as a percentage - that was only ever right for a 60-unit tank.
+    expect(app).toContain('state.boostEnergy / state.boostCapacity * 100');
+    expect(app).toContain("node('span', '', 'NITRO')");
+    expect(app).toContain('blitz-gear-pips');
+    expect(app).toContain('updateSupplyHud');
+    // Pips are rebuilt only when the count changes: this runs every frame.
+    expect(app).toContain('this.gearHost.childElementCount !== state.driftCapacity');
+    // The slide meter only exists while a slide does.
+    expect(app).toContain('window.hidden = !sliding');
+    expect(css).toContain('.blitz-gear-pip.is-spent');
+    expect(css).toContain('.blitz-drift-window[hidden] { display: none; }');
+
+    // Taught in the opening, with its own picture, before a rider meets one.
+    const onboarding = readFileSync(new URL('../src/atlas/blitz/blitz-onboarding.ts', import.meta.url), 'utf8');
+    expect(onboarding).toContain('THE SUPPLIES');
+    expect(onboarding).toContain('Nitro bottles and gearboxes lie in the lanes');
+    expect(onboarding).toContain('A gearbox buys one slide');
+  });
+
+  /*
+   * The ladder, and the sentence that keeps it honest.
+   *
+   * A rider who thought their level bought them places on the board would be
+   * right to feel cheated when it did not, so the result screen says so.
+   */
+  it('shows what a level is worth and says plainly that ranked ignores it', () => {
+    expect(app).toContain('riderLadder');
+    expect(app).toContain('blitzRiderLevel');
+    expect(app).toContain('blitzNextRiderLevel');
+    expect(app).toContain('Levels change free rides only. Every ranked run is ridden on the same equipment.');
+    // Career score is the sum of bests, so the ladder is climbed by riding
+    // better rather than by riding more.
+    expect(app).toContain('careerScore');
+    expect(app).toContain('blitzRules(this.difficulty).rulesetVersion');
+    // And the run itself takes the base loadout whenever it is ranked.
+    expect(app).toContain('blitzLoadoutFor({ careerScore: this.careerScore(), ranked: Boolean(rankedTicket) })');
+
+    expect(app).toContain('SUPPLIES TAKEN');
+    expect(app).toContain('Boost and drift only come off the road.');
+    expect(css).toContain('.blitz-supply-glyph-nitro');
+    expect(css).toContain('.blitz-supply-glyph-gearbox');
+  });
+
   it('keeps every mobile action at least 52px and honours reduced motion', () => {
     expect(css).toMatch(/\.blitz-control[^}]+min-height:\s*56px/s);
     expect(css).toMatch(/\.blitz-pause[^}]+pointer-events:\s*auto/s);
@@ -182,7 +234,7 @@ describe('the Beacon Blitz opening', () => {
     // Authored geometry, in the game's own flat-shape language. Every beat is
     // an inline SVG in this module; nothing loads an image.
     expect(onboarding).not.toMatch(/<img|\.png|\.jpg|\.jpeg|\.webp/);
-    expect((onboarding.match(/<svg /g) ?? []).length).toBe(3);
+    expect((onboarding.match(/<svg /g) ?? []).length).toBe(4);
   });
 
   it('can always be left, and is only shown once', () => {
@@ -205,7 +257,7 @@ describe('the Beacon Blitz opening', () => {
   });
 
   it('every beat carries a described picture for a screen reader', () => {
-    expect((onboarding.match(/role="img"/g) ?? []).length).toBe(3);
+    expect((onboarding.match(/role="img"/g) ?? []).length).toBe(4);
     expect((onboarding.match(/aria-label="[^"]{12,}"/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 });
