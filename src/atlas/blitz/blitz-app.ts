@@ -2,7 +2,7 @@ import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } fr
 import { blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
 import type { BlitzCityId, BlitzDifficulty, BlitzRunState, BlitzTraceFrame } from '../../../shared/atlas/blitz/types';
 import type { BlitzTicket } from '../../../shared/atlas/blitz/competition';
-import { getBlitzDailyChallenge } from '../../../shared/atlas/blitz/daily';
+import { BLITZ_SEASON_ID, getBlitzDailyChallenge } from '../../../shared/atlas/blitz/daily';
 import { hashBlitzTrace } from '../../../shared/atlas/blitz/replay';
 import { getOrCreateCredential } from '../../net/player-credential';
 import { createAtlasApiClient } from '../api';
@@ -16,7 +16,8 @@ import { BLITZ_ONBOARDING_BEATS, blitzOnboardingSeen, markBlitzOnboardingSeen } 
 import { createBlitzPendingRunStore, type BlitzPendingRunStore, type BlitzPendingSubmission } from './pending-run';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
-const BLITZ_SEASON = 'cycle-2';
+/* Shared with the server's maintenance worker; see shared/atlas/blitz/daily.ts. */
+const BLITZ_SEASON = BLITZ_SEASON_ID;
 
 export class BlitzApp {
   private readonly renderer: BlitzRenderer;
@@ -249,7 +250,10 @@ export class BlitzApp {
     this.lastPhysicsAudioTick = -1;
     this.paused = false;
     this.input.reset();
-    await this.renderer.loadCity(cityId);
+    // The scene has to be built for the ruleset this run is judged under, or
+    // a rider swerves around obstacles that are not there and rides through
+    // ones that are.
+    await this.renderer.loadCity(cityId, this.state.difficulty);
     this.setAudioScene(this.paused ? 'paused' : 'riding');
     this.renderRun();
     this.previousTimestamp = null;
@@ -486,6 +490,15 @@ export class BlitzApp {
     pool.hidden = true;
     screen.append(pool);
     void this.presentDayPool(pool);
+    /*
+     * What this rider is already owed. Separate from the pool panel: the pool
+     * is about today and could still change, a receipt is about a day that has
+     * closed and cannot.
+     */
+    const rewards = node('section', 'blitz-rewards');
+    rewards.hidden = true;
+    screen.append(rewards);
+    void this.presentRewards(rewards);
     const reveal = node('section', 'blitz-next-city');
     reveal.append(node('span', '', nextUnlocked ? 'NEXT CIRCUIT' : 'SKILL UNLOCK'), node('h2', '', next.circuit), node('p', '', nextUnlocked ? next.callout : `Finish this run with two missions and no more than two contacts to unlock ${next.name}.`));
     const nextButton = button(nextUnlocked ? `Ride ${next.name}` : `Unlock ${next.name}`, 'blitz-again blitz-next', () => void this.startRun(nextCityId));
@@ -565,6 +578,13 @@ export class BlitzApp {
     if (!binding.ok) throw new Error(binding.error);
     const ticket = await this.api.issueBlitzTicket({ actorId: credential.playerId, walletAddress: binding.value.address, username, cityId, seasonId: BLITZ_SEASON });
     if (!ticket.ok) throw new Error(ticket.error);
+    /*
+     * Remembered so a rider who comes back tomorrow sees what yesterday owes
+     * them without signing again. It is a public address that already appears
+     * beside their rank on the board, not a secret, and losing it costs
+     * nothing: the obligation lives in the ledger either way.
+     */
+    try { localStorage.setItem('nim-atlas:blitz:wallet', binding.value.address); } catch { /* Storage is optional. */ }
     return ticket;
   }
 
@@ -619,6 +639,59 @@ export class BlitzApp {
     } catch {
       // Leave it hidden. The run still counted, and the board is still true.
     }
+  }
+
+  /**
+   * What this rider has been awarded, and where each award actually is.
+   *
+   * A pool nobody can see the end of is indistinguishable from a pool that was
+   * never paid. This closes that loop: once a day is closed, the rider sees the
+   * obligation the moment it exists, then sees it move, then sees the chain
+   * confirm it.
+   *
+   * It never says "paid" on anything short of chain evidence, and never hides a
+   * problem as "owed" - a stuck transfer says so and keeps its reason.
+   */
+  private async presentRewards(host: HTMLElement): Promise<void> {
+    const walletAddress = this.rememberedWallet();
+    // Nothing to ask about. A rider who has never ranked has no receipts, and
+    // an empty panel would only be noise on the screen where they just rode.
+    if (!walletAddress) return;
+    try {
+      const receipts = await this.api.getBlitzRewards(walletAddress);
+      if (receipts.length === 0) return;
+
+      host.replaceChildren();
+      host.append(node('span', 'blitz-rewards-label', `YOUR REWARDS / ${shortWallet(walletAddress)}`));
+      const list = node('ol', 'blitz-rewards-list');
+      for (const receipt of receipts.slice(0, REWARD_ROWS)) {
+        const row = node('li', `blitz-reward blitz-reward-${receipt.state}`);
+        row.append(node('span', 'blitz-reward-day', rewardDayLabel(receipt.period)));
+        row.append(node('strong', 'blitz-reward-amount', formatNim(receipt.amountLuna)));
+        row.append(node('span', 'blitz-reward-state', REWARD_STATE_LABEL[receipt.state]));
+        if (receipt.state === 'attention' && receipt.attentionReason) {
+          // Shown, not swallowed. Somebody waiting for money is owed the reason.
+          row.append(node('small', 'blitz-reward-note', receipt.attentionReason));
+        }
+        if (receipt.transactionHash) {
+          const hash = node('small', 'blitz-reward-hash', `${receipt.transactionHash.slice(0, 10)}…`);
+          hash.title = receipt.transactionHash;
+          row.append(hash);
+        }
+        list.append(row);
+      }
+      host.append(list);
+      host.append(node('p', 'blitz-pool-note blitz-quiet', 'A reward is only called paid once the transfer is seen on chain from the treasury to your wallet.'));
+      host.hidden = false;
+    } catch {
+      // Leave it hidden. A ledger we cannot reach right now is not a claim
+      // that a rider is owed nothing.
+    }
+  }
+
+  /** The address this rider last ranked with, if any. Public, never a key. */
+  private rememberedWallet(): string | null {
+    try { return localStorage.getItem('nim-atlas:blitz:wallet'); } catch { return null; }
   }
 
   private async submitRankedRun(state: BlitzRunState, status: HTMLElement, host: HTMLElement): Promise<void> {
@@ -819,6 +892,30 @@ function formatNim(luna: number): string {
 
 function formatUtcTime(timestampMs: number): string {
   return new Date(timestampMs).toISOString().slice(11, 16) + 'Z';
+}
+
+/** How many past days of receipts a result screen shows before it gets long. */
+const REWARD_ROWS = 4;
+
+/*
+ * Each label is a true sentence about where the money is. "Owed" is a decision
+ * the server made; only "Paid" is a claim about the chain.
+ */
+const REWARD_STATE_LABEL: Readonly<Record<'owed' | 'sending' | 'paid' | 'attention', string>> = {
+  owed: 'OWED / AWAITING RELEASE',
+  sending: 'SENDING / ON CHAIN SOON',
+  paid: 'PAID / CONFIRMED',
+  attention: 'HELD / NEEDS A LOOK',
+};
+
+/*
+ * A payout period is `blitz-<season>-<city>-<date>`, and the date is the part a
+ * rider recognises. Anything that does not end in a date falls back to the raw
+ * period rather than guessing at a prettier lie.
+ */
+function rewardDayLabel(period: string): string {
+  const match = /(d{4}-d{2}-d{2})$/.exec(period);
+  return match ? match[1]! : period;
 }
 
 /**

@@ -149,6 +149,7 @@ export interface AtlasApiClient {
   getCompetitiveLeaderboard(seasonId: string, role: AtlasRole): Promise<AtlasLeaderboardRow[]>;
   getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
   getBlitzPrizes(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzPrizeTableSummary>;
+  getBlitzRewards(walletAddress: string): Promise<BlitzRewardSummary[]>;
   issueBlitzTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<ApiResult<BlitzTicket>>;
   submitBlitzRun(input: BlitzSubmissionInput): Promise<ApiResult<BlitzSubmitResult>>;
   issueCompetitiveTicket(input: { actorId: string; walletAddress: string; role: AtlasRole }): Promise<ApiResult<AtlasCompetitiveTicket>>;
@@ -179,6 +180,7 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     getCompetitiveLeaderboard: (seasonId, role) => requestData(fetchImpl, `${baseUrl}/atlas/api/competitive/leaderboard?seasonId=${encodeURIComponent(seasonId)}&role=${role}`, isLeaderboard),
     getBlitzLeaderboard: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzLeaderboard),
     getBlitzPrizes: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/prizes?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzPrizeTable),
+    getBlitzRewards: (walletAddress) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/rewards?walletAddress=${encodeURIComponent(walletAddress)}`, isBlitzRewards),
     issueBlitzTicket: (input) => authenticatedAtlasRequest<BlitzTicket>('/atlas/api/blitz/tickets', 'atlas.ticket.issue', input.actorId, input, isBlitzTicket, { apiBase: baseUrl, fetchImpl }),
     submitBlitzRun: (input) => authenticatedAtlasRequest<BlitzSubmitResult>('/atlas/api/blitz/runs', 'atlas.run.submit', input.actorId, input, isBlitzSubmitResult, { apiBase: baseUrl, fetchImpl }),
     issueCompetitiveTicket: (input) => authenticatedRequest<AtlasCompetitiveTicket>('/atlas/api/competitive/tickets', 'atlas.ticket.issue', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
@@ -290,6 +292,31 @@ function isBlitzPrizeTable(value: unknown): value is BlitzPrizeTableSummary {
     const row = entry as Record<string, unknown>;
     return Number.isSafeInteger(row.rank) && Number.isSafeInteger(row.luna)
       && typeof row.walletAddress === 'string' && typeof row.runId === 'string';
+  });
+}
+
+/*
+ * One reward, in the four words a rider can act on. The server collapses the
+ * ledger's eight operator statuses; this mirrors that set exactly so a status
+ * the client does not understand is a failed guard rather than a blank row.
+ */
+export interface BlitzRewardSummary {
+  period: string;
+  amountLuna: number;
+  state: 'owed' | 'sending' | 'paid' | 'attention';
+  transactionHash: string | null;
+  attentionReason: string | null;
+}
+
+function isBlitzRewards(value: unknown): value is BlitzRewardSummary[] {
+  return Array.isArray(value) && value.every((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const row = entry as Record<string, unknown>;
+    return typeof row.period === 'string'
+      && Number.isSafeInteger(row.amountLuna)
+      && ['owed', 'sending', 'paid', 'attention'].includes(String(row.state))
+      && (row.transactionHash === null || typeof row.transactionHash === 'string')
+      && (row.attentionReason === null || typeof row.attentionReason === 'string');
   });
 }
 

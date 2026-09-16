@@ -16,6 +16,7 @@ import type { AtlasIdentityService, AtlasWalletBindingChallenge } from './identi
 import type { AuthAction, DeviceProof } from '../../src/net/player-auth-protocol';
 import type { AtlasSnapshot } from '../../shared/atlas/state';
 import type { AtlasBlitzService } from './blitz';
+import type { BlitzRewardReceipt } from './blitz-rewards';
 
 export interface AtlasOrderCatalog {
   itemId: 'harbor-lantern';
@@ -42,6 +43,12 @@ export interface AtlasApi {
   identity?: AtlasIdentityService;
   competitive?: AtlasCompetitiveRuntime;
   blitz?: AtlasBlitzService;
+  /*
+   * What this wallet has been promised and what has actually reached it.
+   * Optional because a board can run with no treasury behind it, and a rider
+   * should then be told rewards are unavailable rather than shown an empty list.
+   */
+  blitzRewards?: (walletAddress: string) => Promise<readonly BlitzRewardReceipt[]>;
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
 }
 
@@ -58,6 +65,7 @@ export function createAtlasApi(options: {
   identity?: AtlasIdentityService;
   competitive?: AtlasCompetitiveRuntime;
   blitz?: AtlasBlitzService;
+  blitzRewards?: (walletAddress: string) => Promise<readonly BlitzRewardReceipt[]>;
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
 }): AtlasApi {
   const curriculum = validateAtlasCurriculum(options.curriculum, options.now?.() ?? new Date());
@@ -83,6 +91,7 @@ export function createAtlasApi(options: {
     identity: options.identity,
     competitive: options.competitive,
     blitz: options.blitz,
+    blitzRewards: options.blitzRewards,
     authorize: options.authorize,
   };
 }
@@ -148,6 +157,26 @@ export function mountAtlasRoutes(options: {
     try {
       response.setHeader('cache-control', 'no-store');
       response.json({ ok: true, data: await options.api.blitz.prizeTable(seasonId, cityId.data, challengeId) });
+    } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
+  /*
+   * What a rider is owed and what has been paid.
+   *
+   * Read-only, and keyed on the wallet the obligation names. That address is
+   * already public beside a rank on the leaderboard, so this exposes nothing
+   * new; it exposes only amounts that wallet was awarded on a public board.
+   * An unparseable address is a 400 rather than an empty list, because "owed
+   * nothing" and "you typed it wrong" must not look the same to somebody
+   * waiting for money.
+   */
+  options.app.get('/atlas/api/blitz/rewards', options.limit(60, 20), async (request, response) => {
+    if (!options.api.blitzRewards) { response.status(503).json({ ok: false, error: 'Beacon Blitz rewards are unavailable.' }); return; }
+    let walletAddress: string;
+    try { walletAddress = requiredNimiqAddress(request.query.walletAddress); }
+    catch { response.status(400).json({ ok: false, error: 'Beacon Blitz reward query is invalid.' }); return; }
+    try {
+      response.setHeader('cache-control', 'no-store');
+      response.json({ ok: true, data: await options.api.blitzRewards(walletAddress) });
     } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
   options.app.post('/atlas/api/wallet/challenge', options.limit(24, 8), async (request, response) => {

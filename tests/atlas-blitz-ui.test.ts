@@ -113,6 +113,47 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain('if (!this.state) this.renderer.renderPreview(this.cityId)');
   });
 
+  /*
+   * Rider receipts on the result screen.
+   *
+   * The result screen already promises a pool is "paid at the close of the
+   * day". Until a rider could see the other end of that sentence, the promise
+   * was unfalsifiable from inside the game.
+   */
+  it('shows a rider what they are owed without ever calling it paid early', () => {
+    expect(app).toContain('presentRewards');
+    expect(app).toContain('getBlitzRewards');
+    // Painted after the pool, and the panel starts hidden: an empty receipt
+    // list is silence, not an empty box on the screen where they just rode.
+    expect(app.indexOf('void this.presentDayPool(pool)')).toBeLessThan(app.indexOf('void this.presentRewards(rewards)'));
+    expect(app).toContain('rewards.hidden = true');
+    expect(app).toContain('if (receipts.length === 0) return');
+
+    /*
+     * Only the chain-verified state may read as paid. If a future edit points
+     * 'owed' or 'sending' at the word PAID, this fails.
+     */
+    expect(app).toContain("paid: 'PAID / CONFIRMED'");
+    expect(app).toContain("owed: 'OWED / AWAITING RELEASE'");
+    expect(app).toContain("sending: 'SENDING / ON CHAIN SOON'");
+    expect(app).toContain("attention: 'HELD / NEEDS A LOOK'");
+    expect(app).toContain('A reward is only called paid once the transfer is seen on chain');
+
+    // A held payout keeps its reason on screen rather than looking like a
+    // slow one.
+    expect(app).toContain("receipt.state === 'attention' && receipt.attentionReason");
+
+    // The address is remembered so yesterday's reward survives a reload, and
+    // it is only ever the public address, never a signature or a key.
+    expect(app).toContain("localStorage.setItem('nim-atlas:blitz:wallet', binding.value.address)");
+    expect(app).toContain('rememberedWallet');
+
+    // State is carried by words as well as by colour.
+    expect(css).toContain('.blitz-rewards[hidden] { display: none; }');
+    expect(css).toContain('.blitz-reward-paid');
+    expect(css).toContain('.blitz-reward-attention');
+  });
+
   it('keeps every mobile action at least 52px and honours reduced motion', () => {
     expect(css).toMatch(/\.blitz-control[^}]+min-height:\s*56px/s);
     expect(css).toMatch(/\.blitz-pause[^}]+pointer-events:\s*auto/s);
