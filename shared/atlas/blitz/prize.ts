@@ -200,14 +200,26 @@ function ledgerSlug(challengeId: string): string {
  * row can compare the two and refuse rather than pay, which is a check the
  * caller must make - this function cannot see the ledger.
  */
+/**
+ * The ledger period a day's obligations live under.
+ *
+ * Exported so a caller can ask "has this day already been settled?" without
+ * first computing a prize table. That matters: the pool is read live, so
+ * recomputing a settled day after the treasury moved would produce different
+ * amounts and report a conflict that is really just drift.
+ */
+export function blitzPayoutPeriod(challengeId: string): string {
+  if (!CHALLENGE_ID_PATTERN.test(challengeId)) {
+    throw new Error('Beacon Blitz challenge id cannot name a payout obligation.');
+  }
+  return `blitz-${ledgerSlug(challengeId)}`;
+}
+
 export function planBlitzPayouts(input: {
   readonly challengeId: string;
   readonly allocations: readonly BlitzPrizeAllocation[];
 }): readonly BlitzPayoutPlanEntry[] {
-  if (!CHALLENGE_ID_PATTERN.test(input.challengeId)) {
-    throw new Error('Beacon Blitz challenge id cannot name a payout obligation.');
-  }
-  const period = `blitz-${ledgerSlug(input.challengeId)}`;
+  const period = blitzPayoutPeriod(input.challengeId);
   /*
    * Refuse here rather than at the ledger. A name that is too long fails at
    * the moment the obligation is written, which is the worst moment to find

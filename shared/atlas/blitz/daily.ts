@@ -5,6 +5,16 @@ import type { BlitzCityId } from './types';
  * for issuance, while this pure module lets the client explain the same board
  * without importing a clock, network client, or UI framework.
  */
+/**
+ * The season every ranked run, board and close agrees on.
+ *
+ * Shared because the client issues tickets under a season and the maintenance
+ * worker closes days under one. Two copies of this string would drift, and the
+ * failure would be silent: the worker would close a season nobody played while
+ * riders kept posting to another.
+ */
+export const BLITZ_SEASON_ID = 'cycle-2';
+
 export const BLITZ_DAILY_RULESET_VERSION = 'rush-missions-v5-rookie';
 export const BLITZ_DAY_MS = 86_400_000;
 
