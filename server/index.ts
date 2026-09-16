@@ -111,6 +111,17 @@ import { createAtlasTicketService } from './atlas/tickets';
 import { createAtlasSubmissionService } from './atlas/submissions';
 import { createAtlasLeaderboardService } from './atlas/leaderboard';
 import { createAtlasBlitzService } from './atlas/blitz';
+import { createBlitzMaintenance } from './atlas/blitz-worker';
+import { runBlitzDailyClose } from './atlas/blitz-daily-close';
+import { blitzRewardsForWallet } from './atlas/blitz-rewards';
+import { BLITZ_CITIES } from '../shared/atlas/blitz/cities';
+import { BLITZ_SEASON_ID } from '../shared/atlas/blitz/daily';
+
+/*
+ * Every five minutes. Frequent enough that a day settles soon after it ends,
+ * rare enough that it is not a busy loop against the treasury ledger.
+ */
+const BLITZ_MAINTENANCE_INTERVAL_MS = 5 * 60_000;
 import { createAtlasCompetitiveRuntime } from './atlas/competitive';
 import { ATLAS_CORE_FIXTURE } from '../shared/atlas/world';
 
@@ -298,6 +309,32 @@ const atlasBlitz = ATLAS_PRODUCTION_GATE.durableRepository ? createAtlasBlitzSer
    */
   daily: atlasDaily,
 }) : undefined;
+
+/*
+ * The only unattended work NIM RUSH does.
+ *
+ * Two promises were being made and never kept: the result screen tells a rider
+ * a pool is "paid at the close of the day" while nothing closed a day, and the
+ * blitz qualification outbox had no drain. Both failed silently.
+ *
+ * It raises draft obligations and stops. Approving and submitting a transfer
+ * stay supervised human actions, which is what makes an unattended worker safe
+ * to run at all. Constructed only when there is both a board to close and a
+ * treasury to owe from.
+ */
+const atlasBlitzMaintenance = atlasBlitz && atlasPayouts
+  ? createBlitzMaintenance({
+      intervalMs: BLITZ_MAINTENANCE_INTERVAL_MS,
+      close: () => runBlitzDailyClose({
+        now: Date.now(),
+        seasonId: BLITZ_SEASON_ID,
+        cities: BLITZ_CITIES.map((city) => city.id),
+        blitz: atlasBlitz,
+        payouts: atlasPayouts,
+      }),
+      drainQualifications: () => atlasBlitz.retryPendingQualifications(),
+    })
+  : undefined;
 const atlasCompetitive = ATLAS_PRODUCTION_GATE.competitive && atlasBeacon && atlasEchoes
   ? createAtlasCompetitiveRuntime({ identity: atlasIdentity, tickets: atlasTickets, submissions: atlasSubmissions, leaderboard: atlasLeaderboard, beacon: atlasBeacon, echoes: atlasEchoes, stateStore: atlasStateStore, ticketPolicy: ATLAS_COMPETITIVE_POLICY! })
   : undefined;
@@ -316,6 +353,12 @@ mountAtlasRoutes({ app, limit: rateLimiter.limit, api: createAtlasApi({
   identity: atlasIdentity,
   competitive: atlasCompetitive,
   blitz: atlasBlitz,
+  /*
+   * A rider can see their own receipts only when there is a ledger to read.
+   * Without a treasury this stays undefined and the route answers 503, which
+   * is the truth: rewards are unavailable, not empty.
+   */
+  blitzRewards: atlasPayouts ? (walletAddress: string) => blitzRewardsForWallet({ payouts: atlasPayouts, walletAddress }) : undefined,
   competition: atlasCompetitive ? () => atlasCompetitive.competition() : undefined,
   authorize: (proof, action, actorId, body) => provesActor(proof, action, actorId, body),
   orderCatalog: ATLAS_PAYMENT_CONFIG.enabled ? { itemId: ATLAS_PAYMENT_CONFIG.itemId, network: ATLAS_PAYMENT_CONFIG.network, recipient: ATLAS_PAYMENT_CONFIG.recipient!, valueLuna: ATLAS_PAYMENT_CONFIG.valueLuna } : undefined,
@@ -1798,8 +1841,12 @@ async function main(): Promise<void> {
     process.exit(1);
   });
 
+  atlasBlitzMaintenance?.start();
+  if (atlasBlitzMaintenance) console.log('[blitz] maintenance running every 5 minutes: daily close and qualification drain.');
+
   // Flush the snapshot before dying, or the last few scores go with it.
   const shutdown = (signal: string) => async () => {
+    atlasBlitzMaintenance?.stop();
     console.log(`[sface] ${signal}, shutting down`);
     server.close();
     await flush();
