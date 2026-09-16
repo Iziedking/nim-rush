@@ -109,11 +109,20 @@ function nearestSupplyLane(state: BlitzRunState, city: ReturnType<typeof blitzCi
  * a gearbox to spend and the bike is fast enough for the slide to do anything.
  * Boost is held whenever there is fuel, because that is what fuel is for.
  */
-export function blitzRiderInput(state: BlitzRunState, options: { boost?: boolean; drift?: boolean } = {}): BlitzInput {
+export function blitzRiderInput(state: BlitzRunState, options: { boost?: boolean; drift?: boolean; tuck?: boolean } = {}): BlitzInput {
   const steer = blitzRacingLine(state);
   return {
     steer,
     drift: options.drift ?? (state.driftCharges > 0 && Math.abs(steer) > 0.55 && state.speedMps >= 12),
     boost: options.boost ?? state.boostEnergy > 12,
+    /*
+     * Tuck when the line is straight, sit up when it is not.
+     *
+     * The bike coasts without this, so a rider who never tucks barely beats
+     * the time limit. Tucking costs grip, which is why this one lets go of it
+     * the moment the road asks for a real correction - the same call a person
+     * makes, and the reason posture is a skill rather than a button to hold.
+     */
+    tuck: options.tuck ?? Math.abs(steer) < 0.3,
   };
 }

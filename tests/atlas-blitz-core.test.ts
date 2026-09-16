@@ -151,7 +151,10 @@ describe('Beacon Blitz deterministic arcade core', () => {
     let sawLanding = false;
     let sawSurface = false;
     let visitedNonPavement = false;
-    for (let tick = 0; tick < BLITZ_TICK_RATE * 35 && state.phase === 'running'; tick += 1) {
+    // Long enough to reach the gravel at 0.47. The bike no longer holds its
+    // own speed, so a rider who rides posture covers less ground per second
+    // than the old automatic one and 35s stopped short of the surface change.
+    for (let tick = 0; tick < BLITZ_TICK_RATE * 55 && state.phase === 'running'; tick += 1) {
       // Ridden rather than held: a rider who ploughs into the first rock never
       // reaches the market kicker inside the window this checks.
       state = stepBlitzRun(state, blitzRiderInput(state, { boost: false }));

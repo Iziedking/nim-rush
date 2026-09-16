@@ -20,6 +20,16 @@ export interface BlitzInput {
   readonly steer: number;
   readonly drift: boolean;
   readonly boost: boolean;
+  /**
+   * Down on the bars, out of the wind.
+   *
+   * The bike used to hold its own speed whatever the rider did, which made the
+   * whole run automatic: steering was the only thing that mattered and a rider
+   * who touched nothing else arrived at the same time as one who worked. Tuck
+   * makes speed and costs steering; sitting up does the opposite. A rider who
+   * never tucks coasts, and coasting is slow enough to lose.
+   */
+  readonly tuck?: boolean;
   readonly brake?: boolean;
   readonly relayChoice?: BlitzChoice;
 }

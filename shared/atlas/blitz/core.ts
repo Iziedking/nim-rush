@@ -12,6 +12,22 @@ const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
 // The gates a rider can see. One list, shared with the renderer, because a
 // rider threading the gate in front of them must be the rider being scored.
 const LINE_GATE_FRACTIONS = BLITZ_LINE_GATES;
+/*
+ * Riding position.
+ *
+ * The three numbers that turn a run from automatic into ridden. Neutral is
+ * deliberately below the speed the course was built around: a rider who never
+ * tucks will be close to the time limit, which is the point - the bike no
+ * longer rides itself.
+ */
+const POSTURE_SPEED = { tucked: 1.16, neutral: 0.86 } as const;
+/*
+ * And the cost. Tucked, the bike goes where it was already going; sat up with
+ * the brakes on, it turns. Braking into a corner and tucking out of it is
+ * faster than holding one position through both, which is the whole skill.
+ */
+const POSTURE_GRIP = { tucked: 0.62, neutral: 1, braking: 1.3 } as const;
+
 const BOOST_DRAIN = 0.55;
 /*
  * There is no idle regen any more.
@@ -155,12 +171,15 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     driftLatched = true;
   }
   const brakeActive = input.brake === true;
+  // Braking wins: a rider cannot be hard on the brakes and tucked at once.
+  const tuckActive = input.tuck === true && !brakeActive;
   const routeSurface = surfaceAt(city, state.distanceMeters);
   const surface = Math.abs(state.laneOffset) > city.roadWidth * 0.5 ? 'grass' : routeSurface;
   const surfaceProfile = blitzSurface(surface);
   const boostActive = surface !== 'grass' && input.boost
     && (state.boostActive ? state.boostEnergy > 0.25 : state.boostEnergy >= BOOST_ENGAGE_ENERGY);
-  const lateralAcceleration = input.steer * (driftActive ? 13 : 8) * surfaceProfile.grip;
+  const postureGrip = tuckActive ? POSTURE_GRIP.tucked : brakeActive ? POSTURE_GRIP.braking : POSTURE_GRIP.neutral;
+  const lateralAcceleration = input.steer * (driftActive ? 13 : 8) * surfaceProfile.grip * postureGrip;
   let lateralVelocityMps = clamp(state.lateralVelocityMps + lateralAcceleration / BLITZ_TICK_RATE, -12, 12);
   lateralVelocityMps *= driftActive ? 0.988 : Math.pow(surfaceProfile.grip, 0.35) * 0.94;
   let laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
@@ -169,7 +188,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
   const grassProfile = blitzSurface('grass');
   const targetSpeed = brakeActive ? 0 : offRoad
     ? city.baseSpeedMps * grassProfile.resistance / (1 + shoulderDepth * 0.18)
-    : city.baseSpeedMps * surfaceProfile.resistance + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0);
+    : city.baseSpeedMps * surfaceProfile.resistance * (tuckActive ? POSTURE_SPEED.tucked : POSTURE_SPEED.neutral)
+      + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0);
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
   if (offRoad && !brakeActive && !state.airborne) {
     const here = sampleCourse(city.id, state.distanceMeters);
@@ -480,7 +500,7 @@ function withScore(state: Omit<BlitzRunState, 'score' | 'scoreBreakdown' | 'pena
 }
 
 function validateInput(input: BlitzInput): BlitzInput {
-  if (!Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1 || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean' || (input.brake !== undefined && typeof input.brake !== 'boolean') || (input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right')) throw new Error('Beacon Blitz input is invalid.');
+  if (!Number.isFinite(input.steer) || input.steer < -1 || input.steer > 1 || typeof input.drift !== 'boolean' || typeof input.boost !== 'boolean' || (input.brake !== undefined && typeof input.brake !== 'boolean') || (input.tuck !== undefined && typeof input.tuck !== 'boolean') || (input.relayChoice !== undefined && input.relayChoice !== 'left' && input.relayChoice !== 'right')) throw new Error('Beacon Blitz input is invalid.');
   return input;
 }
 

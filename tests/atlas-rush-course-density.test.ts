@@ -172,8 +172,8 @@ describe('every NIM RUSH course is dense enough to ride and open enough to pass'
    */
   it('names a ruleset version that moved with the course and its economy', () => {
     for (const rules of Object.values(BLITZ_DIFFICULTY_RULES)) {
-      expect(rules.rulesetVersion).toContain('v7');
-      expect(rules.rulesetVersion).not.toContain('v6');
+      expect(rules.rulesetVersion).toContain('v8');
+      expect(rules.rulesetVersion).not.toContain('v7');
     }
     expect(new Set(Object.values(BLITZ_DIFFICULTY_RULES).map((rules) => rules.rulesetVersion)).size)
       .toBe(Object.keys(BLITZ_DIFFICULTY_RULES).length);
