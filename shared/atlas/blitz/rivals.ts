@@ -163,3 +163,29 @@ export function isBlitzRivalPath(value: unknown): value is BlitzRivalPath {
   return path.distance.every((value) => Number.isFinite(value))
     && path.lane.every((value) => Number.isFinite(value));
 }
+
+/**
+ * Where you are in the pack, right now.
+ *
+ * A gap list says who is near; it does not say whether you are winning. That
+ * is the number a rider actually races against, and the one Downhill puts on
+ * screen from the first second to the last.
+ *
+ * A rival whose recorded path has already ended finished ahead of you - they
+ * got down the hill and you are still on it - so they count as ahead rather
+ * than dropping out of the field. Otherwise a rider would climb the order by
+ * being slow, which is the opposite of a race.
+ */
+export function blitzFieldPosition(input: {
+  readonly rivals: readonly BlitzRivalPath[];
+  readonly tick: number;
+  readonly distanceMeters: number;
+}): { readonly place: number; readonly field: number } {
+  let ahead = 0;
+  for (const rival of input.rivals) {
+    const at = blitzRivalAt(rival, input.tick);
+    if (!at) { ahead += 1; continue; }
+    if (at.distanceMeters > input.distanceMeters) ahead += 1;
+  }
+  return { place: ahead + 1, field: input.rivals.length + 1 };
+}

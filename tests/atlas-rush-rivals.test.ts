@@ -4,6 +4,7 @@ import { BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../shared/atlas/b
 import { replayBlitzTrace } from '../shared/atlas/blitz/replay';
 import {
   BLITZ_RIVAL_SAMPLE_TICKS,
+  blitzFieldPosition,
   blitzRivalAt,
   blitzRivalGaps,
   blitzRivalPathFrom,
@@ -202,5 +203,41 @@ describe('the gap list', () => {
     expect(blitzRivalGaps({ rivals: [done], tick: 600, distanceMeters: 10, speedMps: 20 })).toEqual([]);
     const stopped = blitzRivalGaps({ rivals: [pacer({ lane: 0, mps: 30 })], tick: 0, distanceMeters: 0, speedMps: 0 });
     expect(stopped[0]!.seconds).toBeNull();
+  });
+});
+
+/*
+ * Place in the field.
+ *
+ * The number that turns a time trial into a race. Its one real subtlety is a
+ * rival whose path has ended: they are not gone, they are down the hill
+ * already, so they must keep counting as ahead. Otherwise a rider climbs the
+ * order by being slow enough to outlast everybody's recording.
+ */
+describe('place in the field', () => {
+  const fast = pacer({ lane: 0, mps: 30, runId: 'fast' });
+  const slow = pacer({ lane: 1, mps: 6, runId: 'slow' });
+
+  it('counts the riders actually in front', () => {
+    expect(blitzFieldPosition({ rivals: [fast, slow], tick: 60, distanceMeters: 30 }))
+      .toEqual({ place: 2, field: 3 });
+  });
+
+  it('leads when nobody is in front', () => {
+    expect(blitzFieldPosition({ rivals: [fast, slow], tick: 60, distanceMeters: 10_000 }))
+      .toEqual({ place: 1, field: 3 });
+  });
+
+  it('keeps a rider who already finished ahead of you', () => {
+    const short = { runId: 'gone', username: 'Gone', distance: [0, 40], lane: [0, 0] };
+    // Their recording has run out, so they are down; you are still riding.
+    expect(blitzRivalAt(short, 900)).toBeNull();
+    expect(blitzFieldPosition({ rivals: [short], tick: 900, distanceMeters: 10 }))
+      .toEqual({ place: 2, field: 2 });
+  });
+
+  it('is a field of one when there is no pack', () => {
+    expect(blitzFieldPosition({ rivals: [], tick: 0, distanceMeters: 0 }))
+      .toEqual({ place: 1, field: 1 });
   });
 });

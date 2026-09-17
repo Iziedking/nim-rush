@@ -19,9 +19,10 @@ import { createBlitzPendingRunStore, type BlitzPendingRunStore, type BlitzPendin
 import { BlitzVoice, blitzCallout } from './blitz-callouts';
 import { createBlitzVoiceBank } from './blitz-voice-bank';
 import { createBlitzStartGate } from './blitz-start-gate';
+import { BLITZ_MINIMUM_FIELD } from '../../../shared/atlas/blitz/prize';
 import { createBlitzLobbyScreen } from './blitz-lobby-screen';
 import { createBlitzNimiqRequired } from './blitz-nimiq-required';
-import { blitzRivalGaps, type BlitzRivalPath } from '../../../shared/atlas/blitz/rivals';
+import { blitzFieldPosition, blitzRivalGaps, type BlitzRivalPath } from '../../../shared/atlas/blitz/rivals';
 import { createNimiqPoweredBy, createRushLogo } from './blitz-brand';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
@@ -140,6 +141,14 @@ export class BlitzApp {
       window.addEventListener('pointerdown', this.audioGesture);
       window.addEventListener('keydown', this.audioGesture);
       window.addEventListener('resize', this.resize);
+      /*
+       * On iOS the visible box changes without a window resize: the toolbar
+       * slides away as you scroll, the keyboard opens, the address bar
+       * collapses. Listening only to window resize leaves the canvas sized for
+       * the frame before last, which is how a strip of the world ends up drawn
+       * underneath the controls.
+       */
+      window.visualViewport?.addEventListener('resize', this.resize);
       document.addEventListener('visibilitychange', this.visibilityChanged);
     } catch (error) {
       console.error('Beacon Blitz failed to start.', error);
@@ -257,7 +266,13 @@ export class BlitzApp {
      * the way.
      */
     const difficultyChooser = node('fieldset', 'blitz-difficulty');
-    difficultyChooser.append(node('legend', '', 'DIFFICULTY'));
+    /*
+     * Ranked keeps one shared ruleset, so this chooser has never applied to
+     * today's challenge - but sitting under a bare 'DIFFICULTY' it read as if
+     * it did, which is the sort of ambiguity that makes a rider think a
+     * leaderboard can be gamed. The legend names what it governs.
+     */
+    difficultyChooser.append(node('legend', '', 'DIFFICULTY / FREE + FRIENDS'));
     const rookie = button('Rookie', `blitz-difficulty-option${this.difficulty === 'rookie' ? ' is-selected' : ''}`, () => { this.difficulty = 'rookie'; this.renderIntro(); });
     const pro = button('Pro', `blitz-difficulty-option${this.difficulty === 'pro' ? ' is-selected' : ''}`, () => { this.difficulty = 'pro'; this.renderIntro(); });
     rookie.setAttribute('aria-pressed', String(this.difficulty === 'rookie'));
@@ -302,6 +317,17 @@ export class BlitzApp {
         : 'Signs your identity. Never a payment.');
       command.append(connect, connectNote);
     } else {
+      /*
+       * A rider names themselves once.
+       *
+       * The field used to be there every single time, so entering a race meant
+       * re-reading a name you had already chosen before you could press the
+       * button - three screens deep, on a phone, every day. A name that is
+       * already settled is shown as settled, with one way to change it.
+       *
+       * The input still exists behind it, because the name is what the server
+       * binds to the wallet and it is what a clash has to be corrected in.
+       */
       const username = node('input', 'blitz-username');
       username.type = 'text';
       username.inputMode = 'text';
@@ -310,6 +336,20 @@ export class BlitzApp {
       username.placeholder = 'Rider name';
       username.setAttribute('aria-label', 'Rider name');
       try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
+
+      const nameLabel = node('span', 'blitz-field-label', 'RIDER NAME');
+      const settled = node('div', 'blitz-name-settled');
+      const settledName = node('strong', 'blitz-name-value', username.value);
+      const rename = button('Change', 'blitz-quiet blitz-name-change', () => {
+        settled.hidden = true;
+        username.hidden = false;
+        username.focus();
+      });
+      settled.append(settledName, rename);
+      const nameIsSettled = /^[A-Za-z0-9_]{3,18}$/.test(username.value);
+      settled.hidden = !nameIsSettled;
+      username.hidden = nameIsSettled;
+      username.addEventListener('input', () => { settledName.textContent = username.value; });
 
       /*
        * The pool, as a number and a clock. What the split is and when it
@@ -323,7 +363,7 @@ export class BlitzApp {
       const rankedStatus = node('p', 'blitz-rank-status', '');
       const rankedButton = button("Ride today's challenge", 'blitz-start blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
       const ranked = node('section', 'blitz-ranked-launch');
-      ranked.append(node('span', 'blitz-mode-label', 'DAILY CHALLENGE'), pool, node('span', 'blitz-field-label', 'RIDER NAME'), username, rankedButton, rankedStatus);
+      ranked.append(node('span', 'blitz-mode-label', 'DAILY CHALLENGE'), pool, nameLabel, settled, username, rankedButton, rankedStatus);
 
       // Practice. Deliberately the quieter of the two: it is the one that does
       // not count, and the panel should lead with the one that does.
@@ -597,9 +637,28 @@ export class BlitzApp {
     this.updateMissionHud(state);
   }
 
+  /*
+   * One contract on screen, not three.
+   *
+   * Three stacked cards sat over the top quarter of the trail, which is the
+   * part a rider needs to read to pick a line - so the instructions were
+   * covering the thing they were instructions about. A rider can only work on
+   * one contract at a time anyway, so only one is shown: whichever is live,
+   * or the next one waiting.
+   *
+   * It also gets out of the way. The card is there while something is
+   * happening to it and fades once nothing has changed for a few seconds,
+   * coming straight back when progress moves or the contract does. Nothing is
+   * removed from the DOM, so the update path and its tests are unchanged.
+   */
+  private missionShownId: string | null = null;
+  private missionAwakeUntil = 0;
+
   private renderMissionHud(state: BlitzRunState): void {
     if (!this.missionHost) return;
     this.missionHost.replaceChildren();
+    this.missionShownId = null;
+    this.missionAwakeUntil = 0;
     const heading = node('div', 'blitz-mission-heading', 'TODAY / THREE CONTRACTS');
     this.missionHost.append(heading);
     for (const mission of state.missions) {
@@ -633,6 +692,33 @@ export class BlitzApp {
       card.classList.toggle('is-complete', mission.status === 'complete');
       card.classList.toggle('is-failed', mission.status === 'failed');
     }
+    this.showCurrentContract(state);
+  }
+
+  /**
+   * The one contract worth reading right now, and how long it stays up.
+   *
+   * "Live" wins, because that is the one being scored this second. Otherwise
+   * the next one still open, so a rider knows what is coming. When every
+   * contract is settled there is nothing left to instruct, and the card goes.
+   */
+  private showCurrentContract(state: BlitzRunState): void {
+    if (!this.missionHost) return;
+    const live = state.missions.find((mission) => mission.status === 'active');
+    const next = state.missions.find((mission) => mission.status !== 'complete' && mission.status !== 'failed');
+    const current = live ?? next ?? null;
+    const signature = current ? `${current.id}:${current.status}:${Math.min(current.progress, current.target)}` : 'none';
+    if (signature !== this.missionShownId) {
+      this.missionShownId = signature;
+      // Four seconds is long enough to read a six-word instruction at speed and
+      // short enough that a rider is not reading it through the next corner.
+      this.missionAwakeUntil = performance.now() + 4_200;
+    }
+    for (const card of this.missionHost.querySelectorAll('.blitz-mission-card')) {
+      card.classList.toggle('is-shown', card instanceof HTMLElement && card.dataset.missionId === current?.id);
+    }
+    const awake = Boolean(current) && performance.now() < this.missionAwakeUntil;
+    this.missionHost.classList.toggle('is-idle', !awake);
   }
 
   private togglePause = (): void => {
@@ -812,7 +898,23 @@ export class BlitzApp {
     } catch (error) {
       status.textContent = error instanceof Error ? error.message.toUpperCase() : 'RANKED MODE IS UNAVAILABLE.';
       buttonNode.disabled = false;
+      /*
+       * A name is one per wallet per season, so somebody else can already have
+       * the one you picked. That is the single failure a rider can fix from
+       * this screen, so the field comes back open rather than leaving them
+       * reading a refusal with nothing to act on.
+       */
+      if (error instanceof Error && /name/i.test(error.message)) this.reopenNameField(usernameInput);
     }
+  }
+
+  /** Put the name back in front of a rider who has to change it. */
+  private reopenNameField(usernameInput: HTMLInputElement): void {
+    const settled = usernameInput.parentElement?.querySelector('.blitz-name-settled');
+    if (settled instanceof HTMLElement) settled.hidden = true;
+    usernameInput.hidden = false;
+    usernameInput.focus();
+    usernameInput.select();
   }
 
   private async prepareRankedRun(cityId: BlitzCityId, usernameInput: HTMLInputElement, buttonNode: HTMLButtonElement, status: HTMLElement): Promise<void> {
@@ -1016,7 +1118,16 @@ export class BlitzApp {
        * and the settlement rule are in the rules document, where somebody who
        * wants them can read them once instead of every day.
        */
-      if (table.allocations.length === 0) {
+      if (table.qualifiedRiders < BLITZ_MINIMUM_FIELD) {
+        /*
+         * A funded pot with one rider on it is not a prize, it is a withdrawal
+         * waiting to happen, so the pool says what the day is short of rather
+         * than dangling a number nobody can win yet.
+         */
+        host.append(node('p', 'blitz-pool-note', table.qualifiedRiders === 0
+          ? 'Nobody has ridden today. Two riders make it a race.'
+          : 'One rider so far. The day pays out once a second rider posts a verified run.'));
+      } else if (table.allocations.length === 0) {
         host.append(node('p', 'blitz-pool-note', 'First place open.'));
       } else {
         const standings = node('ol', 'blitz-pool-standings');
@@ -1172,12 +1283,31 @@ export class BlitzApp {
       distanceMeters: state.distanceMeters,
       speedMps: state.speedMps,
     }).slice(0, 3);
-    if (gaps.length === 0) { host.hidden = true; return; }
+    /*
+     * Your place in the field, before the gaps.
+     *
+     * The gap list says who is near. It does not say whether you are winning,
+     * and that is the number a rider is actually racing - so it goes first and
+     * stays up even when nobody is close enough to have a gap worth printing.
+     */
+    const position = blitzFieldPosition({ rivals: this.rivals, tick: state.tick, distanceMeters: state.distanceMeters });
     host.hidden = false;
+    let place = host.querySelector('.blitz-place');
+    if (!place) {
+      place = node('div', 'blitz-place');
+      place.append(node('strong', 'blitz-place-value', ''), node('span', 'blitz-place-field', ''));
+      host.prepend(place);
+    }
+    const placeValue = place.querySelector('.blitz-place-value');
+    const placeField = place.querySelector('.blitz-place-field');
+    if (placeValue) placeValue.textContent = String(position.place);
+    if (placeField) placeField.textContent = `OF ${position.field}`;
+    place.classList.toggle('is-leading', position.place === 1);
+    if (gaps.length === 0) return;
     const signature = gaps.map((gap) => gap.runId).join('|');
     if (host.dataset.signature !== signature) {
       host.dataset.signature = signature;
-      host.replaceChildren();
+      for (const row of [...host.querySelectorAll('.blitz-gap')]) row.remove();
       for (const gap of gaps) {
         const row = node('div', 'blitz-gap');
         row.dataset.runId = gap.runId;
@@ -1185,7 +1315,7 @@ export class BlitzApp {
         host.append(row);
       }
     }
-    [...host.children].forEach((row, index) => {
+    [...host.querySelectorAll('.blitz-gap')].forEach((row, index) => {
       const gap = gaps[index];
       if (!gap) return;
       const time = row.querySelector('.blitz-gap-time');
@@ -1353,8 +1483,25 @@ export class BlitzApp {
     return control;
   }
 
+  /*
+   * Size the picture to the box it is actually drawn in.
+   *
+   * The stylesheet gives the stage `visualViewport.height`, and this asked the
+   * renderer for `window.innerHeight`. On a desktop those are the same number
+   * and nothing looked wrong. On iOS they are not: innerHeight counts the strip
+   * under Safari's toolbar that nobody can see, so the camera was set up for a
+   * taller frame than the one on screen and the bottom of the world was drawn
+   * into space the page had already given to the controls - which is the pale
+   * band along the bottom of the run.
+   *
+   * visualViewport is the honest number where it exists, and innerHeight is
+   * the right fallback where it does not.
+   */
   private resize = (): void => {
-    this.renderer.resize(window.innerWidth, window.innerHeight, Math.min(devicePixelRatio, 1.25));
+    const viewport = window.visualViewport;
+    const width = Math.ceil(viewport?.width ?? window.innerWidth);
+    const height = Math.ceil(viewport?.height ?? window.innerHeight);
+    this.renderer.resize(width, height, Math.min(devicePixelRatio, 1.25));
     if (!this.state) this.renderer.renderPreview(this.cityId);
   };
 }
