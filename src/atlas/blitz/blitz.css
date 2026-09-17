@@ -1465,3 +1465,168 @@ button + .blitz-quiet { margin-top: 11px; }
   box-shadow: var(--rush-drop-tight);
   color: var(--rush-keyline) !important;
 }
+
+/*
+ * A screen is interactive unless it says otherwise.
+ *
+ * The UI layer is pointer-transparent so the world underneath stays visible
+ * and touchable, and every screen used to opt back in by name. Two screens
+ * added this cycle - the private lobby and the Nimiq-needed door - never did,
+ * so both rendered perfectly and accepted no input whatsoever. Every button on
+ * them was covered by the canvas. An invited rider met a screen that looked
+ * finished and could not be used, which is the worst way to lose somebody.
+ *
+ * Opting out is now the exception and belongs to the one screen that wants it:
+ * the run, where taps must reach the world rather than a full-screen panel.
+ */
+.blitz-ui > main { pointer-events: auto; }
+.blitz-ui > main.blitz-run { pointer-events: none; }
+
+/*
+ * The Nimiq-needed door, laid out for a narrow phone.
+ *
+ * The store buttons centred their labels with a 44px line-height, which is a
+ * trick that only works while the label is one line. At 375px "Get it on
+ * iPhone" wraps, the line boxes stack to twice the height the button was drawn
+ * for, and the sentence underneath ends up printed across the buttons. Real
+ * centring and real spacing instead of a magic number.
+ */
+.blitz-store-links { gap: 10px; margin-bottom: 4px; }
+.blitz-store-links a,
+.blitz-open-nimiq {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  margin-top: 0;
+  line-height: 1.15;
+  text-align: center;
+}
+.blitz-open-nimiq { min-height: 60px; margin-bottom: 12px; }
+.blitz-nimiq-required .blitz-rank-status { margin-top: 14px; }
+.blitz-nimiq-required .blitz-lobby-leave { margin-top: 6px; }
+
+/*
+ * One contract card, and only while it has something to say.
+ *
+ * Three cards covered the top of the trail, which is the part a rider reads to
+ * choose a line. Hidden cards stay in the DOM so the update path is unchanged;
+ * they just take no space and catch no light.
+ */
+.blitz-mission-card { display: none; }
+.blitz-mission-card.is-shown { display: block; }
+.blitz-mission-hud {
+  opacity: 1;
+  transition: opacity 320ms ease;
+}
+.blitz-mission-hud.is-idle { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .blitz-mission-hud { transition: none; }
+}
+
+/*
+ * Clearance from the right edge.
+ *
+ * The speed readout and the supply gauges sat 14-15px in and both carry
+ * letter-spacing, which adds a gap after the last character that the box keeps
+ * and the eye does not - so on a phone the final glyph sat right on the edge
+ * and read as cut. A few more pixels, and the trailing space paid for.
+ */
+.blitz-speed-box { right: max(18px, calc(env(safe-area-inset-right) + 4px)); padding-right: .14em; }
+.blitz-boost-wrap { right: max(18px, calc(env(safe-area-inset-right) + 4px)); padding-right: .14em; }
+
+/*
+ * A name already chosen, shown as a fact rather than as a question.
+ */
+.blitz-name-settled {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0 0 4px;
+  padding: 0 4px 0 12px;
+}
+.blitz-name-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--rush-keyline);
+  font: 800 15px/1 ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blitz-name-change {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 2px solid var(--rush-keyline);
+  border-radius: 10px;
+  background: transparent;
+  color: #4b4436;
+  font: 900 9px/1 ui-monospace, monospace;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+/*
+ * The name row, and the height it cost.
+ *
+ * `.blitz-ui button` zeroes every border, which is more specific than a plain
+ * class, so Change rendered as bare text that did not look pressable. And the
+ * row is new height on a screen that was already exactly full, so the panel
+ * gives a little back rather than pushing the footer under the fold again.
+ */
+.blitz-ui .blitz-name-change { border: 2px solid var(--rush-keyline); }
+
+@media (max-width: 720px) {
+  .blitz-name-settled { min-height: 40px; margin-bottom: 0; }
+  .blitz-field-label { margin-top: 8px; }
+  .blitz-intro-command .blitz-ranked-launch { padding: 10px; }
+  .blitz-intro-command .blitz-difficulty { margin-top: 11px; }
+  .blitz-intro-command .blitz-again { margin-top: 8px; }
+}
+
+/*
+ * The wordmark gives way to the panel on a phone.
+ *
+ * With a name row on the daily card the screen is a little over full again,
+ * and of everything on it the giant RIDGE RUN is the part that is decoration:
+ * it was already read on the loading plate a second earlier. The panel and the
+ * utility row underneath are what a rider came to use.
+ */
+@media (max-width: 720px) {
+  .blitz-intro-masthead .blitz-title { font-size: clamp(40px, 11vw, 60px); }
+  .blitz-intro-masthead .blitz-rush-logo-hero { max-width: 186px; }
+  .blitz-intro.blitz-fullscreen-page { gap: 10px; }
+}
+
+/*
+ * Place in the field.
+ *
+ * Downhill Domination keeps a rider's position on screen from the gate to the
+ * line, and it is the single thing that turns a time trial into a race: you
+ * are not chasing a number, you are chasing the rider in front. Big enough to
+ * read at speed without looking away from the trail, and out of the centre.
+ */
+.blitz-place {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 4px 9px;
+  border: 3px solid var(--rush-keyline);
+  border-radius: 12px;
+  background: var(--rush-paper);
+  box-shadow: var(--rush-drop-tight);
+}
+.blitz-place-value {
+  color: var(--rush-keyline);
+  font: 400 26px/1 AtlasDisplay, Impact, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.blitz-place-field {
+  color: #6d604a;
+  font: 900 9px/1 ui-monospace, monospace;
+  letter-spacing: .14em;
+}
+/* Leading is worth seeing without reading. */
+.blitz-place.is-leading { background: var(--rush-lime); }
