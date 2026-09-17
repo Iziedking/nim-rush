@@ -42,10 +42,12 @@ and more missions per city to give them something to be good at.
 
 ## Racing somebody who can fight back
 
-The pack you ride against is recorded, so contact moves you and never them.
-That is honest and it is not a race. We want both bikes live at once, where a
-shoulder going into a corner costs the other rider too and somebody can be put
-out before the line.
+You can put a rival out today, and it counts: the hit is verified from your
+trace and they are gone from your descent. What it cannot do is cost them
+anything, because their run was already ridden.
+
+We want both bikes live at once - a shoulder into a corner that puts either
+rider out, decided once and true for both of them.
 
 ## A fuller hill
 

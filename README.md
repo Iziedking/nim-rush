@@ -89,10 +89,20 @@ next rider's ticket pins three of them. They ride as solid bikes: you can be
 held up behind one, squeeze past on the inside, and put a shoulder in going
 through.
 
-Contact moves you and never them. Their run was ridden before yours existed, so
-the game is overtaking traffic rather than fighting it, and the replay stays
-honest. Two riders cannot take each other down today; that needs both bikes
-live at once, and it is on the roadmap rather than pretended at here.
+You can put one out. Commit across the trail into a rival's flank, at speed,
+with the bars turned into them, and they are down for the rest of your descent:
+gone from the trail, gone from the gap list, gone from your place in the field,
+and worth points. Drift into somebody at half pace and it is still just a
+mistake, paid for as one.
+
+That is computed from your input trace and the pinned pack, so the server
+re-simulating your run agrees about who went down and when. A takedown is a
+verified event, not something the browser asserts.
+
+What it does not do is change their run. Theirs was ridden before yours existed
+and their row on the board is already true, so you take them out of your
+descent rather than out of their result. Both bikes live at once, where a
+shoulder costs the other rider too, is on the roadmap.
 
 Your place in the field is on screen for the whole descent. A rider whose
 recording has run out finished ahead of you and keeps counting as ahead, so
