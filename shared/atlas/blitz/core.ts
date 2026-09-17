@@ -1,5 +1,6 @@
 import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles } from './cities';
 import { BLITZ_BASE_LOADOUT, type BlitzLoadout } from './rider';
+import { blitzRivalAt, blitzRivalContact, type BlitzRivalPath } from './rivals';
 import { missionWindow, selectBlitzMissions } from './missions';
 import { blitzRules, type BlitzDifficultyRules } from './rules';
 import { blitzSurface } from './surfaces';
@@ -51,7 +52,7 @@ export const BLITZ_NITRO_BOTTLE = 18;
  * handed itself a bigger tank produces a trace the server disagrees with, and
  * the run is refused rather than ranked.
  */
-export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; difficulty?: BlitzDifficulty; loadout?: BlitzLoadout }): BlitzRunState {
+export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; difficulty?: BlitzDifficulty; loadout?: BlitzLoadout; rivals?: readonly BlitzRivalPath[] }): BlitzRunState {
   const difficulty = input.difficulty ?? 'rookie';
   const loadout = input.loadout ?? BLITZ_BASE_LOADOUT;
   const rules = blitzRules(difficulty);
@@ -105,6 +106,8 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
     collectedPickupIds: [],
     nitroTaken: 0,
     gearboxTaken: 0,
+    rivalContacts: 0,
+    overtakes: 0,
     distanceScore: 0,
     lineScore: 0,
     controlScore: 0,
@@ -126,7 +129,7 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
   });
 }
 
-export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzRunState {
+export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals: readonly BlitzRivalPath[] = []): BlitzRunState {
   const input = validateInput(rawInput);
   if (state.phase === 'finished' || state.phase === 'timeout') return state;
   if (state.phase === 'countdown') {
@@ -301,6 +304,35 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
       nearMisses += 1;
     }
   }
+  /*
+   * The pack.
+   *
+   * A rival is a moving obstacle that cannot react, so contact moves the rider
+   * and never the rival. It costs less than a rock because it is a shoulder,
+   * not a boulder - and overtaking pays, because getting past traffic cleanly
+   * is the thing worth being good at.
+   */
+  let rivalContacts = state.rivalContacts;
+  let overtakes = state.overtakes;
+  for (const rival of rivals) {
+    const before = blitzRivalAt(rival, state.tick);
+    const now = blitzRivalAt(rival, state.tick + 1);
+    if (!now) continue;
+    if (blitzRivalContact({ distanceMeters, laneOffset }, now)) {
+      const away = Math.sign(laneOffset - now.laneOffset) || (input.steer >= 0 ? 1 : -1);
+      laneOffset = now.laneOffset + away * (0.52 * 2 + 0.01);
+      lateralVelocityMps = away * 4.4;
+      speedMps *= 0.62;
+      rivalContacts += 1;
+      if (!lastEvent) lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 0.5, surface };
+    } else if (before && state.distanceMeters <= before.distanceMeters && distanceMeters > now.distanceMeters) {
+      // Crossed them. Counted on the tick the lead changes hands, so sitting
+      // alongside somebody cannot farm it.
+      overtakes += 1;
+      distanceScore += 150;
+    }
+  }
+
   distanceScore += nearMisses * 180;
 
   /*
@@ -373,6 +405,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput): BlitzR
     collectedPickupIds,
     nitroTaken,
     gearboxTaken,
+    rivalContacts,
+    overtakes,
     distanceScore,
     lineScore,
     controlScore,

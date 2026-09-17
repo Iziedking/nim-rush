@@ -95,7 +95,11 @@ export function createRushCourse(id: BlitzCityId, difficulty: BlitzDifficulty = 
       hazard = new Mesh(rockGeometry, stone);
       hazard.scale.set(shape.halfWidth, shape.height / 2, shape.halfLength);
     }
-    const group = new Group(); group.rotation.y = p.headingRadians; group.position.set(p.x, p.y + shape.height / 2, p.z); group.add(hazard); root.add(group);
+    const group = new Group(); group.rotation.y = p.headingRadians; group.position.set(p.x, p.y + shape.height / 2, p.z); group.add(hazard);
+    // Where it sits, so the renderer can stop submitting it once it is behind
+    // the rider or still beyond the fog.
+    group.userData.courseDistance = obstacle.distance01 * city.lengthMeters;
+    root.add(group);
   }
   return root;
 }

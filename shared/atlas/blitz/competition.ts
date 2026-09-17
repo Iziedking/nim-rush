@@ -1,4 +1,5 @@
 import type { BlitzCityId, BlitzTraceFrame } from './types';
+import type { BlitzRivalPath } from './rivals';
 
 export interface BlitzTicket {
   readonly id: string;
@@ -11,6 +12,14 @@ export interface BlitzTicket {
   readonly challengeDate: string;
   readonly rulesetVersion: string;
   readonly seed: string;
+  /*
+   * The pack this ticket was issued against.
+   *
+   * Pinned by the server so the run a rider rides and the run the server
+   * re-simulates are the same run. A solid rival changes the physics, so a
+   * ticket without its pack would verify an honest run as a mismatch.
+   */
+  readonly rivals?: readonly BlitzRivalPath[];
   readonly issuedAt: number;
   readonly expiresAt: number;
 }

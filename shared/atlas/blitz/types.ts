@@ -132,6 +132,15 @@ export interface BlitzRunState {
   readonly driftLatched: boolean;
   readonly pickupReach: number;
   readonly collectedPickupIds: readonly string[];
+  /*
+   * The pack, and what happened in it.
+   *
+   * Held on the run because a solid rival changes the physics: the same run
+   * ridden against a different pack is a different run, so the set has to
+   * travel with the state that verification rebuilds.
+   */
+  readonly rivalContacts: number;
+  readonly overtakes: number;
   readonly nitroTaken: number;
   readonly gearboxTaken: number;
   readonly distanceScore: number;

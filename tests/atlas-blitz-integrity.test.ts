@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { withStateTransactions } from '../server/atlas/persistence';
 import { createBlitzRun, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { hashBlitzTrace, replayBlitzTrace } from '../shared/atlas/blitz/replay';
 import type { BlitzTraceFrame } from '../shared/atlas/blitz/types';
@@ -105,10 +106,10 @@ describe('Blitz integrity regressions', () => {
   it('rolls back failed persistence and durably accepts the same retry', async () => {
     let fail = false;
     let durable: unknown = null;
-    const store: AtlasStateStore = {
+    const store: AtlasStateStore = withStateTransactions({
       load: async <T>(_key: string, fallback: T) => structuredClone((durable ?? fallback) as T),
       save: async <T>(_key: string, value: T) => { if (fail) throw new Error('disk unavailable'); durable = structuredClone(value); },
-    };
+    });
     const f = await fixture(store);
     fail = true;
     await expect(f.service.submit(f.submission)).rejects.toThrow(/disk/);
@@ -123,7 +124,11 @@ describe('Blitz integrity regressions', () => {
   it('keeps failed store writes out of later unrelated persisted records', async () => {
     let fail = false;
     let durable: AtlasRepositorySnapshot | null = null;
-    const store = createAtlasStateStore({ snapshotPath: 'fixture', lockPath: 'fixture.lock', load: async () => ({ snapshot: durable, recoveredFromBackup: false }), listBackups: async () => [], save: async (snapshot) => { if (fail) throw new Error('disk unavailable'); durable = structuredClone(snapshot); } });
+    const store = createAtlasStateStore({ snapshotPath: 'fixture', lockPath: 'fixture.lock', load: async () => ({ snapshot: durable, recoveredFromBackup: false }), listBackups: async () => [],
+      // The lock the real repository provides. A double without it would let
+      // a caller believe a read-modify-write was isolated when it was not.
+      transact: async <T,>(operation: (write: (snapshot: AtlasRepositorySnapshot) => Promise<void>) => Promise<T>) =>
+        operation(async (next) => { if (fail) throw new Error('disk unavailable'); durable = structuredClone(next); }), save: async (snapshot) => { if (fail) throw new Error('disk unavailable'); durable = structuredClone(snapshot); } });
     await store.save('blitz', { runs: [] });
     fail = true;
     await expect(store.save('blitz', { runs: ['uncommitted'] })).rejects.toThrow(/disk/);

@@ -35,6 +35,7 @@ import {
 
 import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles, type BlitzCityDefinition, type BlitzPickup } from '../../../../shared/atlas/blitz/cities';
 import { blitzRules } from '../../../../shared/atlas/blitz/rules';
+import { blitzRivalAt, type BlitzRivalPath } from '../../../../shared/atlas/blitz/rivals';
 import { sampleBlitzRoute } from '../../../../shared/atlas/blitz/core';
 import { buildBlitzRoadRibbon } from '../../../../shared/atlas/blitz/road-ribbon';
 import type { BlitzCityId, BlitzDifficulty, BlitzRunState } from '../../../../shared/atlas/blitz/types';
@@ -98,6 +99,21 @@ export class BlitzRenderer {
    * banked but can still see is worse than no supply at all.
    */
   private pickupNodes = new Map<string, Group>();
+  /*
+   * Everything on the course that has a position along it: obstacles, gates.
+   *
+   * Collected once when the city is built and culled by distance every frame.
+   * A scene that submits the whole course at every moment spends most of its
+   * draw calls on geometry behind the rider or beyond the fog.
+   */
+  private courseProps: Object3D[] = [];
+  /*
+   * The pack. One bike per rival, built when the run starts and moved along
+   * their recorded line every frame - never rebuilt, because a rival that
+   * flickered into existence mid-corner would read as a bug rather than as a
+   * rider.
+   */
+  private rivalBikes: { readonly path: BlitzRivalPath; readonly bike: RushBike }[] = [];
   private reducedMotion = false;
   private cameraReady = false;
   private previousDistance = 0;
@@ -177,6 +193,13 @@ export class BlitzRenderer {
       const pose = sampleBlitzRoute(city.id, city.lengthMeters * distance01);
       gate.position.set(pose.x, pose.y, pose.z);
       gate.rotation.y = pose.headingRadians;
+      /*
+       * A gate is posts, flags, edge markers, an overhead span and a ring -
+       * roughly eight meshes - and there are three on the course. Only the one
+       * being ridden toward is ever looked at, so they are culled like every
+       * other course prop.
+       */
+      gate.userData.courseDistance = city.lengthMeters * distance01;
       this.cityRoot!.add(gate);
     });
     /*
@@ -198,10 +221,37 @@ export class BlitzRenderer {
       this.pickupNodes.set(pickup.id, node);
     }
 
+    /*
+     * Gathered by traversal rather than by being handed back from each builder,
+     * because Lagos builds its own course and the other cities do not - one
+     * list either way, and a new prop only has to tag itself to be culled.
+     */
+    this.courseProps = [];
+    this.cityRoot.traverse((object) => {
+      if (typeof object.userData.courseDistance === 'number') this.courseProps.push(object);
+    });
+
     this.activeCity = cityId;
     this.activeDifficulty = difficulty;
     this.cameraReady = false;
     this.previousDistance = 0;
+  }
+
+  /** Put a pack on the course. Called once as a run starts. */
+  setRivals(rivals: readonly BlitzRivalPath[]): void {
+    for (const entry of this.rivalBikes) {
+      entry.bike.root.removeFromParent();
+      entry.bike.shadow.removeFromParent();
+      disposeTree(entry.bike.root);
+      disposeTree(entry.bike.shadow);
+    }
+    this.rivalBikes = [];
+    if (!this.cityRoot) return;
+    for (const path of rivals) {
+      const bike = new RushBike();
+      this.cityRoot.add(bike.root, bike.shadow);
+      this.rivalBikes.push({ path, bike });
+    }
   }
 
   renderPreview(cityId: BlitzCityId): void {
@@ -296,6 +346,20 @@ export class BlitzRenderer {
      * its own HUD.
      */
     /*
+     * Cull the course to what a rider can see.
+     *
+     * The fog closes at 225 metres and nothing behind the bike is ever looked
+     * at, so anything outside that window is geometry the GPU is asked to
+     * consider for no reason. The simulation still collides with all of it -
+     * this only decides what is drawn.
+     */
+    for (const prop of this.courseProps) {
+      const ahead = (prop.userData.courseDistance as number) - state.distanceMeters;
+      const shown = ahead > -14 && ahead < 155;
+      if (prop.visible !== shown) prop.visible = shown;
+    }
+
+    /*
      * A supply spins and bobs so it reads as a thing to take rather than as
      * scenery, and vanishes the tick the simulation banks it.
      */
@@ -307,12 +371,30 @@ export class BlitzRenderer {
        * gone for good; far ahead they are not worth submitting yet.
        */
       const ahead = (node.userData.distance as number) - state.distanceMeters;
-      const shown = !state.collectedPickupIds.includes(id) && ahead > -6 && ahead < 150;
+      const shown = !state.collectedPickupIds.includes(id) && ahead > -6 && ahead < 140;
       if (node.visible !== shown) node.visible = shown;
       if (!shown || this.reducedMotion) continue;
       const body = node.children[0]!;
       body.rotation.y = state.tick * 0.09;
       body.position.y = 0.78 + Math.sin(state.tick * 0.11) * 0.07;
+    }
+    /*
+     * Move the pack. A rival who has finished is taken off the course rather
+     * than left parked on it, which is the same rule the simulation uses - if
+     * the two disagreed a rider would be blocked by a bike that is not there.
+     */
+    for (const { path, bike } of this.rivalBikes) {
+      const at = blitzRivalAt(path, state.tick);
+      const gap = at ? at.distanceMeters - state.distanceMeters : 0;
+      // Behind the rider a rival is gone from view; far ahead it is fog.
+      const present = at !== null && gap > -26 && gap < 155;
+      if (bike.root.visible !== present) { bike.root.visible = present; bike.shadow.visible = present; }
+      if (!at) continue;
+      const pose = sampleBlitzRoute(state.cityId, at.distanceMeters, at.laneOffset);
+      bike.root.position.set(pose.x, pose.y, pose.z);
+      bike.root.rotation.y = pose.headingRadians;
+      bike.shadow.position.set(pose.x, pose.y + 0.02, pose.z);
+      bike.shadow.rotation.y = pose.headingRadians;
     }
     if (this.crowd) updateCityCrowd(this.crowd, state.tick);
     if (state.cityId === 'lagos' && this.cityRoot) updateRushCourse(this.cityRoot, state.distanceMeters);
@@ -345,6 +427,12 @@ function createCity(city: BlitzCityDefinition, difficulty: BlitzDifficulty): Gro
     const traffic = createTrafficVehicle(city, obstacle.id);
     traffic.position.set(pose.x, pose.y + 0.26, pose.z);
     traffic.rotation.y = pose.headingRadians;
+    /*
+     * A car is eight meshes - body, glass, four wheels, two lamps - and a city
+     * carries twenty of them. Drawn all at once that is more draw calls than
+     * the whole rest of the scene, for objects the fog hides at 225 metres.
+     */
+    traffic.userData.courseDistance = city.lengthMeters * obstacle.distance01;
     root.add(traffic);
   }
   return root;

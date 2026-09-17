@@ -1,16 +1,28 @@
 import { createBlitzRun, stepBlitzRun } from './core';
 import type { BlitzCityId, BlitzRunState, BlitzTraceFrame } from './types';
+import type { BlitzRivalPath } from './rivals';
 
 // Browser recording and Node verification share this input boundary. Hash the
 // exact numbers the simulation consumes; rounding only the hash aliases runs.
 export const BLITZ_TRACE_FRAME_LIMIT = 3_000;
 
-export function replayBlitzTrace(input: { cityId: BlitzCityId; seed: string; frames: readonly BlitzTraceFrame[] }): BlitzRunState {
+export function replayBlitzTrace(input: {
+  cityId: BlitzCityId;
+  seed: string;
+  frames: readonly BlitzTraceFrame[];
+  /*
+   * The pack the run was ridden against, as pinned to the ticket the server
+   * issued. A solid rival changes the physics, so replaying without them would
+   * compute a different score and refuse an honest run.
+   */
+  rivals?: readonly BlitzRivalPath[];
+}): BlitzRunState {
   validateBlitzTrace(input.frames);
-  let state = createBlitzRun({ cityId: input.cityId, seed: input.seed });
+  const rivals = input.rivals ?? [];
+  let state = createBlitzRun({ cityId: input.cityId, seed: input.seed, rivals });
   for (const frame of input.frames) {
     if (state.phase === 'finished' || state.phase === 'timeout') throw new Error('Beacon Blitz trace contains controls after its terminal state.');
-    state = stepBlitzRun(state, frame.input);
+    state = stepBlitzRun(state, frame.input, rivals);
   }
   return state;
 }
@@ -39,4 +51,33 @@ export function validateBlitzTrace(frames: readonly BlitzTraceFrame[]): void {
       throw new Error('Beacon Blitz trace input is invalid.');
     }
   }
+}
+
+/**
+ * Replay a trace and keep the line it drew.
+ *
+ * The server already re-simulates every ranked run to check the score. Doing
+ * it once more to record where the bike went would double the work for no
+ * reason, so this returns both: the verified state, and the position at every
+ * tick ready to be sampled into a rival path.
+ *
+ * Positions rather than inputs, because a rival's line is fixed. Keeping the
+ * trace would be eighteen times the payload for something nothing recomputes.
+ */
+export function replayBlitzTraceWithPath(input: {
+  cityId: BlitzCityId;
+  seed: string;
+  frames: readonly BlitzTraceFrame[];
+  rivals?: readonly BlitzRivalPath[];
+}): { readonly state: BlitzRunState; readonly positions: readonly { distanceMeters: number; laneOffset: number }[] } {
+  validateBlitzTrace(input.frames);
+  const rivals = input.rivals ?? [];
+  let state = createBlitzRun({ cityId: input.cityId, seed: input.seed, rivals });
+  const positions: { distanceMeters: number; laneOffset: number }[] = [];
+  for (const frame of input.frames) {
+    if (state.phase === 'finished' || state.phase === 'timeout') throw new Error('Beacon Blitz trace contains controls after its terminal state.');
+    state = stepBlitzRun(state, frame.input, rivals);
+    positions.push({ distanceMeters: state.distanceMeters, laneOffset: state.laneOffset });
+  }
+  return { state, positions };
 }

@@ -4,6 +4,7 @@ import { BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../shared/atlas/b
 import { hashBlitzTrace } from '../shared/atlas/blitz/replay';
 import type { BlitzCityId, BlitzTraceFrame } from '../shared/atlas/blitz/types';
 import { createAtlasBlitzService } from '../server/atlas/blitz';
+import type { BlitzRivalPath } from '../shared/atlas/blitz/rivals';
 import { blitzRiderInput } from './support/blitz-rider';
 
 const walletA = 'NQ12 TEST WALLET A';
@@ -16,13 +17,13 @@ function identity(bindings: Record<string, string>) {
   } };
 }
 
-async function completeTrace(cityId: BlitzCityId, seed: string): Promise<{ frames: BlitzTraceFrame[]; score: number; elapsedMs: number; collisions: number; hash: string }> {
+async function completeTrace(cityId: BlitzCityId, seed: string, rivals: readonly BlitzRivalPath[] = []): Promise<{ frames: BlitzTraceFrame[]; score: number; elapsedMs: number; collisions: number; hash: string }> {
   const frames: BlitzTraceFrame[] = [];
-  let state = createBlitzRun({ cityId, seed });
+  let state = createBlitzRun({ cityId, seed, rivals });
   while (state.phase !== 'finished' && state.phase !== 'timeout') {
     const input = blitzRiderInput(state);
     frames.push({ tick: frames.length, input });
-    state = stepBlitzRun(state, input);
+    state = stepBlitzRun(state, input, rivals);
   }
   return { frames, score: state.score, elapsedMs: state.elapsedMs, collisions: state.collisions, hash: await hashBlitzTrace(frames) };
 }
@@ -46,7 +47,7 @@ describe('Beacon Blitz verified competition service', () => {
     let current = 2_000;
     const service = createAtlasBlitzService({ identity: identity({ 'season-1:actor-a': walletA }), now: () => current, randomId: () => `ticket-${++id}` });
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
-    const trace = await completeTrace('lagos', ticket.seed);
+    const trace = await completeTrace('lagos', ticket.seed, ticket.rivals);
     current += trace.elapsedMs + 3_000;
     const input = { runId: 'run-a', ticketId: ticket.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos' as const, seasonId: 'season-1', seed: ticket.seed, frames: trace.frames, traceHash: trace.hash, claimedScore: trace.score };
     const accepted = await service.submit(input);
@@ -63,7 +64,7 @@ describe('Beacon Blitz verified competition service', () => {
     const ticketA = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'london', seasonId: 'season-1' });
     await expect(service.issueTicket({ actorId: 'actor-b', walletAddress: walletB, username: 'sFACE', cityId: 'london', seasonId: 'season-1' })).rejects.toThrow(/username/i);
     const ticketB = await service.issueTicket({ actorId: 'actor-b', walletAddress: walletB, username: 'Kemi', cityId: 'london', seasonId: 'season-1' });
-    const [traceA, traceB] = await Promise.all([completeTrace('london', ticketA.seed), completeTrace('london', ticketB.seed)]);
+    const [traceA, traceB] = await Promise.all([completeTrace('london', ticketA.seed, ticketA.rivals), completeTrace('london', ticketB.seed, ticketB.rivals)]);
     current += Math.max(traceA.elapsedMs, traceB.elapsedMs) + 3_000;
     await service.submit({ runId: 'run-a', ticketId: ticketA.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'london', seasonId: 'season-1', seed: ticketA.seed, frames: traceA.frames, traceHash: traceA.hash, claimedScore: traceA.score });
     await service.submit({ runId: 'run-b', ticketId: ticketB.id, actorId: 'actor-b', walletAddress: walletB, username: 'Kemi', cityId: 'london', seasonId: 'season-1', seed: ticketB.seed, frames: traceB.frames, traceHash: traceB.hash, claimedScore: traceB.score });
@@ -82,7 +83,7 @@ describe('Beacon Blitz verified competition service', () => {
     const ticket = await service.issueTicket({
       actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'dubai', seasonId: 'season-1',
     });
-    const trace = await completeTrace('dubai', ticket.seed);
+    const trace = await completeTrace('dubai', ticket.seed, ticket.rivals);
     current = ticket.issuedAt + 120_001;
     await expect(service.submit({
       runId: 'run-slow', ticketId: ticket.id, actorId: ticket.actorId,
@@ -109,7 +110,7 @@ describe('a verified run and the day pool', () => {
       daily: daily as never,
     });
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
-    const trace = await completeTrace('lagos', ticket.seed);
+    const trace = await completeTrace('lagos', ticket.seed, ticket.rivals);
     current += trace.elapsedMs + 3_000;
     const result = await service.submit({
       runId: 'run-pool', ticketId: ticket.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface',
@@ -164,7 +165,7 @@ describe('what the board would owe if it closed now', () => {
     const service = createAtlasBlitzService({ identity: identity(bindings), now: () => current, randomId: () => `ticket-${++id}`, daily: daily as never });
     for (const [index] of scores.entries()) {
       const ticket = await service.issueTicket({ actorId: `actor-${index}`, walletAddress: wallets[index]!, username: `Rider${index}`, cityId: 'lagos', seasonId: 'season-1' });
-      const trace = await completeTrace('lagos', ticket.seed);
+      const trace = await completeTrace('lagos', ticket.seed, ticket.rivals);
       // The guard measures replay *ticks*, which include the countdown, not the
       // run's elapsed time. Advance by the whole trace or it still trips.
       current += Math.ceil((trace.frames.length * 1_000) / BLITZ_TICK_RATE) + 1_000;

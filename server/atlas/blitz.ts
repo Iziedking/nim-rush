@@ -6,7 +6,8 @@ import type { AtlasDailyService } from './daily';
 import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, type BlitzPrizeAllocation } from '../../shared/atlas/blitz/prize';
 import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
-import { hashBlitzTrace, replayBlitzTrace, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
+import { hashBlitzTrace, replayBlitzTraceWithPath, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
+import { blitzRivalPathFrom, type BlitzRivalPath } from '../../shared/atlas/blitz/rivals';
 import { BLITZ_TICK_RATE } from '../../shared/atlas/blitz/core';
 import { BLITZ_CITIES } from '../../shared/atlas/blitz/cities';
 import { getBlitzDailyChallenge, BLITZ_DAILY_RULESET_VERSION } from '../../shared/atlas/blitz/daily';
@@ -28,6 +29,14 @@ const BLITZ_RANKED_SUBMISSION_WINDOW_MS = 120_000;
 export interface AtlasBlitzSnapshot {
   readonly version: 2;
   tickets: readonly StoredTicket[];
+  /*
+   * The lines riders drew, by challenge.
+   *
+   * Kept so a later rider has somebody to race. Optional because a snapshot
+   * written before rivals existed has none, and a restart must not lose a
+   * day's board just because this field is missing.
+   */
+  readonly rivalPaths?: ReadonlyArray<{ challengeId: string; path: BlitzRivalPath; score: number }>;
   readonly runs: ReadonlyArray<{ row: StoredRow; fingerprint: string }>;
   readonly usernames: ReadonlyArray<{ seasonId: string; normalized: string; walletAddress: string; display: string }>;
   readonly qualificationOutbox: readonly BlitzQualificationOutboxItem[];
@@ -113,6 +122,25 @@ export function createAtlasBlitzService(options: {
   let operations: Promise<void> = Promise.resolve();
   let pendingOperations = 0;
   let drainPromise: Promise<BlitzQualificationRetryResult> | null = null;
+  /**
+   * How many lines are kept per challenge.
+   *
+   * A day only needs enough riders to make a race feel like one, and every
+   * extra path is payload on the ticket and bytes in the snapshot. Six is two
+   * full packs of three.
+   */
+  const RIVAL_PATHS_PER_CHALLENGE = 6;
+  /** How many go on a ticket. More than three and the road stops being readable. */
+  const RIVALS_PER_TICKET = 3;
+
+  /*
+   * Best lines per challenge, fastest first.
+   *
+   * Scored rather than most recent, so a rider always races the runs worth
+   * chasing - and so a flood of slow runs cannot push the good ones out.
+   */
+  const rivalPaths = new Map<string, { path: BlitzRivalPath; score: number }[]>();
+
   let committed: AtlasBlitzSnapshot = serialiseSnapshot();
 
   async function ensureLoaded(): Promise<void> {
@@ -165,6 +193,12 @@ export function createAtlasBlitzService(options: {
           cityId: input.cityId, seasonId: input.seasonId, challengeId: challenge.challengeId,
           challengeDate: challenge.date, rulesetVersion: challenge.rulesetVersion, seed: challenge.seed,
           issuedAt, expiresAt: Math.min(issuedAt + 5 * 60_000, challenge.expiresAt),
+          /*
+           * Pinned now, so the run a rider rides and the run the server checks
+           * are the same run. Empty on the first ticket of a day, which simply
+           * means the first rider down has the hill to themselves.
+           */
+          rivals: packFor(challenge.challengeId, input.walletAddress, username),
         };
         if (!/^[a-zA-Z0-9_-]{1,128}$/.test(ticket.id)) throw new AtlasBlitzError('invalid', 'Beacon Blitz ticket id is invalid.');
         tickets.set(ticket.id, structuredClone(ticket));
@@ -199,7 +233,18 @@ export function createAtlasBlitzService(options: {
           throw new AtlasBlitzError('ticket', 'A ranked Beacon Blitz run must finish within two minutes of ticket issue.');
         }
         if (ticket.usedByRunId && ticket.usedByRunId !== input.runId) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket has already been used.');
-        const replay = replayBlitzTrace({ cityId: input.cityId, seed: input.seed, frames: input.frames });
+        /*
+         * Verified against the pack the ticket was issued with.
+         *
+         * A solid rival changes the physics, so replaying this run without the
+         * rivals it was ridden against would compute a different score and
+         * refuse an honest rider. The set comes from the stored ticket, never
+         * from the submission: a client that chose its own rivals could choose
+         * an empty road.
+         */
+        const { state: replay, positions } = replayBlitzTraceWithPath({
+          cityId: input.cityId, seed: input.seed, frames: input.frames, rivals: ticket.rivals ?? [],
+        });
         if (replay.phase !== 'finished') throw new AtlasBlitzError('replay', 'Only a completed Beacon Blitz run can be ranked.');
         if (replay.score !== input.claimedScore) throw new AtlasBlitzError('replay', 'Beacon Blitz claimed score does not match authoritative replay.');
         // Ticket issue precedes countdown. Include those ticks, and measure at
@@ -215,6 +260,8 @@ export function createAtlasBlitzService(options: {
         };
         ticket.usedByRunId = input.runId;
         runs.set(input.runId, { row, fingerprint });
+        // The line this rider drew becomes somebody else's rival.
+        rememberRivalPath(ticket.challengeId, blitzRivalPathFrom({ runId: input.runId, username: input.username, positions }), replay.score);
         const key = bestKey(row);
         const current = best.get(key);
         if (!current || compareRows(row, current) < 0) best.set(key, row);
@@ -303,10 +350,31 @@ export function createAtlasBlitzService(options: {
     },
   };
 
+  function rememberRivalPath(challengeId: string, path: BlitzRivalPath, score: number): void {
+    const entries = rivalPaths.get(challengeId) ?? [];
+    // One line per rider: a wallet that improves on their own run replaces it
+    // rather than filling the pack with several copies of themselves.
+    const withoutRider = entries.filter((entry) => entry.path.runId !== path.runId && entry.path.username !== path.username);
+    withoutRider.push({ path, score });
+    withoutRider.sort((left, right) => right.score - left.score);
+    rivalPaths.set(challengeId, withoutRider.slice(0, RIVAL_PATHS_PER_CHALLENGE));
+  }
+
+  function packFor(challengeId: string, walletAddress: string, username: string): BlitzRivalPath[] {
+    const entries = rivalPaths.get(challengeId) ?? [];
+    return entries
+      // Nobody races themselves. A rider meeting their own ghost as a solid
+      // bike would be blocked by their own best line, which is absurd.
+      .filter((entry) => entry.path.username !== username && entry.path.runId !== walletAddress)
+      .slice(0, RIVALS_PER_TICKET)
+      .map((entry) => structuredClone(entry.path));
+  }
+
   function serialiseSnapshot(): AtlasBlitzSnapshot {
     return {
       version: 2,
       tickets: [...tickets.values()].map((ticket) => structuredClone(ticket)),
+      rivalPaths: [...rivalPaths.entries()].flatMap(([challengeId, entries]) => entries.map((entry) => ({ challengeId, ...structuredClone(entry) }))),
       runs: [...runs.values()].map((run) => structuredClone(run)),
       usernames: [...usernameWallet.entries()].map(([key, value]) => {
         const separator = key.indexOf(':');
@@ -321,6 +389,19 @@ export function createAtlasBlitzService(options: {
     const snapshot = raw as AtlasBlitzSnapshot & { version: 1 | 2 };
     if (!Array.isArray(snapshot.tickets) || !Array.isArray(snapshot.runs) || !Array.isArray(snapshot.usernames)) throw new AtlasBlitzError('invalid', 'Beacon Blitz snapshot is malformed.');
     tickets.clear(); runs.clear(); best.clear(); usernameWallet.clear(); walletUsername.clear(); qualificationOutbox.clear();
+    /*
+     * Rivals survive the restart too. Losing them would empty every pack for
+     * the rest of the day and quietly turn the race back into a time trial -
+     * the kind of regression nobody notices until somebody asks why the hill
+     * went silent.
+     */
+    rivalPaths.clear();
+    for (const entry of snapshot.rivalPaths ?? []) {
+      const entries = rivalPaths.get(entry.challengeId) ?? [];
+      entries.push({ path: structuredClone(entry.path), score: entry.score });
+      entries.sort((left, right) => right.score - left.score);
+      rivalPaths.set(entry.challengeId, entries.slice(0, RIVAL_PATHS_PER_CHALLENGE));
+    }
     for (const ticket of snapshot.tickets) tickets.set(ticket.id, upgradeTicket(ticket));
     for (const stored of snapshot.runs) {
       const upgraded = { row: upgradeRow(stored.row), fingerprint: stored.fingerprint };
