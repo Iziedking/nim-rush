@@ -185,3 +185,57 @@ describe('NIM Atlas public curriculum boundary', () => {
     }
   });
 });
+
+/*
+ * The submission schema and BlitzInput have to describe the same buttons.
+ *
+ * zod strips what it does not declare, without a word. When the posture system
+ * added `tuck`, this schema kept the old shape, so every ranked frame was
+ * quietly flattened before the server hashed it - which broke the rider's
+ * signature, and would have made the replay disagree with an honest score even
+ * if it had not.
+ *
+ * This asserts on the body the route actually hands to the authorizer, because
+ * that is the object the digest is taken over, and the only place the loss was
+ * observable.
+ */
+describe('a ranked submission keeps every input a rider pressed', () => {
+  const FULL_INPUT = { steer: 0.5, drift: true, brake: true, tuck: true, boost: true, relayChoice: 'left' as const };
+
+  it('hands the authorizer the frames it was sent, tuck included', async () => {
+    let seen: unknown = null;
+    const app = express();
+    app.use(express.json({ limit: '2mb' }));
+    mountAtlasRoutes({
+      app,
+      limit: () => (_request, _response, next) => next(),
+      api: createAtlasApi({
+        curriculum: ATLAS_CURRICULUM,
+        now: () => new Date('2026-08-25T12:00:00.000Z'),
+        blitz: { submit: async () => ({ row: { rank: 1 }, duplicate: false }) } as never,
+        authorize: async (_proof, _action, _actorId, body) => { seen = body; return true; },
+      }),
+    });
+    const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => { const s = app.listen(0, () => resolve(s)); });
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no port');
+    try {
+      await fetch(`http://127.0.0.1:${address.port}/atlas/api/blitz/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          runId: 'run-1', ticketId: 'ticket-1', actorId: 'a'.repeat(64),
+          walletAddress: 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000', username: 'Rider',
+          cityId: 'lagos', seasonId: 'cycle-2', seed: 'seed-1',
+          frames: [{ tick: 0, input: FULL_INPUT }],
+          traceHash: 'f'.repeat(64), claimedScore: 10,
+          auth: { challengeId: 'challenge-1', publicKeyJwk: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' }, signature: 'ab'.repeat(32) },
+        }),
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+    const frames = (seen as { frames?: { input?: Record<string, unknown> }[] } | null)?.frames;
+    expect(frames?.[0]?.input).toEqual(FULL_INPUT);
+  });
+});

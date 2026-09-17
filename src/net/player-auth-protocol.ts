@@ -127,12 +127,33 @@ export function publicKeyId(jwk: PublicKeyJwk): Promise<string> {
   );
 }
 
+/*
+ * A digest both ends can agree on, including the fields that are not there.
+ *
+ * Key order is sorted so the two sides cannot disagree about it. The part that
+ * was missing is `undefined`: this rendered it literally, producing
+ * `"challengeId":undefined`, which is not even JSON. The request itself goes
+ * over the wire through JSON.stringify, which drops an undefined property
+ * entirely, so the server received a body without the key, hashed a body
+ * without the key, and disagreed with the signature every time.
+ *
+ * It only bit requests carrying an optional field that happened to be unset,
+ * which is why a lobby - three required fields, no optionals - signed and
+ * verified perfectly while every ranked run refused. The rider saw "submission
+ * was rejected" and no leaderboard, and nothing in the type system had an
+ * opinion, because `challengeId?: string` being undefined is exactly correct.
+ *
+ * So the rule here is now the same rule JSON.stringify uses: an undefined
+ * property is absent, and an undefined array element is null.
+ */
 function stableJson(value: unknown): string {
+  if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   const record = value as Record<string, unknown>;
   return `{${Object.keys(record)
     .sort()
+    .filter((key) => record[key] !== undefined)
     .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
     .join(',')}}`;
 }

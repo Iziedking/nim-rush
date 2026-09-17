@@ -42,4 +42,33 @@ describe('player auth protocol', () => {
     expect(await bodyDigest({ b: 2, a: 1 })).toBe(await bodyDigest({ a: 1, b: 2 }));
     expect(await bodyDigest({ a: 1, b: 3 })).not.toBe(await bodyDigest({ a: 1, b: 2 }));
   });
+
+  /*
+   * The bug that made every ranked run unverifiable.
+   *
+   * A body is signed on the client, sent through JSON.stringify, and hashed
+   * again on the server. JSON.stringify drops an undefined property, so the
+   * server can only ever see the shorter object - and the digest has to agree
+   * with that, or nothing carrying an unset optional field can be authorised.
+   *
+   * The first case is the whole failure: a ranked submission passes
+   * challengeId, challengeDate and rulesetVersion straight off the ticket, and
+   * a ticket without them produced a signature the server could never match.
+   */
+  it('treats an undefined property as absent, the way transport does', async () => {
+    expect(await bodyDigest({ runId: 'r1', challengeId: undefined }))
+      .toBe(await bodyDigest({ runId: 'r1' }));
+    expect(await bodyDigest({ runId: 'r1', challengeId: undefined }))
+      .toBe(await bodyDigest(JSON.parse(JSON.stringify({ runId: 'r1', challengeId: undefined }))));
+  });
+
+  it('still separates an absent field from a present one', async () => {
+    expect(await bodyDigest({ runId: 'r1' })).not.toBe(await bodyDigest({ runId: 'r1', challengeId: 'c' }));
+    expect(await bodyDigest({ runId: 'r1', challengeId: null })).not.toBe(await bodyDigest({ runId: 'r1' }));
+  });
+
+  it('matches transport for an undefined array element', async () => {
+    const body = { frames: [1, undefined, 3] };
+    expect(await bodyDigest(body)).toBe(await bodyDigest(JSON.parse(JSON.stringify(body))));
+  });
 });

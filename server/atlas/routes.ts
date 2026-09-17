@@ -284,8 +284,27 @@ export function mountAtlasRoutes(options: {
   });
   options.app.post('/atlas/api/blitz/runs', options.limit(12, 4), async (request, response) => {
     if (!options.api.blitz || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Beacon Blitz competition is unavailable.' }); return; }
+    /*
+     * Two very different refusals used to share one message.
+     *
+     * A trace that fails the schema and a trace whose device proof does not
+     * match are the same 403 to the rider, which is right - naming the failing
+     * half tells a forger which half to work on. But they were also the same
+     * line in the log, and a ranked run that silently would not verify on a
+     * real phone took a full device session to narrow down. The rider's
+     * message is unchanged; the operator now gets the half that failed.
+     */
     const parsed = blitzSubmissionBody.safeParse(request.body);
-    if (!parsed.success || !(await options.api.authorize(parsed.data.auth, 'atlas.run.submit', parsed.data.actorId, withoutAuth(parsed.data)))) { response.status(403).json({ ok: false, error: 'Beacon Blitz run submission was rejected.' }); return; }
+    if (!parsed.success) {
+      console.warn(`[sface] blitz run rejected (schema): ${parsed.error.issues.slice(0, 4).map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);
+      response.status(403).json({ ok: false, error: 'Beacon Blitz run submission was rejected.' });
+      return;
+    }
+    if (!(await options.api.authorize(parsed.data.auth, 'atlas.run.submit', parsed.data.actorId, withoutAuth(parsed.data)))) {
+      console.warn('[sface] blitz run rejected (device proof did not authorise the submitted body)');
+      response.status(403).json({ ok: false, error: 'Beacon Blitz run submission was rejected.' });
+      return;
+    }
     try { response.status(201).json({ ok: true, data: await options.api.blitz.submit(withoutAuth(parsed.data)) }); }
     catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
@@ -360,7 +379,24 @@ const ticketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64),
 const actionBody = z.object({ moveX: z.number().finite(), moveY: z.number().finite(), tool: z.enum(['none', 'scanner', 'relay-tether', 'shield-pulse']), interact: z.boolean(), system: z.enum(['active', 'paused', 'hidden']).optional() });
 const submissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-f0-9]{32}$/), actorId, walletAddress: z.string().min(1).max(64), network: z.literal('testalbatross'), role: z.enum(['explorer', 'builder']), seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), challengeId: z.string().regex(/^[a-z0-9-]{1,80}$/), origin: z.string().url().max(256), campaignHash: z.string().regex(/^[a-f0-9]{64}$/), curriculumHash: z.string().regex(/^[a-f0-9]{64}$/), rulesetHash: z.string().regex(/^[a-f0-9]{64}$/), assistance: z.enum(['none', 'free-hint', 'purchased-hint', 'answer-reveal', 'debug']), actions: z.array(actionBody).max(20_000), claimedSnapshot: z.unknown(), replayHash: z.string().regex(/^[a-f0-9]{64}$/), auth: authProof });
 const blitzCityId = z.enum(['lagos', 'london', 'dubai']);
-const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), brake: z.boolean().optional(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
+/*
+ * Every button a rider can press, including the one that was missing.
+ *
+ * zod strips keys it does not know about, silently and by design. `tuck`
+ * arrived with the posture system - the change that made the bike stop holding
+ * its own speed and made the run a series of decisions - and this schema was
+ * never told. So every ranked frame arrived, had its tuck removed, and was
+ * hashed into a body the rider's signature no longer matched.
+ *
+ * That cost the digest first, which is what the rider saw, but the worse half
+ * is what would have happened had it passed: the server would have re-simulated
+ * every run with the posture system switched off, disagreed with an honest
+ * score, and refused honest riders as cheats.
+ *
+ * Keep this in step with BlitzInput in shared/atlas/blitz/types.ts. The test in
+ * tests/atlas-blitz-server.test.ts fails if a field is added there and not here.
+ */
+const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), brake: z.boolean().optional(), tuck: z.boolean().optional(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
 const lobbyOpenBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), capacity: z.number().int().min(2).max(7), auth: authProof });
 const seatClaimBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), auth: authProof });
 const blitzTicketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), auth: authProof });
