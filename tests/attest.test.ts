@@ -113,9 +113,21 @@ describe('what the envelope still guarantees', () => {
     expect(result?.address).toMatch(/^NQ/);
   });
 
-  it('tries the documented envelope first', () => {
-    // A correct wallet must never be judged by the looser rule.
-    expect(envelopes(claimMessage(CLAIM))[0]?.name).toBe('nimiq-byte-length');
+  it('tries what a real wallet produces first', () => {
+    /*
+     * A correct wallet must never be judged by a looser rule, and this used to
+     * assert that the unhashed prefixed message came first. That was the shape
+     * this code believed in, not the shape Nimiq Pay signs: measured against a
+     * real wallet on 2026-09-17, the signature verifies over the SHA-256 digest
+     * of the prefixed message and over nothing else.
+     *
+     * So the order still puts the correct shape first. What changed is which
+     * shape is correct, and the unhashed forms are now the fallbacks.
+     */
+    const order = envelopes(claimMessage(CLAIM)).map((candidate) => candidate.name);
+    expect(order[0]).toBe('sha256-nimiq-byte-length');
+    expect(order.indexOf('sha256-nimiq-byte-length')).toBeLessThan(order.indexOf('nimiq-byte-length'));
+    expect(order.at(-1)).toBe('bare-message');
   });
 
   it('still refuses a signature over a different run, in every envelope', () => {

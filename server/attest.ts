@@ -35,10 +35,13 @@
  * raw bytes does not.
  */
 
+import { createHash } from 'node:crypto';
+
+import { PublicKey, Signature } from '@nimiq/core';
+
 import { scoreClaimMessage, type ScoreClaim } from '../src/data/score-claim';
 
 export type { ScoreClaim } from '../src/data/score-claim';
-import { PublicKey, Signature } from '@nimiq/core';
 
 const encoder = new TextEncoder();
 
@@ -80,14 +83,14 @@ function join(prefix: string, body: Uint8Array): Uint8Array {
  * replayed as a transaction, and every candidate below is a message envelope or
  * the message itself. None of them is a transaction.
  *
- * Order matters. The first is what Nimiq documents and what this verified
- * against before, and the rest are only reached once it fails, so a correct
+ * Order matters. The first is what Nimiq actually produces, confirmed against
+ * a real wallet, and the rest are only reached once it fails, so a correct
  * wallet is never judged by a looser rule than it should be.
  */
 export function envelopes(message: string): Array<{ name: string; bytes: Uint8Array }> {
   const body = encoder.encode(message);
 
-  return [
+  const prefixed = [
     { name: 'nimiq-byte-length', bytes: encodeSignedMessage(message) },
     {
       name: 'nimiq-char-length',
@@ -100,6 +103,31 @@ export function envelopes(message: string): Array<{ name: string; bytes: Uint8Ar
     },
     { name: 'bare-message', bytes: body },
   ];
+
+  /*
+   * The missing step, finally measured.
+   *
+   * Everything above builds the prefixed message and signs those bytes. Nimiq
+   * signs the SHA-256 digest of them. One hash, left out, and no wallet
+   * signature this service has ever been shown could verify - which is exactly
+   * what the note above describes and could not explain, because finding it
+   * needs a real wallet and a headless browser has none.
+   *
+   * Confirmed on 2026-09-17 against Nimiq Pay on a Pixel 7 Pro: a binding
+   * message of 235 bytes, signed in the app, verified against
+   * sha256('\x16Nimiq Signed Message:\n' + byteLength + message) and against
+   * nothing else among twenty-nine candidates.
+   *
+   * The digests go first because they are what a correct wallet produces. The
+   * unhashed forms stay behind them rather than being deleted: they cost one
+   * cheap comparison each, they are all message envelopes rather than
+   * transactions, and a signature that was accepted before must not start
+   * being refused now.
+   */
+  return [...prefixed.map((candidate) => ({
+    name: `sha256-${candidate.name}`,
+    bytes: new Uint8Array(createHash('sha256').update(candidate.bytes).digest()),
+  })), ...prefixed];
 }
 
 export const claimMessage = scoreClaimMessage;
@@ -130,7 +158,7 @@ export function verifyMessage(input: {
       publicKey.verify(signature, candidate.bytes),
     );
     if (!matched) return null;
-    if (matched.name !== 'nimiq-byte-length') {
+    if (matched.name !== 'sha256-nimiq-byte-length') {
       console.warn(`[sface] signature verified with fallback envelope: ${matched.name}`);
     }
     return { address: publicKey.toAddress().toUserFriendlyAddress() };

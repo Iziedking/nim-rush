@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Address, PublicKey, Signature } from '@nimiq/core';
 
-import { encodeSignedMessage } from '../attest';
+import { envelopes } from '../attest';
 import { PlayerAuth } from '../player-auth';
 import type { Challenge, DeviceProof } from '../../src/net/player-auth-protocol';
 import type { AtlasNetwork } from '../../shared/atlas/types';
@@ -59,19 +59,90 @@ export class AtlasIdentityError extends Error {
 
 export const canonicalAtlasWalletBindingMessage = sharedCanonicalAtlasWalletBindingMessage;
 
-export function verifyAtlasWalletSignature(input: AtlasWalletBindingProof, now = Date.now(), expectedDomain = DEFAULT_DOMAIN): { address: string } | null {
+/*
+ * Why a binding was refused, for the log only.
+ *
+ * "Atlas wallet signature is invalid" is what a rider sees, and it is the
+ * right thing to show them: naming the failing check would tell somebody
+ * probing the endpoint which part to vary next. But it was also all the
+ * operator got, and the five checks below fail for completely different
+ * reasons - a stale domain, a key that belongs to another address, bytes the
+ * wallet wrapped differently. Collapsing them into one line cost a full
+ * device round trip per guess.
+ */
+export type AtlasWalletRefusal =
+  | 'domain-or-purpose'
+  | 'network'
+  | 'window'
+  | 'malformed'
+  | 'key-address-mismatch'
+  | 'no-envelope-verified';
+
+export function verifyAtlasWalletSignature(
+  input: AtlasWalletBindingProof,
+  now = Date.now(),
+  expectedDomain = DEFAULT_DOMAIN,
+  onRefusal?: (reason: AtlasWalletRefusal, detail: Record<string, unknown>) => void,
+): { address: string } | null {
+  const refuse = (reason: AtlasWalletRefusal, detail: Record<string, unknown> = {}) => {
+    onRefusal?.(reason, detail);
+    return null;
+  };
   try {
     const challenge = input.challenge;
-    if (challenge.domain !== expectedDomain || challenge.purpose !== PURPOSE) return null;
-    if (!['testalbatross', 'mainalbatross'].includes(challenge.network)) return null;
-    if (!Number.isSafeInteger(challenge.issuedAt) || !Number.isSafeInteger(challenge.expiresAt) || now >= challenge.expiresAt || challenge.expiresAt <= challenge.issuedAt) return null;
+    if (challenge.domain !== expectedDomain || challenge.purpose !== PURPOSE) {
+      return refuse('domain-or-purpose', { got: challenge.domain, expected: expectedDomain, purpose: challenge.purpose });
+    }
+    if (!['testalbatross', 'mainalbatross'].includes(challenge.network)) return refuse('network', { network: challenge.network });
+    if (!Number.isSafeInteger(challenge.issuedAt) || !Number.isSafeInteger(challenge.expiresAt) || now >= challenge.expiresAt || challenge.expiresAt <= challenge.issuedAt) {
+      return refuse('window', { issuedAt: challenge.issuedAt, expiresAt: challenge.expiresAt, now });
+    }
     const address = Address.fromUserFriendlyAddress(challenge.address).toUserFriendlyAddress();
     const publicKey = PublicKey.fromHex(input.publicKey);
     const signature = Signature.fromHex(input.signature);
-    if (publicKey.toAddress().toUserFriendlyAddress() !== address) return null;
-    return publicKey.verify(signature, encodeSignedMessage(canonicalAtlasWalletBindingMessage({ ...challenge, address })) ) ? { address } : null;
-  } catch {
-    return null;
+    if (publicKey.toAddress().toUserFriendlyAddress() !== address) {
+      return refuse('key-address-mismatch', {
+        addressFromKey: publicKey.toAddress().toUserFriendlyAddress(),
+        addressInChallenge: address,
+        publicKeyChars: input.publicKey.length,
+        signatureChars: input.signature.length,
+      });
+    }
+    /*
+     * Every envelope a wallet might have signed, not just the documented one.
+     *
+     * This path checked `nimiq-byte-length` alone and refused everything else,
+     * which is the same failure `server/attest.ts` already describes and
+     * already solved for score claims: the key is right, the address derives
+     * correctly, the signed lines match this message word for word, and the
+     * bytes still do not verify, because the wallet wrapped them differently.
+     *
+     * It survived because the only way to find it is a real wallet, and a
+     * headless browser has none. A Nimiq Pay signature on a Pixel 7 Pro found
+     * it in one tap.
+     *
+     * The order is unchanged, so a wallet using the documented envelope is
+     * still judged by the documented rule and never reaches a looser one. Each
+     * candidate is a message envelope or the message itself; none is a
+     * transaction, so a binding signature still cannot be replayed as one.
+     */
+    const message = canonicalAtlasWalletBindingMessage({ ...challenge, address });
+    const matched = envelopes(message).find((candidate) => publicKey.verify(signature, candidate.bytes));
+    if (!matched) {
+      return refuse('no-envelope-verified', {
+        messageChars: message.length,
+        messageBytes: Buffer.byteLength(message),
+        publicKeyChars: input.publicKey.length,
+        signatureChars: input.signature.length,
+        tried: envelopes(message).map((candidate) => candidate.name),
+      });
+    }
+    if (matched.name !== 'sha256-nimiq-byte-length') {
+      console.warn(`[sface] atlas wallet binding verified with fallback envelope: ${matched.name}`);
+    }
+    return { address };
+  } catch (error) {
+    return refuse('malformed', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -96,7 +167,9 @@ export function createAtlasIdentityService(options: { auth: PlayerAuth; now?: ()
       if (!held || JSON.stringify(held) !== JSON.stringify(input.challenge)) throw new AtlasIdentityError('invalid', 'Atlas wallet challenge is invalid, unknown, or altered.');
       challenges.delete(input.challenge.id);
       if (current >= held.expiresAt) throw new AtlasIdentityError('expired', 'Atlas wallet challenge has expired.');
-      const verified = verifyAtlasWalletSignature({ ...input, challenge: held }, current, domain);
+      const verified = verifyAtlasWalletSignature({ ...input, challenge: held }, current, domain, (reason, detail) => {
+        console.warn(`[sface] atlas wallet binding refused (${reason}): ${JSON.stringify(detail)}`);
+      });
       if (!verified) throw new AtlasIdentityError('invalid', 'Atlas wallet signature is invalid.');
       const actorKey = `${held.seasonId}:${held.actorId}`;
       const walletKey = `${held.seasonId}:${verified.address}`;
