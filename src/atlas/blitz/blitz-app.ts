@@ -769,7 +769,18 @@ export class BlitzApp {
     resultHero.append(node('p', 'blitz-result-kicker', state.phase === 'finished' ? `${city.circuit.toUpperCase()} CLEARED` : 'RUN ENDED'));
     resultHero.append(node('span', 'blitz-result-score-label', 'TOTAL RUN SCORE'));
     resultHero.append(node('h1', 'blitz-result-score', state.score.toLocaleString()));
-    resultHero.append(node('p', 'blitz-result-time', `${(state.elapsedMs / 1_000).toFixed(1)} SEC / ${state.collisions} CONTACTS / ${state.missions.filter((mission) => mission.status === 'complete').length}/3 CONTRACTS`));
+    /*
+     * Riders put out, said out loud.
+     *
+     * A takedown is the one thing in a run that happened to somebody else, so
+     * it is worth naming rather than leaving folded into the racing-line
+     * number. Only shown when there were any: a line reading "0 TAKEDOWNS" on
+     * every clean run is furniture.
+     */
+    const cleared = state.missions.filter((mission) => mission.status === 'complete').length;
+    const ledgerLine = [`${(state.elapsedMs / 1_000).toFixed(1)} SEC`, `${state.collisions} CONTACTS`, `${cleared}/3 CONTRACTS`];
+    if (state.takedowns > 0) ledgerLine.push(`${state.takedowns} PUT OUT`);
+    resultHero.append(node('p', 'blitz-result-time', ledgerLine.join(' / ')));
     resultHero.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
     primary.append(resultHero, this.resultContracts(state));
     screen.append(primary);
@@ -1274,11 +1285,26 @@ export class BlitzApp {
    * second to show the same three names is how a HUD starts costing more than
    * the city does.
    */
+  /**
+   * The pack minus whoever you have put out.
+   *
+   * A rider you took down has to leave the gap list, the place count and the
+   * scene together. Reading it from run state rather than from a field on this
+   * class keeps it identical to what the server computes when it replays the
+   * trace, because it is the same list.
+   */
+  private liveRivals(state: BlitzRunState): readonly BlitzRivalPath[] {
+    if (state.downedRivals.length === 0) return this.rivals;
+    const down = new Set(state.downedRivals);
+    return this.rivals.filter((rival) => !down.has(rival.runId));
+  }
+
   private updateGapHud(state: BlitzRunState): void {
     const host = this.gapHost;
     if (!host || this.rivals.length === 0) return;
+    const live = this.liveRivals(state);
     const gaps = blitzRivalGaps({
-      rivals: this.rivals,
+      rivals: live,
       tick: state.tick,
       distanceMeters: state.distanceMeters,
       speedMps: state.speedMps,
@@ -1290,7 +1316,7 @@ export class BlitzApp {
      * and that is the number a rider is actually racing - so it goes first and
      * stays up even when nobody is close enough to have a gap worth printing.
      */
-    const position = blitzFieldPosition({ rivals: this.rivals, tick: state.tick, distanceMeters: state.distanceMeters });
+    const position = blitzFieldPosition({ rivals: live, tick: state.tick, distanceMeters: state.distanceMeters });
     host.hidden = false;
     let place = host.querySelector('.blitz-place');
     if (!place) {
