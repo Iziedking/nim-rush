@@ -141,6 +141,9 @@ export interface BlitzRunState {
    */
   readonly rivalContacts: number;
   readonly overtakes: number;
+  /** Rivals you put out, and the ones no longer on the hill because of it. */
+  readonly takedowns: number;
+  readonly downedRivals: readonly string[];
   readonly nitroTaken: number;
   readonly gearboxTaken: number;
   readonly distanceScore: number;

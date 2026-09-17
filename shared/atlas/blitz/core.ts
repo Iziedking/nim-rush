@@ -8,6 +8,16 @@ import { courseGroundLift, courseTerrainHeight, nearbyCourseColliders, sampleCou
 import type { BlitzCityId, BlitzDifficulty, BlitzInput, BlitzMissionState, BlitzPhysicsEvent, BlitzRoutePose, BlitzRunState, BlitzScoreBreakdown, BlitzSurface } from './types';
 
 export const BLITZ_TICK_RATE = 30;
+/*
+ * What separates a shoulder from a scrape.
+ *
+ * Both thresholds have to be met at the moment of contact: the bars turned
+ * into them, and enough speed behind it to matter. Anything less is a rider
+ * who drifted into somebody, and that is a mistake rather than a move.
+ */
+const TAKEDOWN_STEER = 0.55;
+const TAKEDOWN_SPEED_MPS = 14;
+export const TAKEDOWN_POINTS = 420;
 export const BLITZ_LIMIT_SECONDS = 90;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
 // The gates a rider can see. One list, shared with the renderer, because a
@@ -108,6 +118,8 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
     gearboxTaken: 0,
     rivalContacts: 0,
     overtakes: 0,
+    takedowns: 0,
+    downedRivals: [],
     distanceScore: 0,
     lineScore: 0,
     controlScore: 0,
@@ -314,17 +326,49 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    */
   let rivalContacts = state.rivalContacts;
   let overtakes = state.overtakes;
+  let takedowns = state.takedowns;
+  const downedRivals = new Set(state.downedRivals);
   for (const rival of rivals) {
+    // Somebody you already put out is off the hill for the rest of your run.
+    if (downedRivals.has(rival.runId)) continue;
     const before = blitzRivalAt(rival, state.tick);
     const now = blitzRivalAt(rival, state.tick + 1);
     if (!now) continue;
     if (blitzRivalContact({ distanceMeters, laneOffset }, now)) {
+      /*
+       * A shoulder you meant, or one you did not get out of the way of.
+       *
+       * Drifting into somebody at half pace is a mistake and is paid for as
+       * one. Committing across the trail into their flank, at speed, with the
+       * bars turned into them, is an attack - and it puts them out.
+       *
+       * Every term here comes off the input trace and the pinned path, so the
+       * server re-simulating your run arrives at the same riders being down at
+       * the same ticks. A takedown is a scored, verified event, not something
+       * the browser gets to assert.
+       *
+       * What it does not do is change their run. Theirs was ridden before
+       * yours existed and their row on the board is already true. You take
+       * them out of your descent, not out of their result.
+       */
+      const intoThem = Math.sign(now.laneOffset - laneOffset);
+      const committed = intoThem !== 0 && Math.sign(input.steer) === intoThem && Math.abs(input.steer) >= TAKEDOWN_STEER;
       const away = Math.sign(laneOffset - now.laneOffset) || (input.steer >= 0 ? 1 : -1);
-      laneOffset = now.laneOffset + away * (0.52 * 2 + 0.01);
-      lateralVelocityMps = away * 4.4;
-      speedMps *= 0.62;
-      rivalContacts += 1;
-      if (!lastEvent) lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 0.5, surface };
+      if (committed && speedMps >= TAKEDOWN_SPEED_MPS) {
+        downedRivals.add(rival.runId);
+        takedowns += 1;
+        distanceScore += TAKEDOWN_POINTS;
+        // You still lose a little: you hit somebody. Far less than being hit.
+        speedMps *= 0.9;
+        lateralVelocityMps = away * 1.6;
+        if (!lastEvent) lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 0.85, surface };
+      } else {
+        laneOffset = now.laneOffset + away * (0.52 * 2 + 0.01);
+        lateralVelocityMps = away * 4.4;
+        speedMps *= 0.62;
+        rivalContacts += 1;
+        if (!lastEvent) lastEvent = { type: 'impact', tick: state.tick + 1, intensity: 0.5, surface };
+      }
     } else if (before && state.distanceMeters <= before.distanceMeters && distanceMeters > now.distanceMeters) {
       // Crossed them. Counted on the tick the lead changes hands, so sitting
       // alongside somebody cannot farm it.
@@ -406,6 +450,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     nitroTaken,
     gearboxTaken,
     rivalContacts,
+    takedowns,
+    downedRivals: [...downedRivals],
     overtakes,
     distanceScore,
     lineScore,

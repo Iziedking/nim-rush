@@ -383,10 +383,14 @@ export class BlitzRenderer {
      * than left parked on it, which is the same rule the simulation uses - if
      * the two disagreed a rider would be blocked by a bike that is not there.
      */
+    const downed = state.downedRivals.length === 0 ? null : new Set(state.downedRivals);
     for (const { path, bike } of this.rivalBikes) {
-      const at = blitzRivalAt(path, state.tick);
+      const at = downed?.has(path.runId) ? null : blitzRivalAt(path, state.tick);
       const gap = at ? at.distanceMeters - state.distanceMeters : 0;
-      // Behind the rider a rival is gone from view; far ahead it is fog.
+      // Behind the rider a rival is gone from view; far ahead it is fog. A
+      // rider you put out is gone from it entirely, and has to be: the
+      // simulation stopped treating them as something you can hit, so a bike
+      // left parked on the trail would be scenery you ride straight through.
       const present = at !== null && gap > -26 && gap < 155;
       if (bike.root.visible !== present) { bike.root.visible = present; bike.shadow.visible = present; }
       if (!at) continue;

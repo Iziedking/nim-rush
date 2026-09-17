@@ -241,3 +241,75 @@ describe('place in the field', () => {
       .toEqual({ place: 1, field: 1 });
   });
 });
+
+/*
+ * Putting somebody out.
+ *
+ * The move Downhill Domination is built on: you do not only pass traffic, you
+ * can remove it. The rule has to be narrow enough that drifting into somebody
+ * is still a mistake, and deterministic enough that the server re-simulating
+ * the trace agrees about who went down - otherwise a takedown is a claim the
+ * browser makes, and the board stops meaning anything.
+ */
+describe('taking a rival down', () => {
+  /*
+   * Alongside, now.
+   *
+   * A pacer's path is indexed from tick zero, so `from` is where it started,
+   * not where it is. Placing a rival beside a rider who is already five
+   * seconds down the hill means winding that back, or the bike is forty metres
+   * up the road and nobody ever touches anybody.
+   */
+  const alongside = (state: BlitzRunState) =>
+    pacer({
+      lane: state.laneOffset + 0.9,
+      mps: state.speedMps,
+      from: state.distanceMeters + 0.5 - (state.speedMps * state.tick) / BLITZ_TICK_RATE,
+      runId: 'target',
+    });
+
+  const lean = (steer: number, ticks = BLITZ_TICK_RATE) => {
+    const before = ride(createBlitzRun({ cityId: 'lagos', seed: 'pack' }), BLITZ_TICK_RATE * 5, straight);
+    return ride(before, ticks, { steer, drift: false, boost: false, tuck: true }, [alongside(before)]);
+  };
+
+  it('starts with nobody down', () => {
+    const state = createBlitzRun({ cityId: 'lagos', seed: 'pack' });
+    expect(state.takedowns).toBe(0);
+    expect(state.downedRivals).toEqual([]);
+  });
+
+  it('a committed shoulder at speed puts a rider out', () => {
+    const state = lean(0.9);
+    expect(state.downedRivals).toEqual(['target']);
+    expect(state.takedowns).toBe(1);
+  });
+
+  it('counts a rider once however long you lean on them', () => {
+    const state = lean(0.9, BLITZ_TICK_RATE * 3);
+    expect(state.takedowns).toBe(1);
+  });
+
+  it('drifting into somebody is a mistake, not a move', () => {
+    const state = lean(0.05);
+    expect(state.downedRivals).toEqual([]);
+    expect(state.rivalContacts).toBeGreaterThan(0);
+  });
+
+  it('is reproduced exactly by a replay of the same trace', () => {
+    const before = ride(createBlitzRun({ cityId: 'lagos', seed: 'pack' }), BLITZ_TICK_RATE * 5, straight);
+    const rivals = [alongside(before)];
+    const attack: BlitzInput = { steer: 0.9, drift: false, boost: false, tuck: true };
+    const frames: BlitzTraceFrame[] = [];
+    let live = createBlitzRun({ cityId: 'lagos', seed: 'pack' });
+    for (let tick = 0; tick < BLITZ_TICK_RATE * 6; tick += 1) {
+      const input = tick < BLITZ_TICK_RATE * 5 ? straight : attack;
+      frames.push({ tick, input });
+      live = stepBlitzRun(live, input, rivals);
+    }
+    const replayed = replayBlitzTrace({ cityId: 'lagos', seed: 'pack', frames, rivals });
+    expect(replayed.downedRivals).toEqual(live.downedRivals);
+    expect(replayed.takedowns).toBe(live.takedowns);
+    expect(replayed.score).toBe(live.score);
+  });
+});
