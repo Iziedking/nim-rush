@@ -309,7 +309,12 @@
 .blitz-breakdown { grid-template-columns: repeat(2, 1fr); }
 .blitz-breakdown .blitz-stat { min-height: 48px; display: grid; align-content: center; border: 1px solid rgb(var(--atlas-ink-rgb) / .1); border-radius: 8px; background: rgb(var(--atlas-raised-rgb) / .55); }
 .blitz-breakdown .blitz-stat strong { font-variant-numeric: tabular-nums; }
-button:disabled { cursor: not-allowed; opacity: .48; }
+/*
+ * A disabled key still has to be read: its label is what tells a rider what
+ * they have not unlocked yet. Dimmed enough to read as unavailable, not so far
+ * that the instruction goes with it.
+ */
+button:disabled { cursor: not-allowed; opacity: .62; }
 @media (max-width: 390px) { .blitz-mission-hud { top: max(106px, calc(env(safe-area-inset-top) + 92px)); width: min(198px, calc(100% - 28px)); } .blitz-mission-card { padding: 6px 8px 5px; } .blitz-mission-verb { margin: 3px 0 4px; font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .blitz-mission-card, .blitz-mission-meter-fill { transition: none; } }
 
@@ -409,19 +414,24 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 }
 .blitz-fullscreen-page { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: none; max-height: none; margin: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--rush-sun) transparent; }
 .blitz-fullscreen-page::after { content: ''; position: fixed; inset: 0; z-index: -2; border: 1px solid rgb(245 234 212 / .08); pointer-events: none; }
-.blitz-rush-logo { position: relative; color: var(--rush-ink); filter: drop-shadow(0 8px 20px rgb(0 0 0 / .3)); }
+.blitz-rush-logo { position: relative; color: var(--rush-ink); }
 .blitz-rush-logo svg { display: block; width: 100%; height: auto; overflow: visible; }
-.blitz-rush-logo-hero { width: min(100%, 465px); }
+.blitz-rush-logo-hero { width: min(100%, 470px); }
 .blitz-rush-logo-compact { width: min(100%, 270px); }
-.blitz-logo-skyline, .blitz-logo-bike, .blitz-logo-rider, .blitz-logo-wheel, .blitz-logo-badge { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
-.blitz-logo-skyline { stroke: var(--rush-teal); stroke-width: 6; opacity: .9; }
-.blitz-logo-sun { fill: var(--rush-sun); stroke: none; }
-.blitz-logo-wheel { stroke: var(--rush-sun); stroke-width: 6; }
-.blitz-logo-bike { stroke: var(--rush-ink); stroke-width: 7; }
-.blitz-logo-rider { stroke: var(--rush-coral); stroke-width: 8; }
-.blitz-logo-badge { stroke: var(--rush-lime); stroke-width: 3; opacity: .85; }
-.blitz-logo-wordmark { fill: currentColor; font: 900 37px/1 ui-monospace, monospace; letter-spacing: 8px; }
-.blitz-logo-subtitle { fill: var(--rush-lime); font: 900 13px/1 ui-monospace, monospace; letter-spacing: 5px; }
+/*
+ * The mark. Enamel: a flat plate, an ink keyline, a hard offset shadow drawn
+ * as a second shape rather than a blur filter. No gradients anywhere.
+ */
+.blitz-logo-plate { fill: var(--rush-sun); stroke: var(--rush-keyline); stroke-width: 7; }
+/* The thickness of the badge: a darkened amber wall, not a blur. */
+.blitz-logo-side { fill: #b9762a; stroke: var(--rush-keyline); stroke-width: 7; }
+/* One lit edge along the top left, so the face reads as catching light. */
+.blitz-logo-gloss { fill: rgb(255 255 255 / .26); }
+.blitz-logo-drop { fill: var(--rush-keyline); }
+.blitz-logo-wordmark { fill: var(--rush-paper); font: 400 68px/1 AtlasDisplay, Impact, sans-serif; letter-spacing: .012em; }
+.blitz-logo-wordmark-drop { fill: var(--rush-keyline); }
+.blitz-rush-mark { width: 100%; }
+.blitz-rush-mark svg { display: block; width: 100%; height: auto; overflow: visible; }
 .blitz-powered { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--rush-muted); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
 .blitz-powered .blitz-nimiq-lockup { width: auto; height: 17px; }
 
@@ -477,7 +487,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .blitz-contract.is-failed { border-color: var(--rush-coral); background: rgb(244 119 98 / .08); }
 .blitz-contract.is-complete .blitz-contract-state { color: var(--rush-lime); }
 .blitz-contract.is-failed .blitz-contract-state { color: var(--rush-coral); }
-.blitz-result-ledger { grid-column: 2; grid-row: 1; align-self: center; padding: clamp(16px, 3vw, 28px); border-left: 1px solid var(--rush-line); background: rgb(8 20 21 / .94); }
+.blitz-result-ledger { grid-column: 2; grid-row: 1; align-self: stretch; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: clamp(16px, 3vw, 28px); background: rgb(8 20 21 / .94); }
 .blitz-result-ledger .blitz-breakdown { margin-top: 0; }
 .blitz-result-ledger .blitz-breakdown .blitz-stat { min-height: 64px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--rush-line); border-radius: 0; background: transparent; }
 .blitz-result-ledger .blitz-breakdown .blitz-stat strong { color: var(--rush-ink); font-size: 16px; }
@@ -546,3 +556,852 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 @media (prefers-reduced-motion: reduce) {
   .blitz-speed-veil { display: none; }
 }
+
+
+/* ==========================================================================
+ * ENAMEL ARCADE
+ *
+ * The drawing language, applied over the layout above.
+ *
+ * The screens were thin one-pixel rules, transparent fills and soft forty-pixel
+ * blurs on a dark ground - which is the look every generated interface arrives
+ * at, because it is what you get when nothing is decided. Three rules replace
+ * it, and they are the whole system:
+ *
+ *   1. Every surface is opaque. Nothing important sits on a translucent panel.
+ *   2. Every surface has an ink keyline, three pixels, never one.
+ *   3. Every raised surface has a hard offset shadow with NO BLUR.
+ *
+ * That third one does most of the work. A blurred shadow says "floating glass";
+ * a solid offset says "a printed thing, screwed to a cabinet". It is the
+ * difference between a render and a drawing.
+ *
+ * The panels are cream rather than dark. An ink keyline is invisible on a dark
+ * panel, and the point of the keyline is that it holds the shape - so the
+ * furniture is light, sitting on the dark ridge like decals on an arcade
+ * cabinet, and the world keeps the rest of the screen.
+ * ========================================================================== */
+
+.blitz-ui {
+  --rush-keyline: #14131d;
+  --rush-paper: #f7ecd6;
+  --rush-plate: #1d2330;
+  --rush-drop: 6px 7px 0 var(--rush-keyline);
+  --rush-drop-tight: 4px 5px 0 var(--rush-keyline);
+  --rush-radius: 22px;
+  --rush-radius-tight: 14px;
+}
+
+/* Panels ------------------------------------------------------------------ */
+
+.blitz-intro-command,
+.blitz-result-ledger,
+.blitz-pool,
+.blitz-rewards,
+.blitz-competition,
+.blitz-pending-run {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius);
+  background: var(--rush-paper);
+  box-shadow: var(--rush-drop);
+  clip-path: none;
+  color: var(--rush-keyline);
+}
+
+/* The notch was the one shape with real character. Kept, squared to the radius. */
+.blitz-intro-command::before { color: #7a5a2a; }
+
+.blitz-result-ledger { border-left: 3px solid var(--rush-keyline) !important; }
+
+/* Text on cream. Stated once, so no panel can quietly keep a dark-ground colour. */
+.blitz-intro-command .blitz-stat strong,
+.blitz-result-ledger .blitz-breakdown .blitz-stat strong,
+.blitz-pool-note, .blitz-ladder-unlock, .blitz-supply-value,
+.blitz-result-ledger .blitz-ladder-unlock, .blitz-result-ledger .blitz-ladder-next { color: var(--rush-keyline) !important; }
+
+.blitz-intro-command .blitz-stat span,
+.blitz-result-ledger .blitz-breakdown .blitz-stat span,
+.blitz-pool-label, .blitz-rewards-label, .blitz-supplies-label, .blitz-ladder-label,
+.blitz-supply-label, .blitz-competition-summary,
+.blitz-pool-note.blitz-quiet, .blitz-ladder-next,
+.blitz-result-ledger .blitz-supplies-label, .blitz-result-ledger .blitz-ladder-label,
+.blitz-intro-command .blitz-difficulty legend,
+.blitz-intro-command .blitz-quiet { color: #6d604a !important; }
+
+/* Chips ------------------------------------------------------------------- */
+
+.blitz-intro-command .blitz-stat,
+.blitz-result-ledger .blitz-breakdown .blitz-stat {
+  border: 2px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: rgb(20 19 29 / .07);
+}
+
+/* Scoreboard numerals: the display face, not a monospace label. */
+.blitz-intro-command .blitz-stat strong,
+.blitz-result-ledger .blitz-breakdown .blitz-stat strong {
+  font: 400 clamp(19px, 2.2vw, 26px)/1 AtlasDisplay, Impact, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+.blitz-contract {
+  border: 2px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: rgb(20 19 29 / .06);
+  box-shadow: var(--rush-drop-tight);
+}
+.blitz-contract { background: rgb(247 236 214 / .1); color: var(--rush-paper); }
+.blitz-contract .blitz-contract-label { color: var(--rush-paper); }
+.blitz-contract.is-complete { background: var(--rush-lime); }
+.blitz-contract.is-complete .blitz-contract-label,
+.blitz-contract.is-complete .blitz-contract-state { color: var(--rush-keyline); }
+.blitz-contract.is-failed { border-color: var(--rush-coral) !important; background: rgb(244 119 98 / .16); }
+.blitz-contract.is-failed .blitz-contract-state { color: var(--rush-coral); }
+/* The chips sit on the dark column, so their keyline is cream, not ink. */
+.blitz-result-primary .blitz-contract { border-color: rgb(247 236 214 / .5) !important; box-shadow: 4px 5px 0 rgb(7 18 19 / .55); }
+.blitz-result-primary .blitz-contract.is-complete { border-color: var(--rush-keyline) !important; }
+
+.blitz-supply, .blitz-reward, .blitz-pool-place {
+  border: 2px solid var(--rush-keyline);
+  border-radius: 12px;
+  background: rgb(20 19 29 / .06);
+}
+.blitz-result-ledger .blitz-supply { border-radius: 12px; background: rgb(20 19 29 / .06); }
+
+/* Badges ------------------------------------------------------------------ */
+
+.blitz-edition, .blitz-intro-masthead .blitz-edition {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: 999px;
+  background: var(--rush-sun) !important;
+  box-shadow: var(--rush-drop-tight);
+  color: var(--rush-keyline) !important;
+  font-weight: 900;
+}
+
+/* Buttons ----------------------------------------------------------------- */
+
+/*
+ * A button that moves. The shadow is the travel: pressing drops the face onto
+ * the shadow, which is what a real key does and what no blurred glow can.
+ */
+.blitz-intro-command .blitz-start,
+.blitz-result-actions .blitz-rematch,
+.blitz-start, .blitz-rematch {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius);
+  background: var(--rush-lime);
+  box-shadow: var(--rush-drop);
+  color: var(--rush-keyline) !important;
+  font: 400 clamp(20px, 2.4vw, 27px)/1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: .03em;
+  transition: transform 70ms ease, box-shadow 70ms ease;
+}
+.blitz-intro-command .blitz-start:active,
+.blitz-result-actions .blitz-rematch:active,
+.blitz-start:active, .blitz-rematch:active {
+  transform: translate(5px, 6px);
+  box-shadow: 1px 1px 0 var(--rush-keyline);
+}
+
+.blitz-verify, .blitz-again, .blitz-intro-command .blitz-ranked-launch {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: var(--rush-paper) !important;
+  box-shadow: var(--rush-drop-tight);
+  color: var(--rush-keyline) !important;
+  transition: transform 70ms ease, box-shadow 70ms ease;
+}
+.blitz-verify:active, .blitz-again:active { transform: translate(3px, 4px); box-shadow: 1px 1px 0 var(--rush-keyline); }
+.blitz-intro-command .blitz-ranked-label { color: var(--rush-keyline); }
+
+.blitz-intro-command .blitz-difficulty-option {
+  border: 2px solid var(--rush-keyline) !important;
+  border-radius: 999px;
+  background: transparent;
+  color: #6d604a;
+  font-weight: 900;
+}
+.blitz-intro-command .blitz-difficulty-option.is-selected {
+  background: var(--rush-teal) !important;
+  color: var(--rush-keyline) !important;
+}
+
+.blitz-competition-summary::after { color: var(--rush-keyline); }
+
+/* The run HUD ------------------------------------------------------------- */
+
+/*
+ * The one place that stays dark, because it sits over the road the whole time
+ * and a cream panel there would cover the game. It takes a cream keyline
+ * instead of an ink one so it still reads as the same family.
+ */
+.blitz-run .blitz-hud > * {
+  border: 0 !important;
+  border-bottom: 3px solid var(--rush-paper) !important;
+  background: rgb(20 19 29 / .82) !important;
+}
+
+.blitz-run .blitz-control {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: 16px;
+  background: var(--rush-paper);
+  box-shadow: var(--rush-drop-tight);
+  color: var(--rush-keyline) !important;
+  font-weight: 900;
+  transition: transform 60ms ease, box-shadow 60ms ease;
+}
+.blitz-run .blitz-control.is-held { transform: translate(3px, 4px); box-shadow: 1px 1px 0 var(--rush-keyline); }
+.blitz-run .blitz-actions .blitz-tuck { background: var(--rush-teal) !important; }
+.blitz-run .blitz-actions .blitz-boost { background: var(--rush-lime) !important; }
+.blitz-run .blitz-actions .blitz-brake { background: var(--rush-coral) !important; }
+.blitz-run .blitz-actions .blitz-drift { background: var(--rush-sun) !important; }
+
+/* Countdown and score read as arcade numerals, not as UI labels. */
+.blitz-run .blitz-timer, .blitz-run .blitz-score, .blitz-speed-value {
+  font-family: AtlasDisplay, Impact, sans-serif !important;
+  font-weight: 400 !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blitz-start, .blitz-rematch, .blitz-verify, .blitz-again, .blitz-run .blitz-control { transition: none; }
+}
+
+/* A category that scored nothing is still shown, but it stops shouting. */
+.blitz-stat[data-empty] { background: rgb(20 19 29 / .03); }
+.blitz-stat[data-empty] strong { color: #6d604a !important; font-size: .82em; }
+
+/*
+ * The control cluster.
+ *
+ * The actions column was sized for three buttons and now holds four, so TUCK
+ * overflowed its track and sat off-centre from the row above it. Sizing the
+ * cluster itself rather than letting it inherit a column width keeps the four
+ * keys square to each other at every width - which matters, because a thumb
+ * finds a key by position long before it reads the label.
+ */
+.blitz-run .blitz-actions { width: min(300px, 100%); margin-left: auto; }
+.blitz-run .blitz-actions .blitz-control { min-width: 0; }
+
+/*
+ * Mission contracts, in the same family as everything else.
+ *
+ * These kept a navy card style from an earlier palette, so the one part of the
+ * HUD a rider reads for instructions looked like it came from a different game
+ * than the keys they press.
+ */
+.blitz-mission-hud .blitz-mission-card {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: var(--rush-paper) !important;
+  box-shadow: var(--rush-drop-tight);
+}
+.blitz-mission-card .blitz-mission-label { color: var(--rush-keyline); }
+.blitz-mission-card .blitz-mission-status { color: #6d604a; }
+.blitz-mission-card .blitz-mission-verb, .blitz-mission-card .blitz-mission-progress { color: #4b4436; }
+.blitz-mission-card .blitz-mission-meter { border: 2px solid var(--rush-keyline); background: rgb(20 19 29 / .1); }
+.blitz-mission-card .blitz-mission-meter-fill { background: var(--rush-lime); }
+.blitz-mission-card.is-complete { background: var(--rush-lime) !important; }
+.blitz-mission-card.is-failed { border-color: var(--rush-coral) !important; }
+.blitz-mission-heading { color: var(--rush-paper); }
+
+/*
+ * A clean two-by-two. TUCK spanning the full width left an empty cell beside
+ * BRAKE, and an empty cell in a control cluster reads as a missing button.
+ * Four keys, four cells; TUCK keeps its colour to stay the obvious one.
+ */
+.blitz-run .blitz-actions .blitz-tuck { grid-column: auto; }
+/* The instruction on a contract has to be as readable as its title. */
+.blitz-mission-card .blitz-mission-verb { color: #4b4436 !important; opacity: 1; }
+
+
+/* ==========================================================================
+ * LEGIBILITY AND CHARACTER
+ *
+ * Two problems, one pass.
+ *
+ * The first is a real defect: several pieces of copy kept colours chosen for a
+ * dark ground and were moved onto cream, where pale mint on pale mint and
+ * lavender on cream are simply invisible. Text that cannot be read is not a
+ * style question.
+ *
+ * The second is that a rounded rectangle with a border is the most generic
+ * object in software - it is what every generated interface produces, because
+ * it is the shape you get when nothing has been decided. The panels keep their
+ * geometry and gain the things a made object has: a die-cut edge, a printed
+ * hatch, and section labels that are stamped tabs rather than grey captions.
+ * ========================================================================== */
+
+/* Sections inside a panel: a ruled division with room to breathe. */
+.blitz-result-ledger .blitz-supplies,
+.blitz-result-ledger .blitz-ladder {
+  margin-top: 20px;
+  padding: 18px 0 0 !important;
+  border: 0 !important;
+  border-top: 3px solid rgb(20 19 29 / .22) !important;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/*
+ * A stamped tab, not a caption.
+ *
+ * Small grey uppercase text above a box is the single most generic pattern in
+ * this whole screen. An ink tab with cream letters reads as something printed
+ * onto the panel, and it gives every section a hard edge to start from.
+ */
+.blitz-pool-label, .blitz-rewards-label, .blitz-supplies-label,
+.blitz-ladder-label, .blitz-supplies-label,
+.blitz-result-ledger .blitz-supplies-label, .blitz-result-ledger .blitz-ladder-label {
+  display: inline-block;
+  width: max-content;
+  padding: 6px 11px 5px;
+  border-radius: 7px;
+  background: var(--rush-keyline);
+  color: var(--rush-paper) !important;
+  font-weight: 900;
+}
+
+/*
+ * The die-cut edge.
+ *
+ * A cream rim outside the ink keyline, the way a printed sticker is trimmed
+ * proud of its own outline. Only on panels that sit on the dark world, where
+ * there is a ground for it to read against.
+ */
+.blitz-intro-command, .blitz-result > .blitz-pool, .blitz-result > .blitz-rewards {
+  outline: 5px solid var(--rush-paper);
+  outline-offset: 0;
+}
+
+/* A printed hatch, barely there, so the cream is a surface and not a fill. */
+.blitz-intro-command, .blitz-result-ledger, .blitz-pool, .blitz-rewards, .blitz-competition {
+  background-image: repeating-linear-gradient(135deg, rgb(20 19 29 / .035) 0 2px, transparent 2px 7px);
+}
+
+/* Copy that moved onto cream ------------------------------------------------ */
+
+.blitz-intro-command .blitz-rank-status,
+.blitz-result .blitz-rank-status { color: #5d5341 !important; }
+
+.blitz-intro-command .blitz-username,
+.blitz-result .blitz-username {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: 12px;
+  background: #fffaf0 !important;
+  color: var(--rush-keyline) !important;
+}
+.blitz-intro-command .blitz-username::placeholder { color: #8a7d66; }
+
+.blitz-intro-command .blitz-ranked-button,
+.blitz-result .blitz-ranked-button {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: 12px;
+  background: var(--rush-teal) !important;
+  box-shadow: var(--rush-drop-tight);
+  color: var(--rush-keyline) !important;
+}
+.blitz-intro-command .blitz-ranked-button:active { transform: translate(3px, 4px); box-shadow: 1px 1px 0 var(--rush-keyline); }
+
+.blitz-intro-command .blitz-ranked-launch,
+.blitz-result .blitz-ranked-launch {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: rgb(20 19 29 / .05) !important;
+}
+.blitz-intro-command .blitz-ranked-label { color: var(--rush-keyline) !important; }
+.blitz-intro-command .blitz-ranked-label::after { color: var(--rush-keyline); }
+
+/* Contracts sit on the dark column and must not go muddy. */
+.blitz-result-primary .blitz-contract { background: rgb(247 236 214 / .12); }
+.blitz-result-primary .blitz-contract .blitz-contract-state { color: var(--rush-sun); }
+.blitz-result-primary .blitz-contract.is-failed .blitz-contract-state { color: var(--rush-coral); }
+.blitz-result-primary .blitz-contract-label { color: var(--rush-paper) !important; }
+
+/* The ledger scrolls, so it needs a visible top and bottom edge to the scroll. */
+.blitz-result-ledger { scrollbar-width: thin; scrollbar-color: var(--rush-keyline) transparent; }
+
+/*
+ * One scroll, not two.
+ *
+ * The ledger was a scrolling box inside a scrolling page, so its last line was
+ * always cut by the panel edge and read as broken text rather than as "there
+ * is more below". A result screen is a page: let it be as tall as it needs and
+ * let the page carry the scroll.
+ */
+.blitz-result.blitz-fullscreen-page { grid-template-rows: auto auto; align-content: start; }
+.blitz-result-ledger { overflow: visible; min-height: 0; }
+.blitz-result-primary { align-self: start; }
+
+/*
+ * The ledger sizes to its own content.
+ *
+ * Stretching it filled a track whose height came from the taller left column,
+ * so with the inner scroll removed its copy painted straight out of the bottom
+ * of its own panel and over the sections below. A panel has to be as tall as
+ * what is inside it; the page takes the scroll.
+ */
+.blitz-result-ledger { align-self: start !important; min-height: auto; height: auto; }
+
+/*
+ * The start gate. See src/atlas/blitz/blitz-start-gate.ts.
+ *
+ * Full bleed art with the identity sitting on it, and one button. It covers
+ * everything because it is a door, not an overlay: the world behind it is
+ * still building, and a half-visible city under a splash reads as a bug.
+ */
+.blitz-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #0d1418;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 420ms ease;
+}
+.blitz-gate.is-gone { opacity: 0; pointer-events: none; }
+.blitz-gate-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* The pack sits left of centre in the plate, so hold that edge when cropped. */
+  object-position: 38% 45%;
+}
+/* A ground for the copy. The art is bright, and cream on sand is unreadable. */
+.blitz-gate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(8 14 18 / .2) 0%, rgb(8 14 18 / .62) 48%, rgb(8 14 18 / .93) 100%);
+}
+.blitz-gate-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  width: min(100%, 560px);
+  padding: clamp(20px, 5vw, 40px);
+  text-align: center;
+}
+.blitz-gate-panel .blitz-rush-logo { width: min(100%, 430px); }
+.blitz-gate-tagline {
+  max-width: 24ch;
+  margin: 0;
+  color: var(--rush-paper);
+  font: 700 clamp(16px, 2.3vw, 21px)/1.24 system-ui, sans-serif;
+  text-shadow: 0 3px 0 rgb(6 12 15 / .7);
+}
+.blitz-gate-start {
+  min-height: 68px;
+  padding: 0 clamp(28px, 6vw, 54px);
+  border: 3px solid var(--rush-keyline);
+  border-radius: 22px;
+  background: var(--rush-lime);
+  box-shadow: 6px 7px 0 var(--rush-keyline);
+  color: var(--rush-keyline);
+  cursor: pointer;
+  font: 400 clamp(22px, 3.4vw, 32px)/1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: .03em;
+  transition: transform 70ms ease, box-shadow 70ms ease;
+}
+.blitz-gate-start:active { transform: translate(5px, 6px); box-shadow: 1px 1px 0 var(--rush-keyline); }
+/* Loading is a state, not a disabled control: it says why it cannot be used. */
+.blitz-gate-start:disabled { background: var(--rush-paper); cursor: progress; opacity: .92; }
+.blitz-gate-note { margin: 0; color: rgb(247 236 214 / .82); font: 600 12px/1.4 system-ui, sans-serif; }
+@media (prefers-reduced-motion: reduce) { .blitz-gate, .blitz-gate-start { transition: none; } }
+
+/*
+ * Two modes, as peers.
+ *
+ * Ranked was a collapsed accordion labelled with a word about wallets, so the
+ * only mode that takes a place on the leaderboard was the one a rider was
+ * least likely to find. Each mode is its own block now, with a stamped tab
+ * saying what it is, and the ranked one is the heavier of the two because it
+ * is the one worth coming back for.
+ */
+.blitz-mode-label {
+  display: inline-block;
+  width: max-content;
+  margin-bottom: 10px;
+  padding: 6px 11px 5px;
+  border-radius: 7px;
+  background: var(--rush-keyline);
+  color: var(--rush-paper);
+  font: 900 10px/1 ui-monospace, monospace;
+  letter-spacing: .16em;
+}
+.blitz-mode-free { margin-top: 20px; }
+.blitz-intro-command .blitz-ranked-launch {
+  margin-top: 20px;
+  padding: 16px;
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  /* Warmer than the free block, so the ranked mode reads as the main event. */
+  background: rgb(240 179 93 / .22) !important;
+}
+.blitz-intro-command .blitz-ranked-launch .blitz-mode-label { background: var(--rush-keyline); }
+.blitz-intro-command .blitz-ranked-launch .blitz-daily-meta { margin: 0 0 12px; color: #6d604a; font: 800 10px/1.3 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-intro-command .blitz-ranked-launch .blitz-username,
+.blitz-intro-command .blitz-ranked-launch .blitz-ranked-button,
+.blitz-intro-command .blitz-ranked-launch .blitz-rank-status { width: 100%; margin-right: 0; margin-left: 0; }
+/* The pool sits inside the ranked block, so it drops the outer die-cut rim. */
+.blitz-intro-command .blitz-pool { margin: 0 0 12px; outline: 0; box-shadow: none; background: rgb(20 19 29 / .06); }
+.blitz-intro-command .blitz-pool-value { color: #8a5a12; font: 400 22px/1.1 AtlasDisplay, Impact, sans-serif; }
+
+/*
+ * The gap list. See updateGapHud() in blitz-app.ts.
+ *
+ * Borrowed from how a downhill broadcast shows a race: the nearest rider at
+ * the top, a signed time beside the name. A lap time on its own tells a rider
+ * nothing; being four seconds off the name above them tells them everything.
+ * Sits under the top bar on the left, out of the road's sight line.
+ */
+.blitz-gaps {
+  position: absolute;
+  top: max(74px, calc(env(safe-area-inset-top) + 66px));
+  left: max(14px, env(safe-area-inset-left));
+  display: grid;
+  gap: 4px;
+  width: min(210px, 46vw);
+  pointer-events: none;
+}
+.blitz-gaps[hidden] { display: none; }
+.blitz-gap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-left: 4px solid var(--rush-muted);
+  border-radius: 0 9px 9px 0;
+  background: rgb(20 19 29 / .82);
+}
+/* Ahead of you is a target to chase; behind you is a lead to defend. */
+.blitz-gap.is-ahead { border-left-color: var(--rush-coral); }
+.blitz-gap:not(.is-ahead) { border-left-color: var(--rush-lime); }
+.blitz-gap-name {
+  overflow: hidden;
+  color: var(--rush-paper);
+  font: 800 11px/1 ui-monospace, monospace;
+  letter-spacing: .06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blitz-gap-time {
+  margin-left: auto;
+  font: 400 15px/1 AtlasDisplay, Impact, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.blitz-gap.is-ahead .blitz-gap-time { color: var(--rush-coral); }
+.blitz-gap:not(.is-ahead) .blitz-gap-time { color: var(--rush-lime); }
+
+/*
+ * Landscape on a phone is 390 pixels tall.
+ *
+ * Two modes stacked is a tall panel, and a tall panel on a short screen puts
+ * RIDE NOW below the fold - which is the one control that must never need
+ * scrolling to. When height is scarce the modes sit side by side instead, so
+ * the panel grows wide rather than long, and the pool drops its explanatory
+ * lines because the number is the part that matters at a glance.
+ */
+@media (max-height: 620px) {
+  .blitz-intro.blitz-fullscreen-page { grid-template-columns: minmax(0, .72fr) minmax(360px, 1.28fr); padding: clamp(14px, 3vw, 26px); }
+  .blitz-intro-command { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; align-items: start; padding: 14px; }
+  .blitz-intro-command .blitz-intro-stats { grid-column: 1 / -1; margin-top: 0; }
+  .blitz-mode-free, .blitz-intro-command .blitz-ranked-launch { margin-top: 0; }
+  .blitz-intro-command .blitz-pool-note { display: none; }
+  .blitz-intro-command .blitz-pool { padding: 8px 10px; }
+  .blitz-intro-masthead .blitz-title { font-size: clamp(40px, 7vw, 72px); }
+  .blitz-intro-masthead .blitz-tagline, .blitz-intro-masthead .blitz-rush-logo { display: none; }
+  .blitz-intro-command .blitz-start { min-height: 52px; }
+}
+
+/*
+ * And start from the top when the screen is short.
+ *
+ * The landing bottom-aligns its columns, which is right on a tall screen and
+ * wrong on a short one: content taller than the viewport gets pushed off the
+ * top instead of the bottom, so the first thing scrolled away was the ride
+ * action. Short screens align to the top and scroll downward like a page.
+ */
+@media (max-height: 620px) {
+  .blitz-intro.blitz-fullscreen-page { align-items: start; grid-template-rows: auto auto; }
+  .blitz-intro-masthead { align-self: start; }
+  /* The ride action leads its column, so it is above the fold on any phone. */
+  .blitz-mode-free { display: grid; }
+  .blitz-mode-free .blitz-start { order: -1; margin-top: 0; }
+  .blitz-mode-free .blitz-difficulty { margin-top: 10px; }
+  .blitz-mode-free .blitz-quiet { font-size: 10px; }
+}
+
+/*
+ * The command panel bottom-aligns itself, which beats the container's
+ * alignment and pushed a 638px panel to start 179px above a 390px screen -
+ * with the page unscrolled, so RIDE NOW simply could not be reached.
+ */
+@media (max-height: 620px) {
+  .blitz-intro-command { align-self: start !important; }
+  .blitz-intro-utility { grid-row: auto; }
+}
+
+/*
+ * Landscape on a phone gets the controls, not the marketing.
+ *
+ * At 844x390 the masthead, the stat strip and two full mode blocks come to
+ * 638px of panel in a 390px window, and no amount of alignment makes that fit.
+ * So the short layout drops what a rider already knows - the logo, the title,
+ * the trail stats, the footer - and keeps the two things they came for: the
+ * ride action and the day's challenge. The full landing is one rotation away.
+ */
+@media (max-height: 620px) {
+  .blitz-intro.blitz-fullscreen-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; place-content: start stretch; }
+  .blitz-intro-masthead, .blitz-intro-utility, .blitz-intro-command .blitz-intro-stats { display: none; }
+  .blitz-intro-command { grid-column: 1; grid-row: 1; width: min(100%, 720px); margin: 0 auto; }
+  .blitz-intro-command .blitz-ranked-launch .blitz-daily-meta,
+  .blitz-intro-command .blitz-ranked-launch .blitz-rank-status { display: none; }
+  .blitz-intro-command .blitz-pool-value { font-size: 17px; }
+  .blitz-mode-free .blitz-quiet { display: none; }
+}
+
+/*
+ * The wallet-first panel.
+ *
+ * One line of trail data, one action, and a link to the rules. The stat strip,
+ * the mode notes, the split, the settlement line and the "first place is open"
+ * sentence are gone from the screen and into docs/how-nim-rush-works.md - a
+ * rider deciding whether to ride needs the size of the prize, not its
+ * arithmetic, and nobody should read the same four sentences every day.
+ */
+.blitz-trail-meta { margin: 0 0 16px; color: #6d604a; font: 800 10px/1.4 ui-monospace, monospace; letter-spacing: .13em; }
+.blitz-connect { width: 100%; }
+.blitz-intro-command .blitz-quiet { margin: 10px 0 0; color: #6d604a; font: 600 12px/1.4 system-ui, sans-serif; }
+.blitz-free-run { width: 100%; margin-top: 10px; }
+.blitz-mode-free { display: grid; margin-top: 18px; padding-top: 16px; border-top: 3px solid rgb(20 19 29 / .18); }
+.blitz-intro-command .blitz-difficulty { display: flex; gap: 8px; margin: 0; padding: 0; border: 0; }
+.blitz-intro-command .blitz-difficulty legend { padding: 0; color: #6d604a; font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-rules-link {
+  display: inline-block;
+  margin-top: 14px;
+  color: #6d604a;
+  font: 800 10px/1 ui-monospace, monospace;
+  letter-spacing: .14em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.blitz-rules-link:hover, .blitz-rules-link:focus-visible { color: var(--rush-keyline); }
+/* The pool is a figure and a standing now, so it needs far less room. */
+.blitz-intro-command .blitz-pool { display: grid; gap: 4px; margin: 0 0 12px; padding: 10px 12px; }
+.blitz-intro-command .blitz-pool-note { margin: 0; font: 700 12px/1.3 system-ui, sans-serif; }
+
+/*
+ * The panel used to print "DROP 01 / LAGOS" from a pseudo-element because
+ * nothing else said where the run was. The trail line says it now, so the
+ * pseudo-element is a duplicate.
+ */
+.blitz-intro-command::before { content: none; }
+
+/*
+ * The connected panel, in landscape.
+ *
+ * Challenge and practice stack on a tall screen and that is the right order.
+ * On a 390px-tall phone held sideways the stack puts the practice action below
+ * the fold, so the two sit side by side instead and the panel grows wide.
+ */
+@media (max-height: 620px) {
+  .blitz-intro-command { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; align-items: start; }
+  .blitz-trail-meta { grid-column: 1 / -1; margin-bottom: 4px; }
+  .blitz-intro-command .blitz-ranked-launch { grid-column: 1; margin-top: 0; }
+  .blitz-intro-command .blitz-mode-free { grid-column: 2; margin-top: 0; padding-top: 0; border-top: 0; }
+  .blitz-intro-command .blitz-connect, .blitz-intro-command .blitz-quiet { grid-column: 1 / -1; }
+  .blitz-rules-link { grid-column: 1 / -1; margin-top: 2px; }
+}
+
+/*
+ * The lobby, and the door for somebody who arrived without Nimiq.
+ *
+ * Seats are a grid of numbered slots rather than a list of names, because the
+ * thing a rider reads first is how much room is left. An empty seat says
+ * "Open" rather than being blank: a blank row reads as a rendering failure.
+ */
+.blitz-lobby.blitz-fullscreen-page,
+.blitz-nimiq-required.blitz-fullscreen-page {
+  display: grid;
+  place-content: center;
+  padding: clamp(18px, 5vw, 48px);
+}
+.blitz-lobby .blitz-intro-command,
+.blitz-nimiq-required .blitz-intro-command { width: min(100%, 460px); }
+
+.blitz-seat-list { display: grid; gap: 6px; margin: 4px 0 16px; padding: 0; list-style: none; }
+.blitz-seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 2px solid rgb(20 19 29 / .2);
+  border-radius: 12px;
+  background: rgb(20 19 29 / .04);
+}
+.blitz-seat.is-taken { border-color: var(--rush-keyline); background: rgb(20 19 29 / .08); }
+/* Your own seat is the one you look for first. */
+.blitz-seat.is-you { background: var(--rush-lime); }
+.blitz-seat-number { color: #6d604a; font: 900 12px/1 ui-monospace, monospace; }
+.blitz-seat.is-taken .blitz-seat-number { color: var(--rush-keyline); }
+.blitz-seat-rider { color: var(--rush-keyline); font: 700 13px/1 ui-monospace, monospace; }
+.blitz-seat:not(.is-taken) .blitz-seat-rider { color: #8a7d66; }
+.blitz-seat-you { margin-left: auto; color: var(--rush-keyline); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
+
+.blitz-share-link, .blitz-open-lobby { width: 100%; margin-top: 8px; }
+.blitz-lobby-leave { margin-top: 12px; background: none; }
+
+.blitz-nimiq-lead { margin: 0 0 16px; max-width: 42ch; color: var(--rush-keyline); font: 600 14px/1.45 system-ui, sans-serif; }
+.blitz-open-nimiq { display: block; margin-bottom: 10px; text-align: center; text-decoration: none; line-height: 58px; }
+/* Both platforms are offered rather than guessed: a wrong guess strands
+   somebody on a store they cannot install from. */
+.blitz-store-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.blitz-store-links a { text-align: center; text-decoration: none; line-height: 44px; }
+
+
+/* ==========================================================================
+ * FINAL PASS
+ *
+ * Four faults found by photographing every screen and measuring the colour
+ * actually painted behind every piece of copy, rather than reading the rules
+ * and assuming they landed.
+ * ========================================================================== */
+
+/*
+ * A panel that is hidden must be gone.
+ *
+ * `.blitz-intro-command .blitz-pool` sets a display later in this file than
+ * `.blitz-pool[hidden]` does, at the same specificity, so it won. On any day
+ * without a funded pool - which is most days, and every day before the first
+ * sponsor - the home screen drew an empty bordered box above the rider's name.
+ * An empty box reads as something that failed to load.
+ */
+.blitz-pool[hidden],
+.blitz-rewards[hidden],
+.blitz-intro-command .blitz-pool[hidden] { display: none !important; }
+
+/*
+ * The next-circuit panel never came across to the cream language: it kept a
+ * dark raised fill from the old palette while sitting inside a cream card, so
+ * its heading was ink on dark at 2.4:1 and its copy was lavender on dark.
+ */
+.blitz-next-city {
+  border: 2px solid var(--rush-keyline);
+  border-left: 6px solid var(--rush-sun);
+  border-radius: var(--rush-radius-tight);
+  background: rgb(20 19 29 / .05);
+}
+.blitz-next-city > span { color: #6d604a; }
+.blitz-next-city h2 { color: var(--rush-keyline); }
+.blitz-next-city p { color: #4b4436; }
+
+/* Same cause on the board: dark-ground label colours over a cream panel. */
+.blitz-leaderboard h3 { color: #6d604a; }
+.blitz-leaderboard p { color: #4b4436; }
+.blitz-leaderboard-row { color: var(--rush-keyline); }
+.blitz-leaderboard-row b { color: #8a5a12; }
+.blitz-leaderboard-row small { color: #6d604a; }
+.blitz-leaderboard-row strong { color: var(--rush-keyline); }
+
+/*
+ * The phone fold.
+ *
+ * On a 390x844 screen the masthead ate 400px and pushed Free run and Race
+ * friends off the bottom, so two of the three ways to play were invisible to
+ * anyone who did not think to scroll a screen that looks complete. The
+ * masthead is the part that can afford to give the space back: the wordmark is
+ * already on the loading plate a second earlier, and the tagline is printed
+ * there too, so repeating both at full size costs a mode.
+ */
+@media (max-width: 720px) {
+  .blitz-intro.blitz-fullscreen-page { gap: 12px; padding: clamp(14px, 4vw, 24px); }
+  .blitz-intro-masthead .blitz-title { font-size: clamp(46px, 13vw, 72px); }
+  .blitz-intro-masthead .blitz-edition { margin-top: 12px; }
+  .blitz-intro-masthead .blitz-tagline { display: none; }
+  .blitz-intro-masthead .blitz-rush-logo-hero { max-width: 210px; }
+}
+
+
+/* The name field announces itself like every other section of the panel. */
+.blitz-field-label {
+  /* Its own line. Sharing one with the section tab made it read as a second
+     heading rather than as the label for the box underneath it. */
+  display: block;
+  width: fit-content;
+  margin: 14px 0 6px 10px;
+  padding: 4px 9px;
+  border: 2px solid var(--rush-keyline);
+  border-radius: 7px;
+  background: rgb(20 19 29 / .06);
+  color: #4b4436;
+  font: 900 9px/1 ui-monospace, monospace;
+  letter-spacing: .16em;
+}
+
+/*
+ * The two secondary modes.
+ *
+ * They had the keyline and the offset shadow already, but kept a small
+ * sentence-case monospace label, so next to a display-face primary they read
+ * as footnotes rather than as the other two ways to play. Same face, smaller,
+ * and the cream fill keeps them behind the teal one.
+ */
+.blitz-intro-command .blitz-again {
+  min-height: 56px;
+  font: 400 clamp(17px, 2vw, 20px)/1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+/*
+ * Rookie and Pro were sized by their own labels, so a four-letter word and a
+ * six-letter word produced a circle beside an oval and the pair looked like an
+ * accident rather than a switch.
+ */
+.blitz-intro-command .blitz-difficulty { grid-template-columns: repeat(2, minmax(0, 116px)); }
+.blitz-intro-command .blitz-difficulty-option {
+  min-height: 46px;
+  border-radius: 10px;
+  font: 900 11px/1 ui-monospace, monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+/*
+ * The last forty pixels on a phone.
+ *
+ * With all three modes in view the utility row - How to ride, sound, the Nimiq
+ * mark - was the one thing still under the fold. It is the row a rider who has
+ * never played needs most, so the panel gives back the spacing instead.
+ */
+@media (max-width: 720px) {
+  .blitz-intro-command { padding: 13px; }
+  .blitz-intro-command .blitz-ranked-launch { padding: 11px; }
+  .blitz-field-label { margin-top: 10px; }
+  .blitz-intro-command .blitz-username { min-height: 44px; }
+  .blitz-mode-free { margin-top: 13px; }
+  .blitz-intro-command .blitz-again { min-height: 50px; margin-top: 9px; }
+  .blitz-intro-command .blitz-difficulty { margin-top: 13px; }
+}
+
+/*
+ * A hard offset shadow paints outside the box and reserves no space for
+ * itself, so any line of text sitting flush under a key was covered by that
+ * key's shadow. It read as a rendering glitch, and it hit the two places that
+ * matter most: the seat you were just given, and the reason a lobby failed to
+ * open.
+ */
+button + .blitz-rank-status,
+button + .blitz-quiet { margin-top: 11px; }

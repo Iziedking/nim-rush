@@ -118,9 +118,17 @@ try {
   await send('Page.enable'); await send('Runtime.enable');
   if (!device && !publicScreenshots) await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await send('Page.navigate', { url: origin });
+  /*
+   * A returning rider, not a bypass. The app reads this key to decide whether
+   * a wallet has been connected on this device, so seeding it puts the probe
+   * in the same state as somebody who connected yesterday. The address is a
+   * real Nimiq-shaped one so nothing downstream has to special-case it.
+   */
+  await evaluate(`(() => { try { localStorage.setItem('nim-atlas:blitz:wallet', 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000'); localStorage.setItem('nim-atlas:blitz:username', 'Probe'); } catch {} })()`);
+  await send('Page.navigate', { url: origin });
   let ready = false;
   for (let retry = 0; retry < 50; retry++) {
-    ready = await evaluate('Boolean(window.blitzDebug && document.querySelector(".blitz-start"))');
+    ready = await evaluate('Boolean(window.blitzDebug && document.querySelector(".blitz-free-run"))');
     if (ready) break;
     await delay(200);
   }
@@ -129,7 +137,7 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: publicScreenshots ? 1440 : 844, height: publicScreenshots ? 900 : 390, deviceScaleFactor: 1, mobile: !publicScreenshots });
     await delay(400);
     await screenshot('intro-landscape');
-    const visible = await evaluate(`(() => { const r=document.querySelector('.blitz-start').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&r.right<=innerWidth; })()`);
+    const visible = await evaluate(`(() => { const r=document.querySelector('.blitz-free-run').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&r.right<=innerWidth; })()`);
     if (!visible) throw new Error('The ride action is clipped in landscape.');
     if (!publicScreenshots) await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await delay(400);
@@ -148,7 +156,7 @@ try {
   const muted = await evaluate('window.blitzDebug.debugSnapshot().audio');
   if (muted.samples.length || muted.bike || muted.scene!=='silent') throw new Error('Mute left an audio source playing.');
   await evaluate(`document.querySelector('.blitz-sound').click()`);
-  await evaluate(`(() => { window.rushProbe = {frames: [], last: 0}; const frame=t=>{const p=window.rushProbe;if(p.last&&document.visibilityState==='visible')p.frames.push(t-p.last);p.last=t;if(p.frames.length>7200)p.frames.shift();requestAnimationFrame(frame)};requestAnimationFrame(frame);document.querySelector('.blitz-start').click(); })()`);
+  await evaluate(`(() => { window.rushProbe = {frames: [], last: 0}; const frame=t=>{const p=window.rushProbe;if(p.last&&document.visibilityState==='visible')p.frames.push(t-p.last);p.last=t;if(p.frames.length>7200)p.frames.shift();requestAnimationFrame(frame)};requestAnimationFrame(frame);document.querySelector('.blitz-free-run').click(); })()`);
   await delay(4200);
   await evaluate(`document.querySelector('.blitz-pause').click()`);
   const paused = await evaluate('window.blitzDebug.debugSnapshot()');
