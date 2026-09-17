@@ -30,8 +30,10 @@ import { openInNimiqPay } from '../nimiq/deeplink';
 import { qrSvg } from './qr';
 
 /** Confirmed against nimiq.com/nimiq-pay rather than typed from memory. */
-const IOS = 'https://apps.apple.com/us/app/nimiq-pay/id6471844738';
-const ANDROID = 'https://play.google.com/store/apps/details?id=com.nimiq.pay';
+export const NIMIQ_PAY_IOS = 'https://apps.apple.com/us/app/nimiq-pay/id6471844738';
+export const NIMIQ_PAY_ANDROID = 'https://play.google.com/store/apps/details?id=com.nimiq.pay';
+const IOS = NIMIQ_PAY_IOS;
+const ANDROID = NIMIQ_PAY_ANDROID;
 
 export interface WalletCtaOptions {
   /**

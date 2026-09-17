@@ -109,6 +109,9 @@ describe('NIM Atlas payout ledger durability', () => {
      */
     let reads = 0;
     const flaky: AtlasStateStore = {
+      // A transaction on a double isolates within this process, which is all
+      // there is to isolate when nothing else is writing.
+      transact: (operation) => operation({ load: (key, fallback) => store.load(key, fallback), save: (key, value) => { void store.save(key, value); } }),
       async load(key, fallback) {
         reads += 1;
         if (reads === 1) throw new Error('Atlas state store read failed transiently.');

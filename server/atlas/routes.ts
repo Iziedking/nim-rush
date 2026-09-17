@@ -17,6 +17,7 @@ import type { AuthAction, DeviceProof } from '../../src/net/player-auth-protocol
 import type { AtlasSnapshot } from '../../shared/atlas/state';
 import type { AtlasBlitzService } from './blitz';
 import type { BlitzRewardReceipt } from './blitz-rewards';
+import type { BlitzLobby, BlitzSeat, BlitzSeatResult } from './blitz-seats';
 
 export interface AtlasOrderCatalog {
   itemId: 'harbor-lantern';
@@ -49,6 +50,19 @@ export interface AtlasApi {
    * should then be told rewards are unavailable rather than shown an empty list.
    */
   blitzRewards?: (walletAddress: string) => Promise<readonly BlitzRewardReceipt[]>;
+  /*
+   * Seats in a challenge or a private lobby.
+   *
+   * Optional, because a deployment with no durable store has nowhere to keep a
+   * lobby - and an invite link that dies on restart is worse than no invite
+   * link, so the route answers unavailable rather than handing out a seat it
+   * cannot remember.
+   */
+  blitzSeats?: {
+    open(input: { actorId: string; walletAddress: string; capacity: number }): Promise<BlitzLobby>;
+    claim(input: { lobbyId: string; actorId: string; walletAddress: string }): Promise<BlitzSeatResult>;
+    read(lobbyId: string): Promise<{ lobby: BlitzLobby; seats: readonly Omit<BlitzSeat, 'actorId'>[] } | null>;
+  };
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
 }
 
@@ -66,6 +80,7 @@ export function createAtlasApi(options: {
   competitive?: AtlasCompetitiveRuntime;
   blitz?: AtlasBlitzService;
   blitzRewards?: (walletAddress: string) => Promise<readonly BlitzRewardReceipt[]>;
+  blitzSeats?: AtlasApi['blitzSeats'];
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
 }): AtlasApi {
   const curriculum = validateAtlasCurriculum(options.curriculum, options.now?.() ?? new Date());
@@ -92,6 +107,7 @@ export function createAtlasApi(options: {
     competitive: options.competitive,
     blitz: options.blitz,
     blitzRewards: options.blitzRewards,
+    blitzSeats: options.blitzSeats,
     authorize: options.authorize,
   };
 }
@@ -179,6 +195,55 @@ export function mountAtlasRoutes(options: {
       response.json({ ok: true, data: await options.api.blitzRewards(walletAddress) });
     } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
+  /*
+   * Open a private lobby.
+   *
+   * Signed, because the lobby is attributed to the rider who opened it and an
+   * unsigned open would let anybody fill the store with lobbies. The seat
+   * count is clamped by the ledger rather than trusted from the body.
+   */
+  options.app.post('/atlas/api/blitz/lobbies', options.limit(12, 4), async (request, response) => {
+    if (!options.api.blitzSeats || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Beacon Blitz lobbies are unavailable.' }); return; }
+    const parsed = lobbyOpenBody.safeParse(request.body);
+    if (!parsed.success || !(await options.api.authorize(parsed.data.auth, 'atlas.ticket.issue', parsed.data.actorId, withoutAuth(parsed.data)))) { response.status(403).json({ ok: false, error: 'Beacon Blitz lobby request was rejected.' }); return; }
+    try {
+      const lobby = await options.api.blitzSeats.open({ actorId: parsed.data.actorId, walletAddress: parsed.data.walletAddress, capacity: parsed.data.capacity });
+      response.status(201).json({ ok: true, data: lobby });
+    } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
+
+  /*
+   * Take a seat. First come, first served, and signed: a seat decides who is
+   * eligible for a funded pool, so it is attributed to a wallet that proved
+   * it owns itself rather than to whoever typed an address.
+   */
+  options.app.post('/atlas/api/blitz/lobbies/:lobbyId/seats', options.limit(24, 8), async (request, response) => {
+    if (!options.api.blitzSeats || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Beacon Blitz lobbies are unavailable.' }); return; }
+    const lobbyId = typeof request.params.lobbyId === 'string' ? request.params.lobbyId : '';
+    const parsed = seatClaimBody.safeParse(request.body);
+    if (!/^[A-Za-z0-9_-]{16,64}$/.test(lobbyId) || !parsed.success || !(await options.api.authorize(parsed.data.auth, 'atlas.ticket.issue', parsed.data.actorId, withoutAuth(parsed.data)))) { response.status(403).json({ ok: false, error: 'Beacon Blitz seat request was rejected.' }); return; }
+    try {
+      const result = await options.api.blitzSeats.claim({ lobbyId, actorId: parsed.data.actorId, walletAddress: parsed.data.walletAddress });
+      // A refusal is a normal answer here, not a server error: the lobby is
+      // full, or closed, and the rider needs to be told which.
+      response.status(result.ok ? 201 : 409).json(result.ok ? { ok: true, data: result } : { ok: false, error: result.reason });
+    } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
+
+  /*
+   * Who is in. Read-only and unsigned, because anyone holding the link is
+   * invited - the link is the credential, which is why it has to be random.
+   */
+  options.app.get('/atlas/api/blitz/lobbies/:lobbyId', options.limit(120, 40), async (request, response) => {
+    if (!options.api.blitzSeats) { response.status(503).json({ ok: false, error: 'Beacon Blitz lobbies are unavailable.' }); return; }
+    const lobbyId = typeof request.params.lobbyId === 'string' ? request.params.lobbyId : '';
+    if (!/^[A-Za-z0-9_-]{16,64}$/.test(lobbyId)) { response.status(400).json({ ok: false, error: 'Beacon Blitz lobby id is invalid.' }); return; }
+    const found = await options.api.blitzSeats.read(lobbyId);
+    if (!found) { response.status(404).json({ ok: false, error: 'Beacon Blitz lobby was not found.' }); return; }
+    response.setHeader('cache-control', 'no-store');
+    response.json({ ok: true, data: found });
+  });
+
   options.app.post('/atlas/api/wallet/challenge', options.limit(24, 8), async (request, response) => {
     if (!options.api.identity || !options.api.authorize) { response.status(503).json({ ok: false, error: 'Atlas wallet identity is unavailable.' }); return; }
     const parsed = walletChallengeBody.safeParse(request.body);
@@ -296,6 +361,8 @@ const actionBody = z.object({ moveX: z.number().finite(), moveY: z.number().fini
 const submissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-f0-9]{32}$/), actorId, walletAddress: z.string().min(1).max(64), network: z.literal('testalbatross'), role: z.enum(['explorer', 'builder']), seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), challengeId: z.string().regex(/^[a-z0-9-]{1,80}$/), origin: z.string().url().max(256), campaignHash: z.string().regex(/^[a-f0-9]{64}$/), curriculumHash: z.string().regex(/^[a-f0-9]{64}$/), rulesetHash: z.string().regex(/^[a-f0-9]{64}$/), assistance: z.enum(['none', 'free-hint', 'purchased-hint', 'answer-reveal', 'debug']), actions: z.array(actionBody).max(20_000), claimedSnapshot: z.unknown(), replayHash: z.string().regex(/^[a-f0-9]{64}$/), auth: authProof });
 const blitzCityId = z.enum(['lagos', 'london', 'dubai']);
 const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), brake: z.boolean().optional(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
+const lobbyOpenBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), capacity: z.number().int().min(2).max(7), auth: authProof });
+const seatClaimBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), auth: authProof });
 const blitzTicketBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), auth: authProof });
 const blitzSubmissionBody = z.object({ runId: z.string().regex(/^[a-zA-Z0-9:_-]{1,128}$/), ticketId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/), actorId, walletAddress: z.string().min(1).max(64), username: z.string().regex(/^[A-Za-z0-9_]{3,18}$/), cityId: blitzCityId, seasonId: z.string().regex(/^[a-z0-9-]{1,80}$/), challengeId: z.string().regex(/^[a-z0-9:_-]{1,160}$/).optional(), challengeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), rulesetVersion: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(), seed: z.string().min(1).max(160), frames: z.array(z.object({ tick: z.number().int().min(0).max(3_000), input: blitzInputBody })).max(3_000), traceHash: z.string().regex(/^[a-f0-9]{64}$/), claimedScore: z.number().int().min(0).max(1_000_000), auth: authProof });
 function withoutAuth<T extends { auth: unknown }>(value: T): Omit<T, 'auth'> { const { auth: _auth, ...body } = value; return body; }

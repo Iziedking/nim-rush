@@ -150,6 +150,9 @@ export interface AtlasApiClient {
   getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
   getBlitzPrizes(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzPrizeTableSummary>;
   getBlitzRewards(walletAddress: string): Promise<BlitzRewardSummary[]>;
+  openBlitzLobby(input: { actorId: string; walletAddress: string; capacity: number }): Promise<ApiResult<BlitzLobbySummary>>;
+  claimBlitzSeat(lobbyId: string, input: { actorId: string; walletAddress: string }): Promise<ApiResult<BlitzSeatClaim>>;
+  getBlitzLobby(lobbyId: string): Promise<BlitzLobbyView | null>;
   issueBlitzTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<ApiResult<BlitzTicket>>;
   submitBlitzRun(input: BlitzSubmissionInput): Promise<ApiResult<BlitzSubmitResult>>;
   issueCompetitiveTicket(input: { actorId: string; walletAddress: string; role: AtlasRole }): Promise<ApiResult<AtlasCompetitiveTicket>>;
@@ -181,6 +184,17 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     getBlitzLeaderboard: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzLeaderboard),
     getBlitzPrizes: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/prizes?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzPrizeTable),
     getBlitzRewards: (walletAddress) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/rewards?walletAddress=${encodeURIComponent(walletAddress)}`, isBlitzRewards),
+    openBlitzLobby: (input) => authenticatedAtlasRequest<BlitzLobbySummary>('/atlas/api/blitz/lobbies', 'atlas.ticket.issue', input.actorId, input, isBlitzLobby, { apiBase: baseUrl, fetchImpl }),
+    claimBlitzSeat: (lobbyId, input) => authenticatedAtlasRequest<BlitzSeatClaim>(`/atlas/api/blitz/lobbies/${encodeURIComponent(lobbyId)}/seats`, 'atlas.ticket.issue', input.actorId, input, isBlitzSeatClaim, { apiBase: baseUrl, fetchImpl }),
+    /*
+     * A lobby nobody opened is a null, not a thrown error. Following a stale
+     * or mistyped invite is an ordinary thing to do, and the screen that
+     * handles it needs an answer rather than an exception.
+     */
+    getBlitzLobby: async (lobbyId) => {
+      try { return await requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/lobbies/${encodeURIComponent(lobbyId)}`, isBlitzLobbyView); }
+      catch { return null; }
+    },
     issueBlitzTicket: (input) => authenticatedAtlasRequest<BlitzTicket>('/atlas/api/blitz/tickets', 'atlas.ticket.issue', input.actorId, input, isBlitzTicket, { apiBase: baseUrl, fetchImpl }),
     submitBlitzRun: (input) => authenticatedAtlasRequest<BlitzSubmitResult>('/atlas/api/blitz/runs', 'atlas.run.submit', input.actorId, input, isBlitzSubmitResult, { apiBase: baseUrl, fetchImpl }),
     issueCompetitiveTicket: (input) => authenticatedRequest<AtlasCompetitiveTicket>('/atlas/api/competitive/tickets', 'atlas.ticket.issue', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
@@ -318,6 +332,72 @@ function isBlitzRewards(value: unknown): value is BlitzRewardSummary[] {
       && (row.transactionHash === null || typeof row.transactionHash === 'string')
       && (row.attentionReason === null || typeof row.attentionReason === 'string');
   });
+}
+
+/*
+ * Lobbies.
+ *
+ * A seat decides who is eligible for a funded pool, so every one of these
+ * crosses a trust boundary: the server decides, and the client only ever
+ * displays. The guards are closed for the same reason the others are - a shape
+ * that does not match is refused rather than rendered half-empty.
+ */
+export interface BlitzLobbySummary {
+  id: string;
+  kind: 'daily' | 'private';
+  challengeId: string;
+  capacity: number;
+  hostWallet: string | null;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface BlitzSeatSummary {
+  seat: number;
+  walletAddress: string;
+  claimedAt: number;
+}
+
+export interface BlitzSeatClaim {
+  ok: true;
+  seat: BlitzSeatSummary;
+  lobby: BlitzLobbySummary;
+  taken: number;
+}
+
+export interface BlitzLobbyView {
+  lobby: BlitzLobbySummary;
+  seats: BlitzSeatSummary[];
+}
+
+function isBlitzLobby(value: unknown): value is BlitzLobbySummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const lobby = value as Record<string, unknown>;
+  return typeof lobby.id === 'string'
+    && (lobby.kind === 'daily' || lobby.kind === 'private')
+    && typeof lobby.challengeId === 'string'
+    && Number.isSafeInteger(lobby.capacity)
+    && (lobby.hostWallet === null || typeof lobby.hostWallet === 'string')
+    && Number.isSafeInteger(lobby.createdAt)
+    && Number.isSafeInteger(lobby.expiresAt);
+}
+
+function isBlitzSeat(value: unknown): value is BlitzSeatSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const seat = value as Record<string, unknown>;
+  return Number.isSafeInteger(seat.seat) && typeof seat.walletAddress === 'string' && Number.isSafeInteger(seat.claimedAt);
+}
+
+function isBlitzSeatClaim(value: unknown): value is BlitzSeatClaim {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const claim = value as Record<string, unknown>;
+  return claim.ok === true && isBlitzSeat(claim.seat) && isBlitzLobby(claim.lobby) && Number.isSafeInteger(claim.taken);
+}
+
+function isBlitzLobbyView(value: unknown): value is BlitzLobbyView {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const view = value as Record<string, unknown>;
+  return isBlitzLobby(view.lobby) && Array.isArray(view.seats) && view.seats.every(isBlitzSeat);
 }
 
 function isBlitzLeaderboard(value: unknown): value is BlitzLeaderboardRow[] {

@@ -161,3 +161,27 @@ export function rememberedChallenge(): string | null {
     return null;
   }
 }
+
+/**
+ * The link that opens a private lobby inside Nimiq Pay.
+ *
+ * Same format as a challenge link, because it is the same mechanism: the app
+ * URL carries the lobby id and the deeplink carries the app URL. Shared by a
+ * rider who has just opened a lobby, so the friends who receive it land in the
+ * mini app already pointed at the right race rather than at the front door.
+ */
+export function lobbyDeeplink(lobbyId: string): string {
+  const target = `${appOrigin()}/?lobby=${encodeURIComponent(lobbyId)}`;
+  return `nimiqpay://miniapp?url=${encodeURIComponent(target)}`;
+}
+
+/**
+ * The same lobby as a plain web address.
+ *
+ * What actually goes in a message, because a nimiqpay:// link pasted into a
+ * browser or a chat that does not know the scheme is a dead end. This opens in
+ * anything, and the app decides whether to play or to offer Nimiq Pay.
+ */
+export function lobbyShareLink(lobbyId: string): string {
+  return `${appOrigin()}/?lobby=${encodeURIComponent(lobbyId)}`;
+}

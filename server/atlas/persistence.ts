@@ -17,6 +17,19 @@ export interface AtlasRepository {
   readonly snapshotPath: string;
   readonly lockPath: string;
   save(snapshot: AtlasRepositorySnapshot): Promise<void>;
+  /**
+   * Run an operation with the repository's cross-process lock held.
+   *
+   * The lock is a directory created with mkdir, which is atomic on every
+   * filesystem this runs on, with a stale-lock recovery for a writer that died
+   * holding it. Saving already takes it; this exposes it so a read-modify-write
+   * can hold it across both halves.
+   *
+   * Without this, two processes that both read "seat 1 is free" both write
+   * their own rider into it, and the second save erases the first. A promise
+   * queue cannot fix that, because each process has its own queue.
+   */
+  transact<T>(operation: (write: (snapshot: AtlasRepositorySnapshot) => Promise<void>) => Promise<T>): Promise<T>;
   load(): Promise<{ snapshot: AtlasRepositorySnapshot | null; recoveredFromBackup: boolean }>;
   listBackups(): Promise<Array<{ name: string; sizeBytes: number; modifiedAt: number }>>;
 }
@@ -24,6 +37,19 @@ export interface AtlasRepository {
 export interface AtlasStateStore {
   load<T>(key: string, fallback: T): Promise<T>;
   save<T>(key: string, value: T): Promise<void>;
+  /**
+   * Read, decide and write as one indivisible step, across processes.
+   *
+   * `load` serves a cached copy, which is right for a projection that only this
+   * process writes and wrong for anything another process may be changing at
+   * the same moment. Inside a transaction the records are re-read from disk
+   * first, so the decision is made against what is actually stored rather than
+   * against what this process last saw.
+   */
+  transact<T>(operation: (records: {
+    load<V>(key: string, fallback: V): Promise<V>;
+    save<V>(key: string, value: V): void;
+  }) => Promise<T>): Promise<T>;
 }
 
 /**
@@ -49,6 +75,36 @@ export function createAtlasStateStore(repository: AtlasRepository, now: () => nu
       await initialise();
       return structuredClone((records[key] as T | undefined) ?? fallback);
     },
+    /*
+     * The whole step under one lock.
+     *
+     * Re-reading from disk inside the lock is the part that makes this work
+     * across processes: this process's cache may be several writes behind
+     * another instance, and deciding from a stale cache is exactly the bug the
+     * lock is here to prevent.
+     */
+    transact<T>(operation: (records: { load<V>(key: string, fallback: V): Promise<V>; save<V>(key: string, value: V): void }) => Promise<T>): Promise<T> {
+      const run = async (): Promise<T> => repository.transact(async (write) => {
+        const loaded = await repository.load();
+        const fresh: Record<string, unknown> = loaded?.snapshot?.records ?? {};
+        let dirty = false;
+        const result = await operation({
+          load: async <V,>(key: string, fallback: V) => structuredClone((fresh[key] as V | undefined) ?? fallback),
+          save: <V,>(key: string, value: V) => { fresh[key] = structuredClone(value); dirty = true; },
+        });
+        // A transaction that only read costs no write, which matters because
+        // every save rewrites the whole snapshot.
+        if (dirty) await write({ version: 1, updatedAt: now(), records: fresh });
+        records = fresh;
+        initialised = true;
+        return result;
+      });
+      // Chained behind this process's own writes so a transaction cannot
+      // interleave with a save that is already in flight here.
+      const next = operations.catch(() => undefined).then(run);
+      operations = next.then(() => undefined, () => undefined);
+      return next;
+    },
     save<T>(key: string, value: T): Promise<void> {
       operations = operations.catch(() => undefined).then(async () => {
         await initialise();
@@ -71,6 +127,13 @@ export function createAtlasJsonRepository(options: {
   const directory = options.directory ?? join(process.cwd(), '.data', 'atlas');
   const snapshotPath = join(directory, 'atlas.json');
   const lockPath = `${snapshotPath}.lock`;
+  /*
+   * How deep this process is inside its own lock.
+   *
+   * A transaction takes the lock and then saves, and saving takes the lock as
+   * well. Without this count the second acquire would find the directory this
+   * same process created, wait for it to be released, and deadlock.
+   */
   if (basename(snapshotPath) === 'sface.json') throw new Error('Atlas repository cannot use the legacy snapshot path.');
   const now = options.now ?? Date.now;
   const lockStaleMs = options.lockStaleMs ?? 30_000;
@@ -94,12 +157,32 @@ export function createAtlasJsonRepository(options: {
       throw new Error('Atlas repository has no valid snapshot or backup.');
     },
     listBackups: listBackupsInternal,
+    /*
+     * The lock, for callers who have to decide something between reading and
+     * writing. Seats are the reason this exists: two processes that both read
+     * "seat 1 is free" would both take it, and no amount of in-process
+     * sequencing can prevent that.
+     */
+    /*
+     * The lock, for callers who decide something between reading and writing.
+     * The operation is handed the writer because the lock is already held: a
+     * nested save would otherwise wait for a lock its own caller owns.
+     */
+    transact: <T,>(operation: (write: (snapshot: AtlasRepositorySnapshot) => Promise<void>) => Promise<T>) => withLock(async () => {
+      await mkdir(directory, { recursive: true });
+      return operation(async (snapshot) => { assertSnapshot(snapshot); await writeSnapshot(snapshot); });
+    }),
   };
 
   async function saveSnapshot(snapshot: AtlasRepositorySnapshot): Promise<void> {
     assertSnapshot(snapshot);
     await mkdir(directory, { recursive: true });
-    await withLock(async () => {
+    await withLock(() => writeSnapshot(snapshot));
+  }
+
+  /** The write itself, with the lock assumed to be held by the caller. */
+  async function writeSnapshot(snapshot: AtlasRepositorySnapshot): Promise<void> {
+    {
       try {
         if (await exists(snapshotPath)) await copyFile(snapshotPath, `${snapshotPath}.${now()}.bak`);
         const temporaryPath = `${snapshotPath}.${process.pid}.${randomUUID()}.tmp`;
@@ -121,23 +204,34 @@ export function createAtlasJsonRepository(options: {
       } catch (error) {
         throw error;
       }
-    });
+    }
   }
 
-  async function withLock(operation: () => Promise<void>): Promise<void> {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+  /*
+   * Wait long enough for a real queue.
+   *
+   * Forty tries five milliseconds apart gave a writer a fifth of a second to
+   * get in, which is fine when nothing else is writing and not fine when seven
+   * riders claim a seat at once: each write copies a backup, fsyncs a
+   * temporary file and renames it, and on a loaded machine that is tens of
+   * milliseconds each. The old budget expired under exactly the contention
+   * this lock exists for, and reported the store as busy.
+   *
+   * The backoff climbs so a long queue does not spin the disk while it waits.
+   */
+  async function withLock<T>(operation: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; attempt < 240; attempt += 1) {
       try {
         await mkdir(lockPath);
         try { await writeFile(join(lockPath, 'owner'), `${process.pid}\n`, 'utf8'); } catch { /* lock existence is sufficient */ }
-        try { await operation(); } finally { await rm(lockPath, { recursive: true, force: true }); }
-        return;
+        try { return await operation(); } finally { await rm(lockPath, { recursive: true, force: true }); }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
         try {
           const details = await stat(lockPath);
           if (Date.now() - details.mtimeMs > lockStaleMs) await rm(lockPath, { recursive: true, force: true });
         } catch { /* another writer may have released it */ }
-        await delay(5);
+        await delay(Math.min(25, 4 + attempt));
       }
     }
     throw new Error('Atlas repository lock is busy.');
@@ -189,3 +283,41 @@ async function flushDirectory(directory: string): Promise<void> {
 }
 
 function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
+
+/**
+ * Give a plain load/save pair the transaction the interface requires.
+ *
+ * For an in-memory store - a test double, or anything that is the only writer
+ * of its own data - serialising the operations in this process is the whole of
+ * what a transaction has to mean, because there is no second process to race
+ * with. The real file-backed store needs more, and does more: it takes the
+ * repository's cross-process lock and re-reads from disk.
+ *
+ * This exists so a double cannot accidentally satisfy the type with a
+ * transaction that does not actually isolate anything.
+ */
+export function withStateTransactions(store: Pick<AtlasStateStore, 'load' | 'save'>): AtlasStateStore {
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    load: store.load,
+    save: store.save,
+    transact<T>(operation: (records: { load<V>(key: string, fallback: V): Promise<V>; save<V>(key: string, value: V): void }) => Promise<T>): Promise<T> {
+      const run = async (): Promise<T> => {
+        /*
+         * Writes are held until the operation succeeds, so a failure part way
+         * through leaves nothing half-applied.
+         */
+        const writes = new Map<string, unknown>();
+        const result = await operation({
+          load: async <V,>(key: string, fallback: V): Promise<V> => (writes.has(key) ? writes.get(key) as V : store.load(key, fallback)),
+          save: <V,>(key: string, value: V): void => { writes.set(key, value); },
+        });
+        for (const [key, value] of writes) await store.save(key, value);
+        return result;
+      };
+      const next = queue.catch(() => undefined).then(run);
+      queue = next.then(() => undefined, () => undefined);
+      return next;
+    },
+  };
+}

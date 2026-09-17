@@ -114,8 +114,11 @@ import { createAtlasBlitzService } from './atlas/blitz';
 import { createBlitzMaintenance } from './atlas/blitz-worker';
 import { runBlitzDailyClose } from './atlas/blitz-daily-close';
 import { blitzRewardsForWallet } from './atlas/blitz-rewards';
+import { createBlitzSeatStore } from './atlas/blitz-seat-store';
+import { BLITZ_MAX_SEATS, claimBlitzSeat, createBlitzLobby, readBlitzLobby } from './atlas/blitz-seats';
+import { randomBytes } from 'node:crypto';
 import { BLITZ_CITIES } from '../shared/atlas/blitz/cities';
-import { BLITZ_SEASON_ID } from '../shared/atlas/blitz/daily';
+import { BLITZ_SEASON_ID, getBlitzDailyChallenge } from '../shared/atlas/blitz/daily';
 
 /*
  * Every five minutes. Frequent enough that a day settles soon after it ends,
@@ -335,6 +338,42 @@ const atlasBlitzMaintenance = atlasBlitz && atlasPayouts
       drainQualifications: () => atlasBlitz.retryPendingQualifications(),
     })
   : undefined;
+/*
+ * Seats, and the lobbies that hold them.
+ *
+ * Only with a durable repository. An invite link is a promise that a place is
+ * being held, and a lobby that vanished on restart would break that promise
+ * silently - so without somewhere to keep it the routes answer unavailable
+ * rather than handing out a seat nobody will remember.
+ */
+const atlasBlitzSeatStore = ATLAS_PRODUCTION_GATE.durableRepository ? createBlitzSeatStore(atlasStateStore) : undefined;
+const atlasBlitzSeats = atlasBlitzSeatStore
+  ? {
+      async open(input: { actorId: string; walletAddress: string; capacity: number }) {
+        const challenge = getBlitzDailyChallenge({ now: Date.now(), cityId: 'lagos', seasonId: BLITZ_SEASON_ID });
+        return createBlitzLobby({
+          store: atlasBlitzSeatStore,
+          kind: 'private',
+          challengeId: challenge.challengeId,
+          capacity: Math.min(BLITZ_MAX_SEATS, input.capacity),
+          hostWallet: input.walletAddress,
+          now: Date.now(),
+          // A lobby dies with the day it belongs to: the challenge it seats
+          // people for stops existing at the reset.
+          expiresAt: challenge.expiresAt,
+          /*
+           * 24 bytes of real randomness. The id is the invitation, so anything
+           * a person could count up to would let strangers into a private race.
+           */
+          randomId: () => randomBytes(24).toString('base64url'),
+        });
+      },
+      claim: (input: { lobbyId: string; actorId: string; walletAddress: string }) =>
+        claimBlitzSeat({ store: atlasBlitzSeatStore, ...input, now: Date.now() }),
+      read: (lobbyId: string) => readBlitzLobby({ store: atlasBlitzSeatStore, lobbyId }),
+    }
+  : undefined;
+
 const atlasCompetitive = ATLAS_PRODUCTION_GATE.competitive && atlasBeacon && atlasEchoes
   ? createAtlasCompetitiveRuntime({ identity: atlasIdentity, tickets: atlasTickets, submissions: atlasSubmissions, leaderboard: atlasLeaderboard, beacon: atlasBeacon, echoes: atlasEchoes, stateStore: atlasStateStore, ticketPolicy: ATLAS_COMPETITIVE_POLICY! })
   : undefined;
@@ -359,6 +398,7 @@ mountAtlasRoutes({ app, limit: rateLimiter.limit, api: createAtlasApi({
    * is the truth: rewards are unavailable, not empty.
    */
   blitzRewards: atlasPayouts ? (walletAddress: string) => blitzRewardsForWallet({ payouts: atlasPayouts, walletAddress }) : undefined,
+  blitzSeats: atlasBlitzSeats,
   competition: atlasCompetitive ? () => atlasCompetitive.competition() : undefined,
   authorize: (proof, action, actorId, body) => provesActor(proof, action, actorId, body),
   orderCatalog: ATLAS_PAYMENT_CONFIG.enabled ? { itemId: ATLAS_PAYMENT_CONFIG.itemId, network: ATLAS_PAYMENT_CONFIG.network, recipient: ATLAS_PAYMENT_CONFIG.recipient!, valueLuna: ATLAS_PAYMENT_CONFIG.valueLuna } : undefined,
