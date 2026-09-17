@@ -1644,3 +1644,31 @@ button + .blitz-quiet { margin-top: 11px; }
  * while marked hidden can say so explicitly; nothing does.
  */
 .blitz-ui [hidden] { display: none !important; }
+
+/*
+ * First down the hill.
+ *
+ * Shown only on a ranked run with nobody recorded ahead of you. Same shape as
+ * the place counter it stands in for, because it is answering the same
+ * question - where am I in this race - with the one honest answer available.
+ */
+.blitz-first-down {
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 3px solid var(--rush-keyline);
+  border-radius: 12px;
+  background: var(--rush-sun);
+  box-shadow: var(--rush-drop-tight);
+}
+.blitz-first-down-title {
+  color: var(--rush-keyline);
+  font: 400 19px/1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: .02em;
+}
+.blitz-first-down-note {
+  color: #4b4436;
+  font: 900 8px/1 ui-monospace, monospace;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}

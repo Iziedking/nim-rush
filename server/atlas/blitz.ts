@@ -360,14 +360,64 @@ export function createAtlasBlitzService(options: {
     rivalPaths.set(challengeId, withoutRider.slice(0, RIVAL_PATHS_PER_CHALLENGE));
   }
 
+  /*
+   * The pack, and where it comes from when today is still empty.
+   *
+   * Lines were only ever drawn from the current day's challenge, and a
+   * challenge id carries the date - so the pack reset to nothing every midnight
+   * and the first riders of every single day raced an empty hill. Not a
+   * cold start once: a cold start daily, for as long as the game runs.
+   *
+   * It is fixable because the course does not change. `sampleCourse` and
+   * `nearbyCourseColliders` are keyed on the city alone; the seed moves the
+   * missions and the supplies, not the road or the rocks. A line ridden down
+   * Lagos yesterday is a true line down Lagos today, so yesterday's riders can
+   * fill today's pack until today has riders of its own.
+   *
+   * Today is always preferred, because those runs were ridden under exactly
+   * these conditions. Older days only backfill the empty seats, newest first.
+   * Every one of them is a real run by a real wallet that the server verified.
+   * Nothing here invents a rider.
+   */
   function packFor(challengeId: string, walletAddress: string, username: string): BlitzRivalPath[] {
-    const entries = rivalPaths.get(challengeId) ?? [];
-    return entries
-      // Nobody races themselves. A rider meeting their own ghost as a solid
-      // bike would be blocked by their own best line, which is absurd.
-      .filter((entry) => entry.path.username !== username && entry.path.runId !== walletAddress)
-      .slice(0, RIVALS_PER_TICKET)
-      .map((entry) => structuredClone(entry.path));
+    const mine = (entry: { path: BlitzRivalPath }) =>
+      entry.path.username === username || entry.path.runId === walletAddress;
+    const city = cityOfChallenge(challengeId);
+    const seen = new Set<string>();
+    const pack: BlitzRivalPath[] = [];
+
+    const take = (entries: readonly { path: BlitzRivalPath; score: number }[]) => {
+      for (const entry of entries) {
+        if (pack.length >= RIVALS_PER_TICKET) return;
+        // Nobody races themselves. A rider meeting their own ghost as a solid
+        // bike would be blocked by their own best line, which is absurd.
+        if (mine(entry) || seen.has(entry.path.username)) continue;
+        seen.add(entry.path.username);
+        pack.push(structuredClone(entry.path));
+      }
+    };
+
+    take(rivalPaths.get(challengeId) ?? []);
+    if (pack.length >= RIVALS_PER_TICKET) return pack;
+
+    // Same city, other days. Newest first, so a rider meets recent company.
+    const older = [...rivalPaths.entries()]
+      .filter(([id]) => id !== challengeId && cityOfChallenge(id) === city)
+      .sort((left, right) => right[0].localeCompare(left[0]));
+    for (const [, entries] of older) {
+      take(entries);
+      if (pack.length >= RIVALS_PER_TICKET) break;
+    }
+    return pack;
+  }
+
+  /*
+   * A challenge id looks like `cycle-2:lagos:2026-09-17:rush-missions-v5-rookie`.
+   * The city is the one part that decides whether a recorded line is still a
+   * valid line, because it is the only part that shapes the road.
+   */
+  function cityOfChallenge(challengeId: string): string {
+    return challengeId.split(':')[1] ?? challengeId;
   }
 
   function serialiseSnapshot(): AtlasBlitzSnapshot {

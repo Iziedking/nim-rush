@@ -504,7 +504,24 @@ export class BlitzApp {
      */
     this.gapHost = node('section', 'blitz-gaps');
     this.gapHost.setAttribute('aria-label', 'Gaps to other riders');
-    this.gapHost.hidden = this.rivals.length === 0;
+    /*
+     * Riding an empty hill, said out loud.
+     *
+     * Somebody has to be first down a course, and when they are, a ranked run
+     * looks exactly like a free one - same trail, same silence, no reason to
+     * believe the race is real. Naming it turns the flattest version of the
+     * mode into the one with a claim attached: the line you draw now is the
+     * one everybody who rides after you has to get past.
+     */
+    this.gapHost.hidden = this.rivals.length > 0 ? false : !this.rankedTicket;
+    if (this.rivals.length === 0 && this.rankedTicket) {
+      const alone = node('div', 'blitz-first-down');
+      alone.append(
+        node('strong', 'blitz-first-down-title', 'FIRST DOWN'),
+        node('span', 'blitz-first-down-note', 'You set the line'),
+      );
+      this.gapHost.append(alone);
+    }
 
     this.missionHost = node('section', 'blitz-mission-hud');
     this.missionHost.setAttribute('aria-label', 'Physical mission contracts');
@@ -1578,14 +1595,22 @@ function stat(value: string, label: string): HTMLElement {
 }
 
 /**
- * Luna is an integer unit; 1 NIM is 100,000 Luna.
+ * A prize, in the unit a rider thinks in.
  *
- * Both are shown because the pool is small in NIM terms and a bare Luna figure
- * reads as larger than it is, while a bare NIM figure rounds the real amount
- * away. Neither alone is honest.
+ * Luna is the integer unit the chain and the ledger use - 1 NIM is 100,000 of
+ * them - and this used to print both, because when the pot was a fraction of a
+ * NIM a bare NIM figure rounded the real amount away to nothing.
+ *
+ * At a funded pool that stopped being true: "2,000 NIM" is exact, and
+ * "200,000,000 Luna (2,000 NIM)" asks a rider to do arithmetic to find out
+ * what they won. Luna stays everywhere it matters - the config, the ledger,
+ * the receipts, every amount the server reasons about - and leaves the screen.
+ *
+ * Fractions are still shown when there are any, so a share that does not divide
+ * evenly is never rounded into a number the treasury will not pay.
  */
 function formatNim(luna: number): string {
-  return `${luna.toLocaleString('en-US')} Luna (${(luna / 100_000).toLocaleString('en-US', { maximumFractionDigits: 5 })} NIM)`;
+  return `${(luna / 100_000).toLocaleString('en-US', { maximumFractionDigits: 5 })} NIM`;
 }
 
 function formatUtcTime(timestampMs: number): string {

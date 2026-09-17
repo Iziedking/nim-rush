@@ -124,3 +124,64 @@ describe('a finished run becomes somebody else\'s rival', () => {
     expect(new Set(next.rivals!.map((rival) => rival.username)).size).toBe(next.rivals!.length);
   });
 });
+
+/*
+ * The hill is not empty again every midnight.
+ *
+ * Recorded lines were filed under the challenge id, and a challenge id carries
+ * the date - so the pack emptied at every reset and the first riders of every
+ * single day raced nobody. That is not a cold start, it is a cold start daily.
+ *
+ * It is safe to reach back because the course does not move: `sampleCourse`
+ * and `nearbyCourseColliders` are keyed on the city, and the seed changes the
+ * missions and the supplies rather than the road. Yesterday's line down Lagos
+ * is a true line down Lagos today.
+ */
+describe('yesterday fills today until today fills itself', () => {
+  const DAY = 24 * 60 * 60 * 1_000;
+
+  it('gives the next day a pack instead of an empty hill', async () => {
+    const clock = { now: 1_700_000_000_000 };
+    const blitz = service(clock);
+
+    const yesterday = await rideAndSubmit(blitz, clock, 'alpha', 'Alpha');
+    expect(yesterday.result.row.verified).toBe(true);
+
+    clock.now += DAY;
+    const today = await blitz.issueTicket({
+      actorId: 'beta', walletAddress: 'wallet-beta', username: 'Beta', cityId: 'lagos', seasonId: 'cycle-2',
+    });
+
+    expect(today.challengeId).not.toBe(yesterday.ticket.challengeId);
+    expect((today.rivals ?? []).map((rival) => rival.username)).toEqual(['Alpha']);
+  });
+
+  it('still refuses to hand a rider their own ghost across days', async () => {
+    const clock = { now: 1_700_000_000_000 };
+    const blitz = service(clock);
+    await rideAndSubmit(blitz, clock, 'alpha', 'Alpha');
+
+    clock.now += DAY;
+    const again = await blitz.issueTicket({
+      actorId: 'alpha', walletAddress: 'wallet-alpha', username: 'Alpha', cityId: 'lagos', seasonId: 'cycle-2',
+    });
+    expect(again.rivals ?? []).toEqual([]);
+  });
+
+  it('prefers today, and only backfills the seats today has not filled', async () => {
+    const clock = { now: 1_700_000_000_000 };
+    const blitz = service(clock);
+    await rideAndSubmit(blitz, clock, 'alpha', 'Alpha');
+
+    clock.now += DAY;
+    await rideAndSubmit(blitz, clock, 'beta', 'Beta');
+    const third = await blitz.issueTicket({
+      actorId: 'gamma', walletAddress: 'wallet-gamma', username: 'Gamma', cityId: 'lagos', seasonId: 'cycle-2',
+    });
+
+    const names = (third.rivals ?? []).map((rival) => rival.username);
+    // Today's rider comes first; yesterday's fills the seat behind them.
+    expect(names[0]).toBe('Beta');
+    expect(names).toContain('Alpha');
+  });
+});
