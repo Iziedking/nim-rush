@@ -32,15 +32,24 @@ The loop is:
 ## Modes
 
 **Free run.** Practise any city at Rookie or Pro rules. Contracts are live and
-the ledger is the same. A free run never takes a place on the leaderboard.
+the ledger is the same. A free run never takes a place on the leaderboard, and
+it is the only mode your rider level changes anything in.
 
 **Daily challenge.** One course, one seed, the same for everybody, reset at
 00:00 UTC. Free to enter. This is the run that ranks, and the run the day's
-funded pool pays out on.
+funded pool pays out on. Rules are fixed here: the Rookie/Pro chooser applies
+to free runs and private lobbies only, because a ranked board on which riders
+picked their own difficulty would not be a board.
+
+A day needs a field. Until two different wallets have posted a verified run,
+the day is not a race, so the pool pays nothing and stays whole rather than
+handing a prize to the only person who turned up.
 
 **Private lobbies.** Open a lobby, send the link, and the first seven riders
 through the door are the field. First come, first served, free to enter. The
-link is the invitation, so lobby ids are twenty-four random bytes.
+link is the invitation, so lobby ids are twenty-four random bytes. Followed
+outside Nimiq Pay, the link explains itself and offers the app rather than
+failing.
 
 ## Controls
 
@@ -82,7 +91,29 @@ through.
 
 Contact moves you and never them. Their run was ridden before yours existed, so
 the game is overtaking traffic rather than fighting it, and the replay stays
-honest.
+honest. Two riders cannot take each other down today; that needs both bikes
+live at once, and it is on the roadmap rather than pretended at here.
+
+Your place in the field is on screen for the whole descent. A rider whose
+recording has run out finished ahead of you and keeps counting as ahead, so
+you cannot climb the order by being slow.
+
+## What is on screen
+
+The trail is the thing you are reading, so the HUD stays off it.
+
+- **Place in the field**, top left, for the whole run.
+- **One contract at a time** — whichever is live, or the next one waiting. It
+  fades a few seconds after anything last changed and comes straight back when
+  progress moves. Three cards stacked over the trail were covering the part of
+  the screen they were instructions about.
+- **Speed, clock and score**, top right.
+- **Nitro and gearboxes**, above your thumb, where spending them happens.
+
+You name your rider once. After that the name is shown as settled with one way
+to change it, rather than asking again on the way into every race. A name is one
+per wallet per season, so if somebody already has the one you picked, the field
+opens again and says so.
 
 ## Scoring
 
