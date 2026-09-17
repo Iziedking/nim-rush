@@ -1261,7 +1261,14 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-seat-you { margin-left: auto; color: var(--rush-keyline); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
 
 .blitz-share-link, .blitz-open-lobby { width: 100%; margin-top: 8px; }
-.blitz-lobby-leave { margin-top: 12px; background: none; }
+/*
+ * The only way out of a lobby, and on a phone it could not be hit.
+ *
+ * It was styled as quiet text with no height of its own, so the target was
+ * about fourteen pixels tall against the forty-four a finger needs. Three taps
+ * on a Pixel 7 Pro landed on nothing before this was measured.
+ */
+.blitz-lobby-leave { min-height: 44px; margin-top: 12px; padding: 0 12px; background: none; }
 
 .blitz-nimiq-lead { margin: 0 0 16px; max-width: 42ch; color: var(--rush-keyline); font: 600 14px/1.45 system-ui, sans-serif; }
 .blitz-open-nimiq { display: block; margin-bottom: 10px; text-align: center; text-decoration: none; line-height: 58px; }
@@ -1405,3 +1412,56 @@ button:disabled { cursor: not-allowed; opacity: .62; }
  */
 button + .blitz-rank-status,
 button + .blitz-quiet { margin-top: 11px; }
+
+/*
+ * Targets a thumb can actually hit.
+ *
+ * Swept at 390px after the lobby's Back link turned out to be fourteen pixels
+ * tall on a real phone. A control under about 44 by 44 fails silently: the tap
+ * lands on nothing, and the rider concludes the app is broken rather than that
+ * they missed. These three were the rest of them.
+ */
+.blitz-rules-link {
+  display: inline-flex;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding-right: 10px;
+}
+.blitz-intro-command .blitz-difficulty-option { min-width: 88px; }
+.blitz-run .blitz-pause { min-width: 44px; min-height: 44px; }
+
+/*
+ * Two things a phone showed that a headless browser did not.
+ *
+ * The score is set at a line-height of .72, so the glyph box is shorter than
+ * the glyphs and the ascenders ride up out of it. On the desktop fallback font
+ * that goes unnoticed; in the real display face on a Pixel it printed the score
+ * straight through TOTAL RUN SCORE. The space belongs on the number, not on
+ * the label, so it scales with the number.
+ *
+ * And the ledger drops its side padding on a phone while keeping a three-pixel
+ * ink keyline, so any bare line of copy - the rider-level sentence, the unlock
+ * note - started underneath that border with its first letter clipped off.
+ */
+.blitz-result-score { margin: .16em 0 0; }
+
+@media (max-width: 720px) {
+  .blitz-result-ledger { padding: 16px 14px 0; }
+}
+
+/*
+ * Retry verification, which nobody could read.
+ *
+ * It kept a pale mint on a pale mint tint from the dark palette and was never
+ * brought onto the cream panel with everything else, so the one control a
+ * rider needs when a ranked run has not been accepted was the hardest thing on
+ * the screen to see.
+ */
+.blitz-retry-submit {
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: var(--rush-paper) !important;
+  box-shadow: var(--rush-drop-tight);
+  color: var(--rush-keyline) !important;
+}
