@@ -411,13 +411,23 @@ export class BlitzApp {
     this.ui.append(screen);
   }
 
-  private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null): Promise<void> {
+  /*
+   * `options.seed` is how a private lobby becomes a race.
+   *
+   * A free run seeds itself from the current minute, which is fine when the
+   * point is practice and wrong the moment two people are supposed to be
+   * racing: friends who tapped Ride a minute apart were not slow and fast on
+   * one hill, they were riding two different hills and comparing numbers that
+   * had nothing to do with each other. A lobby passes the day's challenge seed
+   * so every seat gets the identical course, corner for corner.
+   */
+  private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null, options: { readonly seed?: string } = {}): Promise<void> {
     this.setAudioScene('paused');
     this.audio.unlock();
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
     this.rankedInterrupted = false;
-    const seed = rankedTicket?.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
+    const seed = rankedTicket?.seed ?? options.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
     // Ranked keeps one visible, equal loadout and the shared Rookie ruleset
     // until the server ticket contract carries Pro as an explicit version.
     /*
@@ -872,7 +882,20 @@ export class BlitzApp {
     const competition = node('details', 'blitz-competition');
     competition.open = Boolean(this.rankedTicket);
     competition.append(node('summary', 'blitz-competition-summary', this.rankedTicket ? 'RANKED RUN STATUS' : 'LEADERBOARD'));
-    const rankStatus = node('p', 'blitz-rank-status', this.rankedTicket ? 'VERIFYING THIS RANKED RUN...' : 'CONNECT ONCE TO START A VERIFIED RUN. NO PAYMENT.');
+    /*
+     * A rider who is already connected is not asked to connect again.
+     *
+     * This screen only ever knew two states: mid-verification, or a stranger.
+     * So finishing a free run with a bound wallet and a chosen name put up a
+     * blank username box, a line telling you to connect once, and a button
+     * saying connect - to somebody who had connected, named themselves, and
+     * just ridden. Three pieces of furniture, all of them wrong, at the exact
+     * moment the app should be saying "go again, for a rank this time".
+     */
+    const alreadyConnected = Boolean(this.connectedWallet);
+    const rankStatus = node('p', 'blitz-rank-status', this.rankedTicket
+      ? 'VERIFYING THIS RANKED RUN...'
+      : alreadyConnected ? '' : 'CONNECT ONCE TO START A VERIFIED RUN. NO PAYMENT.');
     competition.append(rankStatus);
     if (this.rankedTicket) {
       if (this.rankedInterrupted) rankStatus.textContent = 'NOT VERIFIED. THIS RANKED RUN LEFT THE SCREEN.';
@@ -886,7 +909,14 @@ export class BlitzApp {
       username.placeholder = 'Leaderboard username';
       username.setAttribute('aria-label', 'Leaderboard username');
       try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
-      const identity = button('CONNECT WALLET TO RIDE RANKED', 'blitz-verify', () => void this.prepareRankedRun(state.cityId, username, identity, rankStatus));
+      // The name is already chosen and bound to the wallet; asking for it again
+      // on the way into a second run is the same friction the home panel drops.
+      username.hidden = alreadyConnected && /^[A-Za-z0-9_]{3,18}$/.test(username.value);
+      const identity = button(
+        alreadyConnected ? "Ride today's challenge" : 'CONNECT WALLET TO RIDE RANKED',
+        'blitz-verify',
+        () => void this.prepareRankedRun(state.cityId, username, identity, rankStatus),
+      );
       competition.append(username, identity);
       void this.loadLeaderboard(state.cityId, competition);
     }
@@ -1019,7 +1049,9 @@ export class BlitzApp {
       view,
       you: this.connectedWallet,
       onJoin: () => void this.joinLobby(lobbyId),
-      onRide: () => void this.startRun('lagos'),
+      onRide: () => void this.startRun('lagos', null, {
+        seed: getBlitzDailyChallenge({ now: Date.now(), cityId: 'lagos', seasonId: BLITZ_SEASON }).seed,
+      }),
       onLeave: () => { this.clearInvite(); this.renderIntro(); },
     });
     this.ui.append(screen.element);

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { BLITZ_BASE_LOADOUT, blitzLoadoutFor } from '../shared/atlas/blitz/rider';
+import { getBlitzDailyChallenge } from '../shared/atlas/blitz/daily';
 
 const app = readFileSync(new URL('../src/atlas/blitz/blitz-app.ts', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/atlas/blitz/blitz.css', import.meta.url), 'utf8');
@@ -74,5 +75,35 @@ describe('free run and daily challenge', () => {
   it('rides every ranked run on the same equipment whatever the rider has earned', () => {
     expect(blitzLoadoutFor({ careerScore: 500_000, ranked: true })).toEqual(BLITZ_BASE_LOADOUT);
     expect(app).toContain('ranked: Boolean(rankedTicket)');
+  });
+});
+
+/*
+ * A private lobby has to be one race, not several.
+ *
+ * A free run seeds itself from the current minute. That is right for practice
+ * and wrong for a lobby: two friends tapping Ride a minute apart were riding
+ * different courses and comparing scores that had nothing in common. The seat
+ * list looked like a race and the racing was never connected to it.
+ *
+ * The day's challenge seed is the same string for everyone, all day, so every
+ * seat gets the same corners in the same order.
+ */
+describe('everybody in a lobby rides one course', () => {
+  it('hands the lobby the day-stable seed, not a per-minute one', () => {
+    // The ride action passes an explicit seed rather than falling through to
+    // the minute-based one a solo practice run uses.
+    expect(app).toContain('onRide: () => void this.startRun(\'lagos\', null, {');
+    expect(app).toContain('seed: getBlitzDailyChallenge({ now: Date.now(), cityId: \'lagos\', seasonId: BLITZ_SEASON }).seed,');
+    expect(app).toContain('const seed = rankedTicket?.seed ?? options.seed ??');
+  });
+
+  it('keeps the same seed for two riders an hour apart on the same day', () => {
+    const morning = getBlitzDailyChallenge({ now: Date.parse('2026-09-17T06:00:00Z'), cityId: 'lagos', seasonId: 'cycle-2' });
+    const evening = getBlitzDailyChallenge({ now: Date.parse('2026-09-17T21:30:00Z'), cityId: 'lagos', seasonId: 'cycle-2' });
+    expect(morning.seed).toBe(evening.seed);
+    // And a different day is a different hill, which is the point of a daily.
+    const tomorrow = getBlitzDailyChallenge({ now: Date.parse('2026-09-18T06:00:00Z'), cityId: 'lagos', seasonId: 'cycle-2' });
+    expect(tomorrow.seed).not.toBe(morning.seed);
   });
 });
