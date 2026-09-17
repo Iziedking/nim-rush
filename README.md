@@ -64,9 +64,14 @@ failing.
 
 Each control costs something. Tuck adds about 16% to your speed and takes
 roughly 38% of your steering authority. Brake trades speed for grip. Drift
-spends a gearbox and buys a slide. Boost spends nitro. A rider who touches
-nothing coasts about 14% below the speed the course was built around, which is
-enough to finish and not enough to win.
+spends a gearbox and buys a slide. Boost spends nitro.
+
+Steering is not optional. A rider who holds the centre line and touches nothing
+else does not finish: they stall against the traffic at around 895 m of 1,900,
+whatever they do with the throttle. Pick a line through the obstacles and the
+same course comes in around 71 seconds of the 90 - about twenty seconds of
+margin, which is the room you have to spend on going faster rather than on
+getting down at all.
 
 Braking into a corner and tucking out of it is faster than holding one position
 through both. That is the skill the course is built to reward.

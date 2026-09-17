@@ -1630,3 +1630,17 @@ button + .blitz-quiet { margin-top: 11px; }
 }
 /* Leading is worth seeing without reading. */
 .blitz-place.is-leading { background: var(--rush-lime); }
+
+/*
+ * Hidden means hidden.
+ *
+ * `[hidden]` is a user-agent style, so any author rule that sets a display
+ * quietly beats it. That has now cost this build twice: an empty pool box on
+ * the home panel, and a stray CHANGE button floating beside an empty name
+ * field on a fresh install. Both were elements the code had correctly marked
+ * hidden and the stylesheet had un-hidden by accident.
+ *
+ * One rule ends the whole category. Anything that genuinely needs to paint
+ * while marked hidden can say so explicitly; nothing does.
+ */
+.blitz-ui [hidden] { display: none !important; }
