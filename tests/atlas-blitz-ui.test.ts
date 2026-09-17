@@ -18,7 +18,7 @@ describe('Beacon Blitz public arcade experience', () => {
   });
 
   it('launches Lagos from one dominant action and keeps the run HUD lean', () => {
-    expect(app).toContain('Ride now');
+    expect(app).toContain("Ride today's challenge");
     expect(app).toContain('Find your line. Ride the ridge. Prove your run.');
     expect(app).toContain('createRushLogo');
     /*
@@ -34,12 +34,12 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(onboarding).toContain('THE CHECKS');
     expect(app).toContain('renderOnboarding');
     expect(app).toContain('blitzOnboardingSeen');
-    // The landing says what it costs to try, before anything is asked for.
-    expect(app).toContain('No wallet needed to play');
-    expect(app).toContain('Verify identity / ride ranked');
+    // Nimiq is the way in: the landing asks for the signature first and says
+    // what it is for, because nothing is playable without it.
+    expect(app).toContain('Connect Nimiq wallet');
+    expect(app).toContain('Signs your identity. Never a payment.');
     expect(app).toContain('prepareRankedStart');
     expect(app).toContain('issueRankedTicket');
-    expect(app).toContain('wallet signs identity, not a payment');
     expect(app).toContain("this.setAudioScene(this.paused ? 'paused' : 'riding')");
     expect(app).not.toContain('this.audio.playTheme()');
     expect(app).toContain('setBikeSpeed');
@@ -193,7 +193,16 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain('riderLadder');
     expect(app).toContain('blitzRiderLevel');
     expect(app).toContain('blitzNextRiderLevel');
-    expect(app).toContain('Levels change free rides only. Every ranked run is ridden on the same equipment.');
+    /*
+     * The rule still has to be stated somewhere a rider can find it; what
+     * changed is where. Repeating it under the ladder after every single run
+     * was noise, so it lives in the rules document now - but it must not be
+     * allowed to quietly disappear, because a rider who believes their level
+     * buys them places on the board would be right to feel cheated.
+     */
+    const rules = readFileSync(new URL('../docs/how-nim-rush-works.md', import.meta.url), 'utf8');
+    expect(rules).toContain('Levels change free rides only.');
+    expect(rules).toContain('refused rather than ranked');
     // Career score is the sum of bests, so the ladder is climbed by riding
     // better rather than by riding more.
     expect(app).toContain('careerScore');
@@ -202,7 +211,7 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain('blitzLoadoutFor({ careerScore: this.careerScore(), ranked: Boolean(rankedTicket) })');
 
     expect(app).toContain('SUPPLIES TAKEN');
-    expect(app).toContain('Boost and drift only come off the road.');
+    expect(readFileSync(new URL('../docs/how-nim-rush-works.md', import.meta.url), 'utf8')).toContain('Boost and drift only come off the road.');
     expect(css).toContain('.blitz-supply-glyph-nitro');
     expect(css).toContain('.blitz-supply-glyph-gearbox');
   });
@@ -222,7 +231,19 @@ describe('Beacon Blitz public arcade experience', () => {
   it('uses an authored full-screen game identity instead of a generic card stack', () => {
     expect(app).toContain('createRushLogo');
     expect(app).toContain('createNimiqPoweredBy');
-    expect(brand).toContain('RIDE THE RIDGE');
+    /*
+     * The mark is drawn, and drawn as mass.
+     *
+     * It used to assert the subtitle, which the lockup no longer carries - the
+     * line lives in the masthead tagline and having it twice was repetition,
+     * not identity. What has to stay true is that the mark is authored shapes
+     * with a flat plate and an ink keyline, never an image file, and that the
+     * hard offset shadow is a real shape rather than a blur filter.
+     */
+    expect(brand).toContain('blitz-logo-plate');
+    expect(brand).toContain('blitz-logo-drop');
+    expect(brand).not.toMatch(/<img|.png|.jpg|.webp/);
+    expect(brand).not.toContain('filter:');
     expect(brand).toContain('createNimiqMark');
     expect(css).toContain('.blitz-rush-logo');
     expect(css).toContain('.blitz-powered');
@@ -308,7 +329,8 @@ describe('what the result screen says about the pool', () => {
   it('names the top-three split from the server, never a hardcoded one', () => {
     // The split is an open product decision. The client renders whatever the
     // server allocated with, so changing it stays a one-line server edit.
-    expect(app).toContain('table.splitBps.map(bpsLabel)');
+    expect(app).toContain('table.allocations');
+    expect(app).not.toMatch(/50\s*%\s*\/\s*30\s*%/);
     expect(app).not.toMatch(/50\s*\/\s*30\s*\/\s*20/);
   });
 
@@ -327,10 +349,11 @@ describe('what the result screen says about the pool', () => {
   });
 
   it('says first place is open rather than inventing a leader', () => {
-    expect(app).toContain('No rider has posted a verified run yet today');
+    expect(app).toContain('First place open.');
   });
 
   it('never calls an allocation paid before it is reconciled', () => {
-    expect(app).toContain('Nothing is paid until the day closes and the transfer is reconciled on chain');
+    expect(readFileSync(new URL('../docs/how-nim-rush-works.md', import.meta.url), 'utf8'))
+      .toContain('Nothing is paid until the day closes and the transfer is reconciled on');
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { withStateTransactions } from '../server/atlas/persistence';
 import {
   ATLAS_USAGE_MAX_EVENTS_PER_SESSION,
   createAtlasUsageState,
@@ -128,10 +129,10 @@ describe('atlas usage counting', () => {
 
   it('never stores the raw session id the client sent', async () => {
     const saved: Record<string, unknown> = {};
-    const stateStore = {
+    const stateStore = withStateTransactions({
       load: async <T>(_key: string, fallback: T) => fallback,
       save: async <T>(key: string, value: T) => { saved[key] = value; },
-    };
+    });
     const service = createAtlasUsageService({ stateStore, salt: 'pepper', now: () => MONDAY });
     await service.record({ name: 'session-start', session: 'atlas-session-abcdef-secret' });
     const serialised = JSON.stringify(saved);
@@ -153,10 +154,10 @@ describe('atlas usage counting', () => {
 
   it('hydrates a persisted count instead of overwriting it on restart', async () => {
     const store: Record<string, unknown> = {};
-    const stateStore = {
+    const stateStore = withStateTransactions({
       load: async <T>(key: string, fallback: T) => (key in store ? (store[key] as T) : fallback),
       save: async <T>(key: string, value: T) => { store[key] = value; },
-    };
+    });
     const first = createAtlasUsageService({ stateStore, now: () => MONDAY });
     await first.record({ name: 'session-start', session: 'atlas-session-one' });
     const second = createAtlasUsageService({ stateStore, now: () => MONDAY + DAY });

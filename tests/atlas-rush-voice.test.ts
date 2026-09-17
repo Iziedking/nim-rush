@@ -50,7 +50,7 @@ describe('the race voice', () => {
   it('speaks one line at a time and drops what it cannot say now', () => {
     const spoken: string[] = [];
     let clock = 0;
-    const voice = new BlitzVoice((text) => spoken.push(text), () => clock);
+    const voice = new BlitzVoice((callout) => spoken.push(callout.text), () => clock);
     expect(voice.offer({ id: 'a', text: 'Contact.', urgency: 1, holdMs: 2_000 })).toBe(true);
     clock = 500;
     expect(voice.offer({ id: 'b', text: 'Contract clear.', urgency: 1, holdMs: 2_000 })).toBe(false);
@@ -62,7 +62,7 @@ describe('the race voice', () => {
   it('never stutters the same line twice in a row', () => {
     const spoken: string[] = [];
     let clock = 0;
-    const voice = new BlitzVoice((text) => spoken.push(text), () => clock);
+    const voice = new BlitzVoice((callout) => spoken.push(callout.text), () => clock);
     voice.offer({ id: 'a', text: 'Contact.', urgency: 1, holdMs: 10 });
     clock = 5_000;
     expect(voice.offer({ id: 'a', text: 'Contact.', urgency: 1, holdMs: 10 })).toBe(false);
@@ -76,7 +76,7 @@ describe('the race voice', () => {
 
   it('forgets the last run when a new one starts', () => {
     const spoken: string[] = [];
-    const voice = new BlitzVoice((text) => spoken.push(text), () => 0);
+    const voice = new BlitzVoice((callout) => spoken.push(callout.text), () => 0);
     voice.offer({ id: 'a', text: 'Finish!', urgency: 1, holdMs: 9_000 });
     voice.reset();
     expect(voice.offer({ id: 'a', text: 'Finish!', urgency: 1, holdMs: 9_000 })).toBe(true);

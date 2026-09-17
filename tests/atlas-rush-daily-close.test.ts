@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { withStateTransactions } from '../server/atlas/persistence';
 
 import { BLITZ_DAY_MS, getBlitzDailyChallenge } from '../shared/atlas/blitz/daily';
 import { runBlitzDailyClose } from '../server/atlas/blitz-daily-close';
@@ -27,10 +28,10 @@ function ledger() {
     minConfirmations: 10,
     chain: { observe: async () => null },
     now: () => 1_000,
-    stateStore: {
+    stateStore: withStateTransactions({
       load: async <T>(key: string, fallback: T) => (key in store ? (store[key] as T) : fallback),
       save: async <T>(key: string, value: T) => { store[key] = value; },
-    },
+    }),
   });
 }
 

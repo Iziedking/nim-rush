@@ -44,15 +44,16 @@ export function blitzCallout(previous: BlitzRunState | null, next: BlitzRunState
 
   // Trouble first. These are the only lines allowed to interrupt a run's flow.
   if (next.collisions > previous.collisions) {
-    const line = next.collisions === 1 ? 'Contact.' : next.collisions >= 4 ? 'Keep it upright!' : 'That is two.';
-    say('contact', line, 100, 1_600);
+    if (next.collisions === 1) say('contact', 'Contact.', 100, 1_600);
+    else if (next.collisions >= 4) say('contact-many', 'Keep it upright!', 100, 1_600);
+    else say('contact-two', 'That is two.', 100, 1_600);
   }
   if (next.phase === 'timeout' && previous.phase !== 'timeout') say('timeout', 'Out of time.', 95, 4_000);
 
   // The finish, and what it was worth.
   if (next.phase === 'finished' && previous.phase !== 'finished') {
-    const clean = next.collisions === 0;
-    say('finish', clean ? 'Finish! Not a mark on it.' : 'Finish!', 90, 4_000);
+    if (next.collisions === 0) say('finish-clean', 'Finish! Not a mark on it.', 90, 4_000);
+    else say('finish', 'Finish!', 90, 4_000);
   }
 
   /*
@@ -70,7 +71,8 @@ export function blitzCallout(previous: BlitzRunState | null, next: BlitzRunState
   // Work done well.
   const done = (state: BlitzRunState) => state.missions.filter((mission) => mission.status === 'complete').length;
   if (done(next) > done(previous)) {
-    say('contract', done(next) === 3 ? 'All three contracts. Clean.' : 'Contract clear.', 70);
+    if (done(next) === 3) say('contract-all', 'All three contracts. Clean.', 70);
+    else say('contract', 'Contract clear.', 70);
   }
   if (next.nearMisses >= previous.nearMisses + 2) say('threaded', 'Threaded it!', 40, 3_000);
   if (next.lastEvent?.type === 'landing' && previous.lastEvent?.type !== 'landing' && next.lastEvent.intensity < 0.45) {
@@ -92,7 +94,7 @@ export class BlitzVoice {
   private silentUntil = 0;
   private lastId: string | null = null;
 
-  constructor(private readonly speak: (text: string) => void, private readonly now: () => number = () => Date.now()) {}
+  constructor(private readonly speak: (callout: BlitzCallout) => void, private readonly now: () => number = () => Date.now()) {}
 
   offer(callout: BlitzCallout | null): boolean {
     if (!callout) return false;
@@ -101,7 +103,7 @@ export class BlitzVoice {
     if (at < this.silentUntil || callout.id === this.lastId) return false;
     this.silentUntil = at + callout.holdMs;
     this.lastId = callout.id;
-    try { this.speak(callout.text); } catch { /* Voice is optional and never blocks play. */ }
+    try { this.speak(callout); } catch { /* Voice is optional and never blocks play. */ }
     return true;
   }
 

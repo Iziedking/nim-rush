@@ -17,6 +17,11 @@ import { BlitzFrameGovernor } from './frame-governor';
 import { BLITZ_ONBOARDING_BEATS, blitzOnboardingSeen, markBlitzOnboardingSeen } from './blitz-onboarding';
 import { createBlitzPendingRunStore, type BlitzPendingRunStore, type BlitzPendingSubmission } from './pending-run';
 import { BlitzVoice, blitzCallout } from './blitz-callouts';
+import { createBlitzVoiceBank } from './blitz-voice-bank';
+import { createBlitzStartGate } from './blitz-start-gate';
+import { createBlitzLobbyScreen } from './blitz-lobby-screen';
+import { createBlitzNimiqRequired } from './blitz-nimiq-required';
+import { blitzRivalGaps, type BlitzRivalPath } from '../../../shared/atlas/blitz/rivals';
 import { createNimiqPoweredBy, createRushLogo } from './blitz-brand';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
@@ -50,7 +55,17 @@ export class BlitzApp {
    * queueing it, because a callout that arrives late describes a part of the
    * hill the rider has already left.
    */
-  private readonly voice = new BlitzVoice((text) => this.audio.narrate(text));
+  private readonly voiceBank = createBlitzVoiceBank();
+  /*
+   * A recorded line if one was rendered, the browser's speech engine if not.
+   * The fallback exists so a clone of this repository without the audio step
+   * still has a race voice, not so anybody has to settle for one.
+   */
+  private readonly voice = new BlitzVoice((callout) => {
+    const level = document.hidden || this.audioMuted ? 0 : 0.85;
+    if (this.voiceBank.play(callout.id, level)) return;
+    if (level > 0) this.audio.narrate(callout.text);
+  });
   private scoreNode: HTMLElement | null = null;
   private timerNode: HTMLElement | null = null;
   private speedNode: HTMLElement | null = null;
@@ -66,6 +81,22 @@ export class BlitzApp {
   private pauseButton: HTMLButtonElement | null = null;
   private paused = false;
   private rankedTicket: BlitzTicket | null = null;
+  /*
+   * The pack this run is being ridden against.
+   *
+   * Held for the whole run and never changed mid-run: a solid rival is part of
+   * the physics, so swapping one out halfway would make the trace unverifiable.
+   */
+  private rivals: readonly BlitzRivalPath[] = [];
+  /*
+   * The wallet this device has connected.
+   *
+   * Nimiq is the identity every run is signed with, so nothing is playable
+   * without one. Read from the address a previous bind already persisted, so
+   * a returning rider is not asked to sign again just to see the menu.
+   */
+  private connectedWallet: string | null = null;
+  private gapHost: HTMLElement | null = null;
   private rankedInterrupted = false;
 
   constructor(private readonly ui: HTMLElement, canvas: HTMLCanvasElement) {
@@ -77,11 +108,32 @@ export class BlitzApp {
   async boot(): Promise<void> {
     try {
       this.ui.className = 'blitz-ui';
+      this.connectedWallet = this.rememberedWallet();
+      /*
+       * The door goes up before anything else, so the first frame a player
+       * sees is a picture rather than an empty canvas. The world then loads
+       * behind it, and the press that opens the door is also the gesture that
+       * lets the browser start audio.
+       */
+      const gate = createBlitzStartGate({
+        onStart: () => {
+          this.audio.unlock();
+          this.voiceBank.prime();
+          gate.dismiss();
+        },
+      });
+      this.ui.append(gate.element);
       await this.renderer.initialize(this.reducedMotion);
       await this.renderer.loadCity('lagos');
       this.resize();
       this.renderer.renderPreview('lagos');
-      this.renderIntro();
+      const invited = this.invitedLobbyId();
+      if (invited && this.connectedWallet) void this.renderLobby(invited);
+      else this.renderIntro();
+      // renderIntro replaces the UI's children, so the gate is put back on top
+      // of the screen it was hiding and only then told it may be opened.
+      this.ui.append(gate.element);
+      gate.ready();
       // Launch can play on hosts that permit it. Suspended contexts retry on
       // gestures, but the current scene alone decides which loops may play.
       this.audioGesture();
@@ -196,7 +248,6 @@ export class BlitzApp {
     const title = node('h1', 'blitz-title', 'RIDGE\nRUN');
     const line = node('p', 'blitz-tagline', 'Find your line. Ride the ridge. Prove your run.');
     const daily = getBlitzDailyChallenge({ now: Date.now(), cityId: 'lagos', seasonId: BLITZ_SEASON });
-    const dailyMeta = node('p', 'blitz-daily-meta', `TODAY'S VERIFIED RUN / ${daily.date} / RESET ${formatUtcTime(daily.expiresAt)}`);
     /*
      * The three-verb brief that used to sit here is gone. It taught check,
      * approve and confirm on the screen a player is trying to leave, next to a
@@ -205,40 +256,96 @@ export class BlitzApp {
      * landing page's job is to be understood in a glance and then get out of
      * the way.
      */
-    const stats = node('div', 'blitz-intro-stats');
-    stats.append(stat('1.9 KM', 'TRAIL'), stat('90 SEC', 'LIMIT'), stat('110 M', 'DESCENT'));
     const difficultyChooser = node('fieldset', 'blitz-difficulty');
-    difficultyChooser.append(node('legend', '', 'RIDE RULES'));
-    const rookie = button('Rookie / learn the line', `blitz-difficulty-option${this.difficulty === 'rookie' ? ' is-selected' : ''}`, () => { this.difficulty = 'rookie'; this.renderIntro(); });
-    const pro = button('Pro / tighter gates', `blitz-difficulty-option${this.difficulty === 'pro' ? ' is-selected' : ''}`, () => { this.difficulty = 'pro'; this.renderIntro(); });
+    difficultyChooser.append(node('legend', '', 'DIFFICULTY'));
+    const rookie = button('Rookie', `blitz-difficulty-option${this.difficulty === 'rookie' ? ' is-selected' : ''}`, () => { this.difficulty = 'rookie'; this.renderIntro(); });
+    const pro = button('Pro', `blitz-difficulty-option${this.difficulty === 'pro' ? ' is-selected' : ''}`, () => { this.difficulty = 'pro'; this.renderIntro(); });
     rookie.setAttribute('aria-pressed', String(this.difficulty === 'rookie'));
     pro.setAttribute('aria-pressed', String(this.difficulty === 'pro'));
     difficultyChooser.append(rookie, pro);
-    const start = button('Ride now', 'blitz-start', () => void this.startRun('lagos'));
-    const ranked = node('details', 'blitz-ranked-launch');
-    ranked.append(node('summary', 'blitz-ranked-label', 'WALLET VERIFIED / LEADERBOARD'));
-    const username = node('input', 'blitz-username');
-    username.type = 'text';
-    username.inputMode = 'text';
-    username.autocomplete = 'username';
-    username.maxLength = 18;
-    username.placeholder = 'Rider name';
-    username.setAttribute('aria-label', 'Ranked rider name');
-    try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
-    const rankedStatus = node('p', 'blitz-rank-status', 'Connect once. Your wallet signs identity, not a payment.');
-    const rankedButton = button('Verify identity / ride ranked', 'blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
-    ranked.append(username, rankedButton, rankedStatus);
-    /*
-     * Discovery first, stated plainly. A player should know before they tap
-     * that nothing is being asked of them - the wallet belongs to the ranked
-     * path and nowhere else.
-     */
-    const note = node('p', 'blitz-quiet', 'No wallet needed to play. Ranked runs are replay-verified.');
+
     const masthead = node('section', 'blitz-intro-masthead');
-    masthead.append(logo, edition, title, line, dailyMeta);
+    masthead.append(logo, edition, title, line);
+
+    /*
+     * One line of trail data, not a strip of boxes.
+     *
+     * The distance, the limit and the descent are facts a rider glances at
+     * once; giving each of them a bordered card made three objects out of one
+     * sentence and turned the top of the panel into furniture.
+     */
+    const meta = node('p', 'blitz-trail-meta', `DROP 01 · LAGOS · 1.9 KM · 90 SEC · RESETS\u00a0${formatUtcTime(daily.expiresAt)}`);
+
     const command = node('section', 'blitz-intro-command');
-    command.setAttribute('aria-label', 'Daily descent launch');
-    command.append(stats, difficultyChooser, start, note, ranked);
+    command.setAttribute('aria-label', 'Start a run');
+    command.append(meta);
+
+    if (!this.connectedWallet) {
+      /*
+       * Nimiq is the way in.
+       *
+       * The wallet is the identity every run is signed with, so there is no
+       * screen behind this one - and the panel is one action because a rider
+       * who has not connected has exactly one thing to do.
+       */
+      /*
+       * An invite is the reason most people will ever see this screen, so it
+       * says so. A stranger who followed a friend's link and is met by a
+       * generic connect panel has no idea a seat is being held for them, and
+       * the one thing that would make them finish is the thing we left out.
+       */
+      const invited = this.invitedLobbyId();
+      if (invited) command.append(node('span', 'blitz-mode-label', 'YOU WERE INVITED'));
+      const connect = button(invited ? 'Connect and take your seat' : 'Connect Nimiq wallet', 'blitz-start blitz-connect', () => void this.connectWallet(connect, connectNote));
+      const connectNote = node('p', 'blitz-quiet', invited
+        ? 'A seat is being held for you. Signing proves who you are; it never moves money.'
+        : 'Signs your identity. Never a payment.');
+      command.append(connect, connectNote);
+    } else {
+      const username = node('input', 'blitz-username');
+      username.type = 'text';
+      username.inputMode = 'text';
+      username.autocomplete = 'username';
+      username.maxLength = 18;
+      username.placeholder = 'Rider name';
+      username.setAttribute('aria-label', 'Rider name');
+      try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
+
+      /*
+       * The pool, as a number and a clock. What the split is and when it
+       * settles are in the rules, because a rider deciding whether to ride
+       * needs the size of the prize, not its arithmetic.
+       */
+      const pool = node('div', 'blitz-pool');
+      pool.hidden = true;
+      void this.presentDayPool(pool);
+
+      const rankedStatus = node('p', 'blitz-rank-status', '');
+      const rankedButton = button("Ride today's challenge", 'blitz-start blitz-ranked-button', () => void this.prepareRankedStart('lagos', username, rankedButton, rankedStatus));
+      const ranked = node('section', 'blitz-ranked-launch');
+      ranked.append(node('span', 'blitz-mode-label', 'DAILY CHALLENGE'), pool, node('span', 'blitz-field-label', 'RIDER NAME'), username, rankedButton, rankedStatus);
+
+      // Practice. Deliberately the quieter of the two: it is the one that does
+      // not count, and the panel should lead with the one that does.
+      const free = node('section', 'blitz-mode-free');
+      free.append(difficultyChooser, button('Free run', 'blitz-again blitz-free-run', () => void this.startRun('lagos')));
+      /*
+       * A private race with friends. Seven seats, first come first served, and
+       * the link is the invitation - so the button that makes one is the same
+       * button that puts the host in seat one.
+       */
+      const lobbyStatus = node('p', 'blitz-rank-status', '');
+      const lobbyButton = button('Race friends', 'blitz-again blitz-open-lobby', () => void this.openLobby(lobbyButton, lobbyStatus));
+      free.append(lobbyButton, lobbyStatus);
+
+      command.append(ranked, free);
+    }
+
+    const rules = node('a', 'blitz-rules-link', 'Rules');
+    rules.href = '/docs/how-nim-rush-works.md';
+    rules.target = '_blank';
+    rules.rel = 'noreferrer';
+    command.append(rules);
     const utility = node('nav', 'blitz-intro-utility');
     utility.setAttribute('aria-label', 'Game utilities');
     utility.append(button('How to ride', 'blitz-help', () => this.renderOnboarding(blitzOnboardingSeen(safeLocalStorage()) ? 1 : 0)), this.soundControl(), createNimiqPoweredBy());
@@ -272,17 +379,26 @@ export class BlitzApp {
      * verification - but the client should not be the thing that tries.
      */
     const loadout = blitzLoadoutFor({ careerScore: this.careerScore(), ranked: Boolean(rankedTicket) });
-    this.state = createBlitzRun({ cityId, seed, difficulty: rankedTicket ? 'rookie' : this.difficulty, loadout });
+    /*
+     * Ranked rides the pack the server pinned to the ticket, so verification
+     * rides the same one. A free run has no pack until the rival service is
+     * wired, and an empty pack is simply a solo descent.
+     */
+    this.rivals = rankedTicket?.rivals ?? [];
+    this.state = createBlitzRun({ cityId, seed, difficulty: rankedTicket ? 'rookie' : this.difficulty, loadout, rivals: this.rivals });
     this.previousRenderState = null;
     this.frames = [];
     this.lastPhysicsAudioTick = -1;
     this.paused = false;
     this.input.reset();
     this.voice.reset();
+    // Decode the lines before the first corner, not during it.
+    this.voiceBank.prime();
     // The scene has to be built for the ruleset this run is judged under, or
     // a rider swerves around obstacles that are not there and rides through
     // ones that are.
     await this.renderer.loadCity(cityId, this.state.difficulty);
+    this.renderer.setRivals(this.rivals);
     this.setAudioScene(this.paused ? 'paused' : 'riding');
     this.renderRun();
     this.previousTimestamp = null;
@@ -339,6 +455,17 @@ export class BlitzApp {
     gearWrap.append(driftTrack);
     boost.append(gearWrap);
 
+    /*
+     * Who is actually being raced.
+     *
+     * A time on its own says nothing - a rider needs to know they are four
+     * seconds off the name above them. Hidden entirely when riding alone,
+     * because an empty list is worse than no list.
+     */
+    this.gapHost = node('section', 'blitz-gaps');
+    this.gapHost.setAttribute('aria-label', 'Gaps to other riders');
+    this.gapHost.hidden = this.rivals.length === 0;
+
     this.missionHost = node('section', 'blitz-mission-hud');
     this.missionHost.setAttribute('aria-label', 'Physical mission contracts');
     this.renderMissionHud(this.state!);
@@ -393,7 +520,7 @@ export class BlitzApp {
      */
     this.speedVeil = node('div', 'blitz-speed-veil');
     this.speedVeil.setAttribute('aria-hidden', 'true');
-    screen.append(top, speedBox, progress, boost, this.missionHost, this.feedbackNode, this.speedVeil, this.countdownNode, this.pauseOverlay, controls);
+    screen.append(top, speedBox, progress, boost, this.gapHost, this.missionHost, this.feedbackNode, this.speedVeil, this.countdownNode, this.pauseOverlay, controls);
     this.ui.append(screen);
   }
 
@@ -412,7 +539,7 @@ export class BlitzApp {
       this.frames.push(frame);
       const wasBoostActive = next.boostActive;
       this.previousRenderState = next;
-      next = stepBlitzRun(next, sampled);
+      next = stepBlitzRun(next, sampled, this.rivals);
       if (!wasBoostActive && next.boostActive) this.audio.playWorldCue('bike-boost');
       if (next.lastEvent && next.lastEvent.tick !== this.lastPhysicsAudioTick && next.lastEvent.type !== 'boost-start' && next.lastEvent.type !== 'boost-end') {
         this.audio.playPhysicsCue(next.lastEvent);
@@ -466,6 +593,7 @@ export class BlitzApp {
       this.countdownNode.textContent = state.phase === 'countdown' ? String(Math.max(1, Math.ceil(state.countdownTicks / BLITZ_TICK_RATE))) : 'GO';
       this.countdownNode.classList.toggle('is-live', state.phase === 'running');
     }
+    this.updateGapHud(state);
     this.updateMissionHud(state);
   }
 
@@ -587,7 +715,6 @@ export class BlitzApp {
       supplyStat('gearbox', `${state.gearboxTaken}/${total('gearbox')}`, 'GEARBOX'),
     );
     supplies.append(supplyRow);
-    supplies.append(node('p', 'blitz-pool-note blitz-quiet', 'Boost and drift only come off the road. The line you take is the fuel you finish with.'));
     ledger.append(supplies, this.riderLadder());
     screen.append(ledger);
     const resultActions = node('nav', 'blitz-result-actions');
@@ -707,6 +834,131 @@ export class BlitzApp {
     }
   }
 
+  /**
+   * Connect once, then ride.
+   *
+   * Separated from the ranked ticket because a rider should be able to get
+   * into the game - and into practice - without also committing to a scored
+   * run. The signature proves who they are and moves nothing.
+   */
+  /**
+   * The lobby this link points at, if any.
+   *
+   * Read from the address rather than from state, because an invite arrives
+   * cold: the rider following it has no session, may never have opened the
+   * game, and the link is the only thing that knows where they are going.
+   */
+  private invitedLobbyId(): string | null {
+    try {
+      const id = new URLSearchParams(window.location.search).get('lobby');
+      // Same shape the server accepts. A malformed id is somebody's mistyped
+      // message, not a lobby, and following it would only produce a 400.
+      return id && /^[A-Za-z0-9_-]{16,64}$/.test(id) ? id : null;
+    } catch { return null; }
+  }
+
+  /**
+   * Show a lobby: the field, the empty seats, and the way in.
+   *
+   * Reloaded from the server on every visit rather than cached, because the
+   * whole point of the screen is who has turned up since last time.
+   */
+  private async renderLobby(lobbyId: string): Promise<void> {
+    this.setAudioScene('menu');
+    this.input.clearBindings();
+    const view = await this.api.getBlitzLobby(lobbyId);
+    if (!view) {
+      // A stale or mistyped invite is an ordinary thing to follow. Say so and
+      // put the rider back on the front door rather than leaving a blank page.
+      this.renderIntro();
+      return;
+    }
+    this.ui.replaceChildren();
+    const screen = createBlitzLobbyScreen({
+      view,
+      you: this.connectedWallet,
+      onJoin: () => void this.joinLobby(lobbyId),
+      onRide: () => void this.startRun('lagos'),
+      onLeave: () => { this.clearInvite(); this.renderIntro(); },
+    });
+    this.ui.append(screen.element);
+  }
+
+  /** Take a seat, then show the lobby again with yourself in it. */
+  private async joinLobby(lobbyId: string): Promise<void> {
+    if (!this.connectedWallet) { this.renderIntro(); return; }
+    const credential = await getOrCreateCredential();
+    await this.api.claimBlitzSeat(lobbyId, { actorId: credential.playerId, walletAddress: this.connectedWallet });
+    // Re-read rather than trusting the claim's own copy: somebody else may
+    // have taken a seat in the same second, and the field should show it.
+    await this.renderLobby(lobbyId);
+  }
+
+  /** Open a lobby and land the host in it, seated. */
+  private async openLobby(action: HTMLButtonElement, status: HTMLElement): Promise<void> {
+    if (!this.connectedWallet) return;
+    action.disabled = true;
+    status.textContent = 'Opening a lobby.';
+    try {
+      const credential = await getOrCreateCredential();
+      const opened = await this.api.openBlitzLobby({ actorId: credential.playerId, walletAddress: this.connectedWallet, capacity: 7 });
+      if (!opened.ok) throw new Error(opened.error);
+      // The host takes seat one by opening it. A lobby whose creator has to
+      // remember to join is a lobby that starts with an empty first seat.
+      await this.joinLobby(opened.value.id);
+    } catch (error) {
+      action.disabled = false;
+      status.textContent = error instanceof Error ? error.message : 'A lobby could not be opened.';
+    }
+  }
+
+  /** Drop the invite from the address so a reload does not re-enter it. */
+  /** Point somebody at Nimiq Pay, carrying their invite with them. */
+  private renderNimiqRequired(): void {
+    this.input.clearBindings();
+    this.ui.replaceChildren();
+    this.ui.append(createBlitzNimiqRequired({
+      lobbyId: this.invitedLobbyId(),
+      onBack: () => this.renderIntro(),
+    }));
+  }
+
+  private clearInvite(): void {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('lobby');
+      window.history.replaceState({}, '', url.toString());
+    } catch { /* Without history the invite simply stays in the address. */ }
+  }
+
+  private async connectWallet(action: HTMLButtonElement, status: HTMLElement): Promise<void> {
+    action.disabled = true;
+    status.textContent = 'Opening Nimiq for an identity signature.';
+    try {
+      const initialized = await this.wallet.initialize();
+      if (!initialized.ok) {
+        /*
+         * Not an error to report in a status line. A rider who followed an
+         * invite in their chat app's browser has done nothing wrong and needs
+         * the app, not a message saying the wallet is unavailable.
+         */
+        if (initialized.reason !== 'timeout') { this.renderNimiqRequired(); return; }
+        throw new Error('Nimiq took too long. Try again.');
+      }
+      const credential = await getOrCreateCredential();
+      const binding = await this.walletBinding.bind({ actorId: credential.playerId, seasonId: BLITZ_SEASON, network: 'testalbatross' });
+      if (!binding.ok) throw new Error(binding.error);
+      try { localStorage.setItem('nim-atlas:blitz:wallet', binding.value.address); } catch { /* Storage is optional. */ }
+      this.connectedWallet = binding.value.address;
+      const invited = this.invitedLobbyId();
+      if (invited) { void this.renderLobby(invited); return; }
+      this.renderIntro();
+    } catch (error) {
+      action.disabled = false;
+      status.textContent = error instanceof Error ? error.message : 'Nimiq could not be reached.';
+    }
+  }
+
   private async issueRankedTicket(cityId: BlitzCityId, username: string): Promise<{ value: BlitzTicket }> {
     const initialized = await this.wallet.initialize();
     if (!initialized.ok) throw new Error(initialized.reason === 'timeout' ? 'Nimiq Wallet took too long. Try again.' : 'Nimiq Wallet is unavailable in this browser.');
@@ -754,24 +1006,28 @@ export class BlitzApp {
       }
 
       host.append(node('strong', 'blitz-pool-value', formatNim(table.poolLuna)));
-      host.append(node('p', 'blitz-pool-note', `Paid to the top three at the close of the day: ${table.splitBps.map(bpsLabel).join(' / ')}.`));
-
+      /*
+       * A number and a standing, and nothing else.
+       *
+       * This panel used to carry the split, a sentence about first place being
+       * open, a count of unclaimed places and a line about chain settlement -
+       * four explanations stacked under one figure. A rider deciding whether
+       * to ride needs the size of the prize and who is on it; the arithmetic
+       * and the settlement rule are in the rules document, where somebody who
+       * wants them can read them once instead of every day.
+       */
       if (table.allocations.length === 0) {
-        host.append(node('p', 'blitz-pool-note', 'No rider has posted a verified run yet today. First place is open.'));
+        host.append(node('p', 'blitz-pool-note', 'First place open.'));
       } else {
         const standings = node('ol', 'blitz-pool-standings');
-        for (const entry of table.allocations) {
+        for (const entry of table.allocations.slice(0, 3)) {
           const row = node('li', 'blitz-pool-place');
           row.append(node('b', '', `#${entry.rank}`), node('span', '', shortWallet(entry.walletAddress)), node('strong', '', formatNim(entry.luna)));
           standings.append(row);
         }
         host.append(standings);
-        if (table.allocations.length < table.splitBps.length) {
-          host.append(node('p', 'blitz-pool-note blitz-quiet', `${table.splitBps.length - table.allocations.length} of the three places are still open.`));
-        }
       }
 
-      host.append(node('p', 'blitz-pool-note blitz-quiet', 'Nothing is paid until the day closes and the transfer is reconciled on chain.'));
       host.hidden = false;
     } catch {
       // Leave it hidden. The run still counted, and the board is still true.
@@ -899,6 +1155,47 @@ export class BlitzApp {
    * every frame, and replacing five nodes thirty times a second to show the
    * same five nodes is how a HUD ends up costing more than the city does.
    */
+  /*
+   * The three nearest riders, nearest first.
+   *
+   * Rebuilt only when the set of names changes; the numbers are written in
+   * place. This runs every frame, and replacing three rows thirty times a
+   * second to show the same three names is how a HUD starts costing more than
+   * the city does.
+   */
+  private updateGapHud(state: BlitzRunState): void {
+    const host = this.gapHost;
+    if (!host || this.rivals.length === 0) return;
+    const gaps = blitzRivalGaps({
+      rivals: this.rivals,
+      tick: state.tick,
+      distanceMeters: state.distanceMeters,
+      speedMps: state.speedMps,
+    }).slice(0, 3);
+    if (gaps.length === 0) { host.hidden = true; return; }
+    host.hidden = false;
+    const signature = gaps.map((gap) => gap.runId).join('|');
+    if (host.dataset.signature !== signature) {
+      host.dataset.signature = signature;
+      host.replaceChildren();
+      for (const gap of gaps) {
+        const row = node('div', 'blitz-gap');
+        row.dataset.runId = gap.runId;
+        row.append(node('span', 'blitz-gap-name', gap.username), node('strong', 'blitz-gap-time', ''));
+        host.append(row);
+      }
+    }
+    [...host.children].forEach((row, index) => {
+      const gap = gaps[index];
+      if (!gap) return;
+      const time = row.querySelector('.blitz-gap-time');
+      // Ahead reads as a target to chase, behind as a lead to defend.
+      const ahead = gap.metres > 0;
+      row.classList.toggle('is-ahead', ahead);
+      if (time) time.textContent = gap.seconds === null ? '--' : `${ahead ? '+' : '-'}${Math.abs(gap.seconds).toFixed(1)}`;
+    });
+  }
+
   private updateSupplyHud(state: BlitzRunState): void {
     if (this.gearHost && this.gearHost.childElementCount !== state.driftCapacity) {
       this.gearHost.replaceChildren();
@@ -947,7 +1244,6 @@ export class BlitzApp {
     }
     // Said plainly, because a rider who thinks their level is worth places on
     // the board would be right to feel cheated when it is not.
-    host.append(node('p', 'blitz-pool-note blitz-quiet', 'Levels change free rides only. Every ranked run is ridden on the same equipment.'));
     return host;
   }
 
@@ -1092,8 +1388,18 @@ function button(label: string, className: string, action: () => void): HTMLButto
   return element;
 }
 
+/*
+ * One line of the score.
+ *
+ * A run that earns nothing in four of six categories used to print four large
+ * +0s at the same weight as the points actually scored, which buries the one
+ * number a rider came to read. A zero is still shown - it is information, and
+ * hiding it would make the ledger look incomplete - but it is dimmed, so the
+ * eye lands on what the run was worth.
+ */
 function stat(value: string, label: string): HTMLElement {
   const item = node('div', 'blitz-stat');
+  if (/^[+-]?0$/.test(value.replace(/,/g, ''))) item.dataset.empty = 'true';
   item.append(node('strong', '', value), node('span', '', label));
   return item;
 }
@@ -1145,18 +1451,8 @@ const REWARD_STATE_LABEL: Readonly<Record<'owed' | 'sending' | 'paid' | 'attenti
  * period rather than guessing at a prettier lie.
  */
 function rewardDayLabel(period: string): string {
-  const match = /(d{4}-d{2}-d{2})$/.exec(period);
+  const match = /(\d{4}-\d{2}-\d{2})$/.exec(period);
   return match ? match[1]! : period;
-}
-
-/**
- * Basis points as a percentage a rider can read.
- *
- * The wire format is basis points because the payout arithmetic has to stay in
- * integers; nobody wants to read "5000 bps" on a result screen.
- */
-function bpsLabel(bps: number): string {
-  return `${(bps / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
 }
 
 function shortWallet(address: string): string {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { withStateTransactions } from '../server/atlas/persistence';
 import { createAtlasDailyService, type AtlasDailyPaymentExpectation } from '../server/atlas/daily';
 import { ATLAS_DAILY_CHALLENGES } from '../shared/atlas/daily';
 
@@ -123,10 +124,10 @@ describe('the daily run', () => {
      */
     it('remembers who already qualified today', async () => {
       const store: Record<string, unknown> = {};
-      const stateStore = {
+      const stateStore = withStateTransactions({
         load: async <T>(key: string, fallback: T) => (key in store ? (store[key] as T) : fallback),
         save: async <T>(key: string, value: T) => { store[key] = value; },
-      };
+      });
       const first = service({ stateStore });
       await first.submit(submission());
       expect((await first.standing()).eligibleCount).toBe(1);
@@ -313,10 +314,10 @@ describe('a run the server verified itself', () => {
 
   it('survives a restart, like every other way of qualifying', async () => {
     const store: Record<string, unknown> = {};
-    const stateStore = {
+    const stateStore = withStateTransactions({
       load: async <T>(key: string, fallback: T) => (key in store ? (store[key] as T) : fallback),
       save: async <T>(key: string, value: T) => { store[key] = value; },
-    };
+    });
     await service({ stateStore }).qualifyVerifiedRun(rider);
     const afterRestart = service({ stateStore });
     expect((await afterRestart.standing()).eligibleCount).toBe(1);
