@@ -135,6 +135,8 @@ export function verifyAnchor(input: {
    * actually carried, so setting it correctly is one refusal away.
    */
   networkId: number;
+  /** The exact data this run should carry, when the caller owns the format. */
+  expectedData?: string;
 }): AnchorResult {
   let tx: Transaction;
   try {
@@ -167,7 +169,13 @@ export function verifyAnchor(input: {
     return { ok: false, reason: 'That transaction was not sent to the sFace anchor.' };
   }
 
-  const expected = anchorData(input.claim);
+  /*
+   * NIM RUSH writes its own short form, because a basic transaction carries 64
+   * bytes and a blitz challenge id alone is 46 of them. Passing the exact
+   * string keeps that decision with the caller that owns the format, and the
+   * legacy board keeps building its own from the claim exactly as before.
+   */
+  const expected = input.expectedData ?? anchorData(input.claim);
   const carried = new TextDecoder().decode(tx.data);
   if (carried !== expected) {
     // The one that matters most: without it a single cheap transaction could be
