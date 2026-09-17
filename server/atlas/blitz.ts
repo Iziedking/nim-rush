@@ -58,6 +58,17 @@ export interface AtlasBlitzService {
    */
   prizeTable(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzPrizeTable>;
   retryPendingQualifications(): Promise<BlitzQualificationRetryResult>;
+  /** One verified run, by id, or null. Read-only. */
+  findRun(runId: string): Promise<BlitzLeaderboardRow | null>;
+  /**
+   * Attach the transaction that put this run on chain.
+   *
+   * Takes a hash the caller has already derived from transaction bytes it
+   * verified. It never takes one from a client, because a hash is a string and
+   * any string would do - the board would be publishing claims dressed as
+   * receipts.
+   */
+  recordAnchor(runId: string, hash: string): Promise<BlitzLeaderboardRow>;
   serialise(): AtlasBlitzSnapshot;
   restore(raw: unknown): void;
 }
@@ -283,6 +294,28 @@ export function createAtlasBlitzService(options: {
 
     async retryPendingQualifications() {
       return drainQualifications();
+    },
+
+    async findRun(runId) {
+      return enqueue(async () => {
+        const held = runs.get(runId);
+        return held ? { ...structuredClone(held.row), rank: 0 } : null;
+      });
+    },
+
+    async recordAnchor(runId, hash) {
+      return enqueue(async () => {
+        const held = runs.get(runId);
+        if (!held) throw new AtlasBlitzError('invalid', 'That run is not on the board.');
+        // One anchor per run. A second transaction for the same result is a
+        // rider paying twice for a record they already have, and replacing the
+        // stored hash would quietly rewrite what the board already published.
+        if (held.row.anchorHash) return { ...structuredClone(held.row), rank: 0 };
+        const row = { ...held.row, anchorHash: hash };
+        runs.set(runId, { ...held, row });
+        await persist();
+        return { ...structuredClone(row), rank: 0 };
+      });
     },
 
     async leaderboard(seasonId, cityId, challengeId) {

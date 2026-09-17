@@ -20,6 +20,9 @@ import { BlitzVoice, blitzCallout } from './blitz-callouts';
 import { createBlitzVoiceBank } from './blitz-voice-bank';
 import { createBlitzStartGate } from './blitz-start-gate';
 import { BLITZ_MINIMUM_FIELD } from '../../../shared/atlas/blitz/prize';
+import { anchorAddress, anchorRun } from '../../nimiq/anchor';
+import { blitzAnchorData } from '../../../shared/atlas/blitz/anchor';
+import type { BlitzLeaderboardRow } from '../../../shared/atlas/blitz/competition';
 import { createBlitzLobbyScreen } from './blitz-lobby-screen';
 import { createBlitzNimiqRequired } from './blitz-nimiq-required';
 import { blitzFieldPosition, blitzRivalGaps, type BlitzRivalPath } from '../../../shared/atlas/blitz/rivals';
@@ -1299,6 +1302,7 @@ export class BlitzApp {
       this.pendingRunStore.clear();
       host.querySelector('.blitz-retry-submit')?.remove();
       status.textContent = `VERIFIED. RANK ${result.value.row.rank} FOR ${ticket.username}.`;
+      this.offerAnchor(host, result.value.row);
     } catch (error) {
       status.textContent = error instanceof Error ? `NOT VERIFIED. ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
       host.querySelector('.blitz-retry-submit')?.remove();
@@ -1309,6 +1313,61 @@ export class BlitzApp {
       }));
     }
     await this.loadLeaderboard(pending.ticket.cityId, host, pending.ticket.challengeId);
+  }
+
+
+  /*
+   * The offer to make a run permanent.
+   *
+   * Only ever shown on a run the server has already verified, because there is
+   * nothing worth writing onto a chain about a result nobody checked. It is a
+   * real transaction on mainnet costing a real fee, so it is a rider's choice
+   * and never automatic, and the copy says what it buys rather than what it
+   * costs: the board can be switched off, an explorer entry cannot.
+   */
+  private offerAnchor(host: HTMLElement, row: BlitzLeaderboardRow): void {
+    host.querySelector('.blitz-anchor')?.remove();
+    host.querySelector('.blitz-anchor-note')?.remove();
+    if (row.anchorHash) { host.append(this.anchorReceipt(row.anchorHash)); return; }
+    if (!anchorAddress()) return;
+
+    const note = node('p', 'blitz-anchor-note', '');
+    const action = button('Write this run onto Nimiq', 'blitz-again blitz-anchor', () => {
+      action.disabled = true;
+      note.textContent = 'OPENING NIMIQ PAY. THIS SENDS A TRANSACTION.';
+      void (async () => {
+        const sent = await anchorRun(blitzAnchorData({
+          challengeDate: row.challengeDate, cityId: row.cityId, score: row.score, traceHash: row.traceHash,
+        }));
+        if (!sent.ok) { note.textContent = sent.reason.toUpperCase(); action.disabled = false; return; }
+        try {
+          const receipt = await this.api.anchorBlitzRun(row.runId, sent.serializedTx);
+          action.remove();
+          note.replaceWith(this.anchorReceipt(receipt.hash));
+        } catch (error) {
+          // The transaction is on chain either way; only our record of it failed.
+          note.textContent = error instanceof Error
+            ? `SENT, BUT NOT RECORDED. ${error.message.toUpperCase()}`
+            : 'SENT, BUT NOT RECORDED.';
+          action.disabled = false;
+        }
+      })();
+    });
+    host.append(action, note);
+  }
+
+  /** The finished thing: a hash anybody can check without trusting us. */
+  private anchorReceipt(hash: string): HTMLElement {
+    const wrap = node('p', 'blitz-anchor-note');
+    wrap.append(node('span', '', 'ON CHAIN '));
+    const link = document.createElement('a');
+    link.className = 'blitz-anchor-link';
+    link.href = `https://nimiq.watch/#${hash}`;
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    link.textContent = `${hash.slice(0, 10)}…`;
+    wrap.append(link);
+    return wrap;
   }
 
   private async loadLeaderboard(cityId: BlitzCityId, host: HTMLElement, challengeId = getBlitzDailyChallenge({ now: Date.now(), cityId, seasonId: BLITZ_SEASON }).challengeId): Promise<void> {

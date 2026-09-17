@@ -1702,3 +1702,25 @@ button + .blitz-quiet { margin-top: 11px; }
   padding-top: 16px;
   border-top: 2px solid rgb(20 19 29 / .16);
 }
+
+/*
+ * The anchor offer, and the receipt it becomes.
+ *
+ * Deliberately quieter than Ride again. Anchoring is a real transaction on
+ * mainnet and a rider should choose it, not press it on the way past - so it
+ * sits below the result as an option rather than competing with the action
+ * that gets them back on the hill.
+ */
+.blitz-anchor { margin-top: 12px; }
+.blitz-anchor-note {
+  margin: 10px 0 0;
+  color: #4b4436;
+  font: 800 10px/1.4 ui-monospace, monospace;
+  letter-spacing: .08em;
+}
+.blitz-anchor-link {
+  color: var(--rush-keyline);
+  font: 800 10px/1.4 ui-monospace, monospace;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

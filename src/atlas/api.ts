@@ -155,6 +155,8 @@ export interface AtlasApiClient {
   getBlitzLobby(lobbyId: string): Promise<BlitzLobbyView | null>;
   issueBlitzTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<ApiResult<BlitzTicket>>;
   submitBlitzRun(input: BlitzSubmissionInput): Promise<ApiResult<BlitzSubmitResult>>;
+  /** Write a verified run onto Nimiq. Takes the signed transaction, not a hash. */
+  anchorBlitzRun(runId: string, serializedTx: string): Promise<{ hash: string }>;
   issueCompetitiveTicket(input: { actorId: string; walletAddress: string; role: AtlasRole }): Promise<ApiResult<AtlasCompetitiveTicket>>;
   submitCompetitiveRun(input: AtlasCompetitiveRunInput): Promise<ApiResult<AtlasCompetitiveRunResult>>;
   submitCoreRun(input: AtlasCoreRunRequest): Promise<ApiResult<AtlasCompetitiveRunResult>>;
@@ -197,6 +199,19 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     },
     issueBlitzTicket: (input) => authenticatedAtlasRequest<BlitzTicket>('/atlas/api/blitz/tickets', 'atlas.ticket.issue', input.actorId, input, isBlitzTicket, { apiBase: baseUrl, fetchImpl }),
     submitBlitzRun: (input) => authenticatedAtlasRequest<BlitzSubmitResult>('/atlas/api/blitz/runs', 'atlas.run.submit', input.actorId, input, isBlitzSubmitResult, { apiBase: baseUrl, fetchImpl }),
+    /*
+     * Unsigned on purpose. The only thing this carries is a Nimiq transaction
+     * the wallet already signed, and the service checks it against the board's
+     * own copy of the run rather than against anything said here. A device
+     * proof would add a second identity to a request whose whole point is that
+     * the chain already proves who sent it.
+     */
+    anchorBlitzRun: (runId, serializedTx) => requestData(
+      fetchImpl,
+      `${baseUrl}/atlas/api/blitz/runs/${encodeURIComponent(runId)}/anchor`,
+      isBlitzAnchorReceipt,
+      { method: 'POST', body: { serialized: serializedTx } },
+    ),
     issueCompetitiveTicket: (input) => authenticatedRequest<AtlasCompetitiveTicket>('/atlas/api/competitive/tickets', 'atlas.ticket.issue', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
     submitCompetitiveRun: (input) => authenticatedRequest<AtlasCompetitiveRunResult>('/atlas/api/competitive/runs', 'atlas.run.submit', input.actorId, input, { apiBase: baseUrl, fetchImpl }),
     submitCoreRun: async (input) => {
@@ -291,6 +306,12 @@ export interface BlitzPrizeTableSummary {
   allocations: Array<{ rank: number; walletAddress: string; luna: number; runId: string }>;
   remainderLuna: number;
   qualifiedRiders: number;
+}
+
+function isBlitzAnchorReceipt(value: unknown): value is { hash: string } {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { hash?: unknown }).hash === 'string'
+    && /^[0-9a-f]{64}$/i.test((value as { hash: string }).hash);
 }
 
 function isBlitzPrizeTable(value: unknown): value is BlitzPrizeTableSummary {

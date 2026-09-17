@@ -59,6 +59,13 @@ export interface BlitzLeaderboardRow {
   readonly verifiedAt: number;
   readonly verified: true;
   readonly rank: number;
+  /*
+   * The Nimiq transaction that wrote this run onto the chain, if the rider
+   * chose to. Optional because anchoring costs a real fee and is a rider's
+   * decision, and because every row written before the feature existed has to
+   * keep restoring cleanly.
+   */
+  readonly anchorHash?: string;
 }
 
 export interface BlitzSubmitResult {

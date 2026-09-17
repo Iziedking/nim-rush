@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { Address, KeyPair, TransactionBuilder } from '@nimiq/core';
+
+import { verifyAnchor } from '../server/anchor';
 
 import {
   BLITZ_ANCHOR_MAX_BYTES,
@@ -49,5 +52,73 @@ describe('writing a run onto Nimiq', () => {
   it('is plain ASCII, so the byte count is the character count', () => {
     const data = blitzAnchorData(claim);
     expect(new TextEncoder().encode(data).byteLength).toBe(data.length);
+  });
+});
+
+/*
+ * The checks that make an anchor mean something.
+ *
+ * A hash proves nothing: a hash is a string and any string would do. What is
+ * checked is the transaction itself - signed by the rider, sent to the anchor,
+ * on the chain that counts, carrying this exact run - and only then is the
+ * hash taken from the bytes. Each of these is a way to fake a record, and
+ * leaving any one out makes the other four decorative.
+ */
+describe('verifying a run written onto Nimiq', () => {
+  const NETWORK = 5;
+  const ANCHOR = KeyPair.generate().toAddress().toUserFriendlyAddress();
+  const expectedData = blitzAnchorData(claim);
+
+  const tx = (over: { keys?: KeyPair; to?: string; data?: string; networkId?: number } = {}) => {
+    const keys = over.keys ?? KeyPair.generate();
+    const built = TransactionBuilder.newBasicWithData(
+      keys.toAddress(),
+      Address.fromUserFriendlyAddress(over.to ?? ANCHOR),
+      new TextEncoder().encode(over.data ?? expectedData),
+      BigInt(1),
+      BigInt(0),
+      1,
+      over.networkId ?? NETWORK,
+    );
+    built.sign(keys, undefined);
+    return { serialized: built.toHex(), sender: keys.toAddress().toUserFriendlyAddress() };
+  };
+
+  const check = (serialized: string) => verifyAnchor({
+    serialized,
+    claim: { date: claim.challengeDate, seed: 'unused-on-this-path', stage: 1, score: claim.score },
+    anchorAddress: ANCHOR,
+    networkId: NETWORK,
+    expectedData,
+  });
+
+  it('accepts a run the rider actually sent, and names who sent it', () => {
+    const sent = tx();
+    const result = check(sent.serialized);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.strength).toBe('verified');
+    expect(result.value.sender).toBe(sent.sender);
+    // Derived from the bytes, never accepted from a caller.
+    expect(result.value.hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('refuses a transaction carrying a different run', () => {
+    const other = blitzAnchorData({ ...claim, score: claim.score + 1 });
+    expect(check(tx({ data: other }).serialized).ok).toBe(false);
+  });
+
+  it('refuses a transaction sent to somebody else', () => {
+    const elsewhere = KeyPair.generate().toAddress().toUserFriendlyAddress();
+    expect(check(tx({ to: elsewhere }).serialized).ok).toBe(false);
+  });
+
+  it('refuses a transaction from another chain, and says which', () => {
+    const result = check(tx({ networkId: 6 }).serialized);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // Without this a free testnet anchor would sit on the board looking
+    // exactly like one that cost real NIM.
+    expect(result.observed).toBe(6);
   });
 });

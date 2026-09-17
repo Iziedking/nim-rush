@@ -68,6 +68,7 @@ import {
   type DeviceProof,
 } from '../src/net/player-auth-protocol';
 import * as anchor from './anchor';
+import { blitzAnchorData } from '../shared/atlas/blitz/anchor';
 import * as chat from './chat';
 import * as tips from './tips';
 import { claimMessage, mergeClaimMessage, verifyClaim, verifyMessage } from './attest';
@@ -382,7 +383,52 @@ installRequestLogging(app, { record: recordAdminLog });
 mountRelayRoutes({ app, limit: rateLimiter.limit, api: createRelayApi({ config: RELAY_CONFIG, tickets: relayTickets, walletBindings: relayWalletBindings, daily: relayDaily, repository: relayRepository, actorExists: (actorId) => playerAuth.hasCredential(actorId), world: relayWorld, leaderboard: relayLeaderboard, rewards: relayRewards }) });
 mountAtlasUsageRoutes({ app, limit: rateLimiter.limit, usage: atlasUsage });
 mountAtlasDailyRoutes({ app, limit: rateLimiter.limit, daily: atlasDaily });
+/*
+ * Writing a NIM RUSH run onto Nimiq.
+ *
+ * This is the half that owns the chain, so it is the half that parses the
+ * transaction. The route above it never sees an anchor address or a network
+ * id; it hands over bytes and gets back a hash or a refusal.
+ *
+ * Three things are checked that a hash alone could never establish: that the
+ * transaction carries this exact result, taken from the board's own row rather
+ * than from the caller; that it was sent to the anchor rather than to a friend;
+ * and that the wallet which signed it is the wallet that set the score. A run
+ * anchored by somebody else's transaction would be a receipt for a payment
+ * nobody made.
+ */
+const anchorBlitzRun: NonNullable<Parameters<typeof createAtlasApi>[0]['anchorBlitzRun']> = async ({ runId, serialized }) => {
+  if (!atlasBlitz) return { ok: false, reason: 'Anchoring is unavailable.', status: 404 as const };
+  if (!anchor.isAnchorAddress(ANCHOR_ADDRESS)) return { ok: false, reason: 'This deployment has no anchor address.', status: 404 as const };
+  const row = await atlasBlitz.findRun(runId);
+  if (!row) return { ok: false, reason: 'That run is not on the board.', status: 404 as const };
+
+  const verified = anchor.verifyAnchor({
+    serialized,
+    // The blitz form is short enough for a basic transaction; the claim shape
+    // below belongs to the legacy board and is unused on this path.
+    expectedData: blitzAnchorData({
+      challengeDate: row.challengeDate,
+      cityId: row.cityId,
+      score: row.score,
+      traceHash: row.traceHash,
+    }),
+    claim: { date: row.challengeDate, seed: row.challengeId, stage: 1, score: row.score },
+    anchorAddress: ANCHOR_ADDRESS,
+    networkId: ANCHOR_NETWORK_ID,
+  });
+  if (!verified.ok) return { ok: false, reason: verified.reason, status: 400 as const };
+
+  const signer = verified.value.sender.replace(/s/g, '').toUpperCase();
+  const owner = row.walletAddress.replace(/s/g, '').toUpperCase();
+  if (signer !== owner) return { ok: false, reason: 'That transaction was signed by a different wallet.', status: 403 as const };
+
+  await atlasBlitz.recordAnchor(runId, verified.value.hash);
+  return { ok: true, hash: verified.value.hash };
+};
+
 mountAtlasRoutes({ app, limit: rateLimiter.limit, api: createAtlasApi({
+  anchorBlitzRun,
   curriculum: ATLAS_CURRICULUM,
   competitiveExpeditions: ATLAS_PRODUCTION_GATE.competitive,
   orders: atlasOrders,

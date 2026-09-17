@@ -64,6 +64,18 @@ export interface AtlasApi {
     read(lobbyId: string): Promise<{ lobby: BlitzLobby; seats: readonly Omit<BlitzSeat, 'actorId'>[] } | null>;
   };
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
+  /*
+   * Write a verified run onto Nimiq.
+   *
+   * Takes the serialized transaction the wallet handed back, not a hash: a
+   * hash is a string and any string would do. Whoever implements this parses
+   * the bytes, checks the signature, sender, recipient, data and chain, and
+   * only then derives the hash. Optional, because a deployment with no anchor
+   * address configured has nowhere to send one and should say so rather than
+   * accept something it cannot check.
+   */
+  anchorBlitzRun?: (input: { runId: string; serialized: string }) =>
+    Promise<{ ok: true; hash: string } | { ok: false; reason: string; status: 400 | 403 | 404 }>;
 }
 
 export function createAtlasApi(options: {
@@ -82,6 +94,7 @@ export function createAtlasApi(options: {
   blitzRewards?: (walletAddress: string) => Promise<readonly BlitzRewardReceipt[]>;
   blitzSeats?: AtlasApi['blitzSeats'];
   authorize?: (proof: DeviceProof, action: AuthAction, actorId: string, body: unknown) => Promise<boolean>;
+  anchorBlitzRun?: AtlasApi['anchorBlitzRun'];
 }): AtlasApi {
   const curriculum = validateAtlasCurriculum(options.curriculum, options.now?.() ?? new Date());
   return {
@@ -109,6 +122,7 @@ export function createAtlasApi(options: {
     blitzRewards: options.blitzRewards,
     blitzSeats: options.blitzSeats,
     authorize: options.authorize,
+    anchorBlitzRun: options.anchorBlitzRun,
   };
 }
 
@@ -308,6 +322,28 @@ export function mountAtlasRoutes(options: {
     try { response.status(201).json({ ok: true, data: await options.api.blitz.submit(withoutAuth(parsed.data)) }); }
     catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
   });
+  /*
+   * Put a verified run on chain.
+   *
+   * Unauthenticated on purpose, and safe to be: the only thing this accepts is
+   * a signed Nimiq transaction, and it is checked against the board's own copy
+   * of the run rather than against anything the caller says. A transaction
+   * that does not carry this exact result, was not sent to the anchor, or was
+   * not signed by the wallet that set the score is refused. There is nothing
+   * here for a forger to gain and nothing to spend but their own fee.
+   */
+  options.app.post('/atlas/api/blitz/runs/:runId/anchor', options.limit(20, 8), async (request, response) => {
+    if (!options.api.anchorBlitzRun) { response.status(503).json({ ok: false, error: 'Anchoring is unavailable.' }); return; }
+    const runId = request.params.runId;
+    const parsed = blitzAnchorBody.safeParse(request.body);
+    if (!/^[a-zA-Z0-9:_-]{1,128}$/.test(runId) || !parsed.success) {
+      response.status(400).json({ ok: false, error: 'Anchor request is invalid.' });
+      return;
+    }
+    const result = await options.api.anchorBlitzRun({ runId, serialized: parsed.data.serialized });
+    if (!result.ok) { response.status(result.status).json({ ok: false, error: result.reason }); return; }
+    response.status(201).json({ ok: true, data: { hash: result.hash } });
+  });
   options.app.post('/atlas/api/orders', options.limit(30, 10), async (request, response) => {
     if (!options.api.orders) { response.status(503).json({ ok: false, error: 'Atlas orders are unavailable.' }); return; }
     try {
@@ -396,6 +432,8 @@ const blitzCityId = z.enum(['lagos', 'london', 'dubai']);
  * Keep this in step with BlitzInput in shared/atlas/blitz/types.ts. The test in
  * tests/atlas-blitz-server.test.ts fails if a field is added there and not here.
  */
+const blitzAnchorBody = z.object({ serialized: z.string().min(1).max(4096) });
+
 const blitzInputBody = z.object({ steer: z.number().finite().min(-1).max(1), drift: z.boolean(), brake: z.boolean().optional(), tuck: z.boolean().optional(), boost: z.boolean(), relayChoice: z.enum(['left', 'right']).optional() });
 const lobbyOpenBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), capacity: z.number().int().min(2).max(7), auth: authProof });
 const seatClaimBody = z.object({ actorId, walletAddress: z.string().min(1).max(64), auth: authProof });
