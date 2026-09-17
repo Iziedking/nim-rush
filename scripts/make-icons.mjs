@@ -12,23 +12,51 @@
  */
 
 import { deflateSync } from 'node:zlib';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-const PLATE = [0x14, 0x11, 0x0e];
-const ACCENT = [0xff, 0x5a, 0x1f];
-const PAPER = [0xf4, 0xed, 0xe0];
+const INK = [0x14, 0x13, 0x1d];
+const AMBER = [0xff, 0xb4, 0x3c];
 
-/** The chart line, in a 512 space. Same path as public/icon.svg. */
-const CHART = [
-  [72, 168], [136, 232], [192, 176], [248, 288], [312, 240], [368, 344],
+/*
+ * The rider, in a 512 space, scaled from the same 184 unit drawing as
+ * public/icon.svg (512 / 184).
+ *
+ * These icons used to carry the old Sface lantern: a dark circle with pink and
+ * cyan blocks under a lamp, which had nothing to do with a downhill race and
+ * was the first thing anybody saw on a home screen. Both files now draw one
+ * mark, and the only reason this one is hand-rasterised is that the competition
+ * form and iOS want raster and a headless browser is a heavy dependency for
+ * four squares.
+ */
+const WHEELS = [{ x: 122.4, y: 356.2 }, { x: 328.3, y: 356.2 }];
+const WHEEL_RADIUS = 61.2;
+const WHEEL_STROKE = 30.6;
+/** Rear triangle, down tube, top tube and fork, as separate runs. */
+const FRAME = [
+  [[122.4, 356.2], [228.2, 345.1], [189.2, 267.1], [122.4, 356.2]],
+  [[228.2, 345.1], [311.6, 283.8]],
+  [[189.2, 267.1], [289.4, 267.1]],
+  [[311.6, 283.8], [328.3, 356.2]],
 ];
-const HEAD = { x: 368, y: 344, r: 46 };
+const FRAME_STROKE = 27.8;
+/** The flat back, which is the whole attitude of the reference photograph. */
+const BACK = [[178.1, 244.9], [278.3, 211.5]];
+const BACK_STROKE = 39.0;
+/** Arm to the bars, driving leg, and the neck that attaches the head. */
+const LIMBS = [
+  { run: [[278.3, 211.5], [311.6, 278.3]], stroke: 27.8 },
+  { run: [[183.7, 256.0], [239.3, 311.7], [228.2, 345.1]], stroke: 33.4 },
+  { run: [[278.3, 211.5], [306.1, 194.8]], stroke: 27.8 },
+];
+const HEAD = { x: 322.8, y: 183.7, r: 33.4 };
 
-const STROKE = 26;
+/** The ink keyline inside the badge edge. */
+const KEYLINE = 22;
 const CORNER = 112;
 
 // Signed distance helpers. Negative is inside, and the returned value is in
@@ -95,23 +123,26 @@ function render(size) {
       const px = (x + 0.5) * pixel;
       const py = (y + 0.5) * pixel;
 
-      const plate = coverage(sdRoundedBox(px - 256, py - 256, 256, CORNER), pixel);
+      const badge = sdRoundedBox(px - 256, py - 256, 256, CORNER);
+      const plate = coverage(badge, pixel);
       if (plate <= 0) continue;
 
-      const colour = [...PAPER];
+      const colour = [...AMBER];
 
-      // Ink first at a wider stroke, then the accent inside it. On a cream
-      // plate an unoutlined orange line goes soft at favicon size; the ink
-      // keel is what keeps the mark legible at 32 pixels.
-      blend(colour, PLATE, coverage(sdPolyline(px, py, CHART, STROKE + 14), pixel));
-      blend(colour, PLATE, coverage(sdCircle(px, py, HEAD.x, HEAD.y, HEAD.r + 7), pixel));
-      blend(colour, ACCENT, coverage(sdPolyline(px, py, CHART, STROKE), pixel));
-      blend(colour, ACCENT, coverage(sdCircle(px, py, HEAD.x, HEAD.y, HEAD.r), pixel));
+      // The keyline, drawn as the band just inside the badge edge. An enamel
+      // mark is a flat colour held by an ink outline; without it the amber
+      // dissolves into a light home screen.
+      blend(colour, INK, coverage(-(badge + KEYLINE), pixel));
 
-      // Two eyes and a mouth, punched back out in the plate colour.
-      blend(colour, PLATE, coverage(sdCircle(px, py, 352, 334, 9), pixel));
-      blend(colour, PLATE, coverage(sdCircle(px, py, 384, 334, 9), pixel));
-      blend(colour, PLATE, coverage(sdBox(px, py, 368, 362.5, 18, 4.5, 4.5), pixel));
+      // Wheels as rings: the distance to the circle, thickened either side.
+      for (const wheel of WHEELS) {
+        const ring = Math.abs(sdCircle(px, py, wheel.x, wheel.y, WHEEL_RADIUS)) - WHEEL_STROKE / 2;
+        blend(colour, INK, coverage(ring, pixel));
+      }
+      for (const run of FRAME) blend(colour, INK, coverage(sdPolyline(px, py, run, FRAME_STROKE), pixel));
+      blend(colour, INK, coverage(sdPolyline(px, py, BACK, BACK_STROKE), pixel));
+      for (const limb of LIMBS) blend(colour, INK, coverage(sdPolyline(px, py, limb.run, limb.stroke), pixel));
+      blend(colour, INK, coverage(sdCircle(px, py, HEAD.x, HEAD.y, HEAD.r), pixel));
 
       const offset = (y * size + x) * 4;
       rgba[offset] = colour[0];
@@ -196,3 +227,31 @@ for (const [size, name] of TARGETS) {
 }
 
 
+
+/*
+ * Keep the asset manifests honest about icon.svg.
+ *
+ * The manifests carry the mark's byte size and SHA-256, and verify:atlas:art
+ * fails the gate when they drift. Editing the icon and forgetting to re-hash
+ * broke the build three times, so the two steps are one step now: whoever
+ * redraws the mark cannot leave the manifest describing the old one.
+ */
+const markPath = join(OUT_DIR, 'icon.svg');
+const markBytes = readFileSync(markPath);
+const markSha = createHash('sha256').update(markBytes).digest('hex').toUpperCase();
+
+for (const manifestPath of ['atlas/manifests/assets-v1.json', 'atlas/manifests/assets-v2.json']) {
+  const full = join(OUT_DIR, manifestPath);
+  const manifest = JSON.parse(readFileSync(full, 'utf8'));
+  const entry = (manifest.assets ?? manifest).find((asset) => asset.id === 'atlas-shell-mark');
+  if (!entry) continue;
+  if (entry.sha256 === markSha && entry.bytes === markBytes.length) {
+    console.log(`${manifestPath.padEnd(34)} already current`);
+    continue;
+  }
+  entry.sha256 = markSha;
+  entry.bytes = markBytes.length;
+  if (entry.compressedBytes !== undefined) entry.compressedBytes = markBytes.length;
+  writeFileSync(full, `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(`${manifestPath.padEnd(34)} re-hashed ${markBytes.length} bytes`);
+}
