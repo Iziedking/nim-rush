@@ -1672,3 +1672,33 @@ button + .blitz-quiet { margin-top: 11px; }
   letter-spacing: .14em;
   text-transform: uppercase;
 }
+
+/*
+ * Hierarchy, instead of the same object three deep.
+ *
+ * The daily-challenge section shared a rule with buttons, so it wore the full
+ * treatment - three-pixel keyline, cream face, hard offset shadow - inside a
+ * panel that already had all three, wrapped around controls that had them
+ * again. Everything on the screen was the same raised card at a different
+ * size, which is what an interface looks like when nothing has been ranked
+ * against anything else.
+ *
+ * One panel is raised. Inside it, the mode that matters is a region: warmer
+ * ground, a single edge at the top, no shadow of its own. Only the things a
+ * thumb actually presses are raised off the paper. That is the whole rule.
+ */
+.blitz-intro-command .blitz-ranked-launch {
+  border: 0 !important;
+  border-radius: 0;
+  background: rgb(240 179 93 / .16) !important;
+  box-shadow: none;
+  margin: 2px -13px 0;
+  padding: 14px 13px 16px;
+}
+
+/* The divider under it does the separating the border used to do. */
+.blitz-intro-command .blitz-mode-free {
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 2px solid rgb(20 19 29 / .16);
+}

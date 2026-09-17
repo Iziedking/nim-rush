@@ -49,8 +49,8 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain("data-blitz-screen', 'run'");
     expect(app).toContain('blitz-timer');
     expect(app).toContain('blitz-score');
-    expect(app).toContain('RANKED RUNS STAY LIVE / KEEP RIDING');
-    expect(app).toContain('NOT VERIFIED / THIS RANKED RUN LEFT THE SCREEN.');
+    expect(app).toContain('A RANKED RUN CANNOT BE PAUSED');
+    expect(app).toContain('NOT VERIFIED. THIS RANKED RUN LEFT THE SCREEN.');
     expect(app).toContain('blitz-boost-meter');
     expect(app).not.toContain('Passport');
     expect(app).not.toContain('Knowledge Book');
@@ -134,10 +134,10 @@ describe('Beacon Blitz public arcade experience', () => {
      * Only the chain-verified state may read as paid. If a future edit points
      * 'owed' or 'sending' at the word PAID, this fails.
      */
-    expect(app).toContain("paid: 'PAID / CONFIRMED'");
-    expect(app).toContain("owed: 'OWED / AWAITING RELEASE'");
-    expect(app).toContain("sending: 'SENDING / ON CHAIN SOON'");
-    expect(app).toContain("attention: 'HELD / NEEDS A LOOK'");
+    expect(app).toContain("paid: 'PAID'");
+    expect(app).toContain("owed: 'OWED, AWAITING RELEASE'");
+    expect(app).toContain("sending: 'SENDING'");
+    expect(app).toContain("attention: 'HELD, NEEDS A LOOK'");
     expect(app).toContain('A reward is only called paid once the transfer is seen on chain');
 
     // A held payout keeps its reason on screen rather than looking like a

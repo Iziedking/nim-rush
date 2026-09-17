@@ -272,7 +272,7 @@ export class BlitzApp {
      * it did, which is the sort of ambiguity that makes a rider think a
      * leaderboard can be gamed. The legend names what it governs.
      */
-    difficultyChooser.append(node('legend', '', 'DIFFICULTY / FREE + FRIENDS'));
+    difficultyChooser.append(node('legend', '', 'DIFFICULTY FOR PRACTICE AND FRIENDS'));
     const rookie = button('Rookie', `blitz-difficulty-option${this.difficulty === 'rookie' ? ' is-selected' : ''}`, () => { this.difficulty = 'rookie'; this.renderIntro(); });
     const pro = button('Pro', `blitz-difficulty-option${this.difficulty === 'pro' ? ' is-selected' : ''}`, () => { this.difficulty = 'pro'; this.renderIntro(); });
     rookie.setAttribute('aria-pressed', String(this.difficulty === 'rookie'));
@@ -343,12 +343,21 @@ export class BlitzApp {
       const rename = button('Change', 'blitz-quiet blitz-name-change', () => {
         settled.hidden = true;
         username.hidden = false;
+        nameLabel.hidden = false;
         username.focus();
       });
       settled.append(settledName, rename);
       const nameIsSettled = /^[A-Za-z0-9_]{3,18}$/.test(username.value);
       settled.hidden = !nameIsSettled;
       username.hidden = nameIsSettled;
+      /*
+       * A settled name does not need a caption. The row underneath already
+       * reads "Rider" with a Change button beside it, so the stamped RIDER NAME
+       * tab above it was a label on a label - which is how a screen ends up
+       * looking like it was assembled rather than designed. It comes back the
+       * moment the field is open and there is an empty box to explain.
+       */
+      nameLabel.hidden = nameIsSettled;
       username.addEventListener('input', () => { settledName.textContent = username.value; });
 
       /*
@@ -455,7 +464,7 @@ export class BlitzApp {
     const screen = node('main', 'blitz-run');
     screen.setAttribute('data-blitz-screen', 'run');
     const top = node('header', 'blitz-hud');
-    const cityName = node('div', 'blitz-city-name', `${city.circuit} / ${this.difficulty.toUpperCase()}`);
+    const cityName = node('div', 'blitz-city-name', `${city.circuit} · ${this.difficulty.toUpperCase()}`);
     this.timerNode = node('div', 'blitz-timer', '90.0');
     this.scoreNode = node('div', 'blitz-score', '000000');
     this.pauseButton = button(this.rankedTicket ? 'LIVE' : 'II', 'blitz-pause', this.togglePause);
@@ -676,7 +685,7 @@ export class BlitzApp {
     this.missionHost.replaceChildren();
     this.missionShownId = null;
     this.missionAwakeUntil = 0;
-    const heading = node('div', 'blitz-mission-heading', 'TODAY / THREE CONTRACTS');
+    const heading = node('div', 'blitz-mission-heading', "TODAY'S THREE CONTRACTS");
     this.missionHost.append(heading);
     for (const mission of state.missions) {
       const card = node('article', 'blitz-mission-card');
@@ -741,7 +750,7 @@ export class BlitzApp {
   private togglePause = (): void => {
     if (this.rankedTicket && !this.rankedInterrupted) {
       if (this.feedbackNode) {
-        this.feedbackNode.textContent = 'RANKED RUNS STAY LIVE / KEEP RIDING';
+        this.feedbackNode.textContent = 'A RANKED RUN CANNOT BE PAUSED';
         this.feedbackNode.className = 'blitz-feedback is-wrong';
       }
       this.audio.playWorldCue('route-refused');
@@ -759,7 +768,7 @@ export class BlitzApp {
       this.pauseButton.setAttribute('aria-label', this.paused ? 'Resume Beacon Blitz' : 'Pause Beacon Blitz');
     }
     if (this.feedbackNode) {
-      this.feedbackNode.textContent = this.paused ? 'RUN SAFE / RESUME WHEN READY' : '';
+      this.feedbackNode.textContent = this.paused ? 'PAUSED. RESUME WHEN READY.' : '';
       this.feedbackNode.className = this.paused ? 'blitz-feedback is-paused' : 'blitz-feedback';
     }
   };
@@ -795,9 +804,11 @@ export class BlitzApp {
      * every clean run is furniture.
      */
     const cleared = state.missions.filter((mission) => mission.status === 'complete').length;
-    const ledgerLine = [`${(state.elapsedMs / 1_000).toFixed(1)} SEC`, `${state.collisions} CONTACTS`, `${cleared}/3 CONTRACTS`];
+    const ledgerLine = [`${(state.elapsedMs / 1_000).toFixed(1)} SEC`, `${state.collisions} CONTACTS`, `${cleared} OF 3 CONTRACTS`];
     if (state.takedowns > 0) ledgerLine.push(`${state.takedowns} PUT OUT`);
-    resultHero.append(node('p', 'blitz-result-time', ledgerLine.join(' / ')));
+    // The same separator the trail data above uses. A slash between three
+    // facts reads as a machine listing them rather than a run being described.
+    resultHero.append(node('p', 'blitz-result-time', ledgerLine.join(' · ')));
     resultHero.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
     primary.append(resultHero, this.resultContracts(state));
     screen.append(primary);
@@ -807,10 +818,10 @@ export class BlitzApp {
     breakdown.append(
       stat(`+${score.finishTime.toLocaleString()}`, 'FINISH TIME'),
       stat(`+${score.racingLine.toLocaleString()}`, 'RACING LINE'),
-      stat(`+${score.control.toLocaleString()}`, 'BRAKING / CONTROL'),
-      stat(`+${score.airtime.toLocaleString()}`, 'AIRTIME / LANDING'),
+      stat(`+${score.control.toLocaleString()}`, 'BRAKING'),
+      stat(`+${score.airtime.toLocaleString()}`, 'AIRTIME AND LANDING'),
       stat(`+${score.missions.toLocaleString()}`, 'MISSION COMPLETION'),
-      stat(`+${score.drift.toLocaleString()}`, 'DRIFT / CONTROL'),
+      stat(`+${score.drift.toLocaleString()}`, 'DRIFTING'),
       stat(`-${score.collisionPenalties.toLocaleString()}`, 'COLLISION PENALTIES'),
       stat(`-${score.missedGatePenalties.toLocaleString()}`, 'MISSED-GATE PENALTIES'),
     );
@@ -860,11 +871,11 @@ export class BlitzApp {
     reveal.append(nextButton);
     const competition = node('details', 'blitz-competition');
     competition.open = Boolean(this.rankedTicket);
-    competition.append(node('summary', 'blitz-competition-summary', this.rankedTicket ? 'RANKED RUN STATUS' : 'RANK THIS CITY / LEADERBOARD'));
+    competition.append(node('summary', 'blitz-competition-summary', this.rankedTicket ? 'RANKED RUN STATUS' : 'LEADERBOARD'));
     const rankStatus = node('p', 'blitz-rank-status', this.rankedTicket ? 'VERIFYING THIS RANKED RUN...' : 'CONNECT ONCE TO START A VERIFIED RUN. NO PAYMENT.');
     competition.append(rankStatus);
     if (this.rankedTicket) {
-      if (this.rankedInterrupted) rankStatus.textContent = 'NOT VERIFIED / THIS RANKED RUN LEFT THE SCREEN.';
+      if (this.rankedInterrupted) rankStatus.textContent = 'NOT VERIFIED. THIS RANKED RUN LEFT THE SCREEN.';
       else void this.submitRankedRun(state, rankStatus, competition);
     } else {
       const username = node('input', 'blitz-username');
@@ -875,7 +886,7 @@ export class BlitzApp {
       username.placeholder = 'Leaderboard username';
       username.setAttribute('aria-label', 'Leaderboard username');
       try { username.value = localStorage.getItem('nim-atlas:blitz:username') ?? ''; } catch { /* Storage is optional. */ }
-      const identity = button('CONNECT WALLET / START RANKED RUN', 'blitz-verify', () => void this.prepareRankedRun(state.cityId, username, identity, rankStatus));
+      const identity = button('CONNECT WALLET TO RIDE RANKED', 'blitz-verify', () => void this.prepareRankedRun(state.cityId, username, identity, rankStatus));
       competition.append(username, identity);
       void this.loadLeaderboard(state.cityId, competition);
     }
@@ -917,7 +928,7 @@ export class BlitzApp {
       return;
     }
     buttonNode.disabled = true;
-    status.textContent = 'OPENING NIMIQ WALLET / IDENTITY ONLY.';
+    status.textContent = 'OPENING NIMIQ WALLET TO SIGN YOUR IDENTITY.';
     try {
       const ticket = await this.issueRankedTicket(cityId, username);
       try { localStorage.setItem('nim-atlas:blitz:username', username); } catch { /* Storage is optional. */ }
@@ -1126,7 +1137,7 @@ export class BlitzApp {
       if (table.state === 'unavailable') return;
 
       host.replaceChildren();
-      host.append(node('span', 'blitz-pool-label', "TODAY'S POOL / NIMIQ MAINNET"));
+      host.append(node('span', 'blitz-pool-label', "TODAY'S POOL ON NIMIQ MAINNET"));
 
       if (table.state === 'unfunded' || table.poolLuna === null || table.poolLuna === 0) {
         host.append(node('strong', 'blitz-pool-value', 'No sponsored pool today'));
@@ -1194,7 +1205,7 @@ export class BlitzApp {
       if (receipts.length === 0) return;
 
       host.replaceChildren();
-      host.append(node('span', 'blitz-rewards-label', `YOUR REWARDS / ${shortWallet(walletAddress)}`));
+      host.append(node('span', 'blitz-rewards-label', `REWARDS FOR ${shortWallet(walletAddress)}`));
       const list = node('ol', 'blitz-rewards-list');
       for (const receipt of receipts.slice(0, REWARD_ROWS)) {
         const row = node('li', `blitz-reward blitz-reward-${receipt.state}`);
@@ -1238,12 +1249,12 @@ export class BlitzApp {
       this.pendingRunStore.save(pending);
       await this.submitPendingRun(pending, status, host);
     } catch (error) {
-      status.textContent = error instanceof Error ? `NOT VERIFIED / ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
+      status.textContent = error instanceof Error ? `NOT VERIFIED. ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
     }
   }
 
   private async submitPendingRun(pending: BlitzPendingSubmission, status: HTMLElement, host: HTMLElement): Promise<void> {
-    status.textContent = 'VERIFYING REPLAY / KEEP THIS SCREEN OPEN...';
+    status.textContent = 'VERIFYING YOUR RUN. KEEP THIS SCREEN OPEN.';
     try {
       const ticket = pending.ticket;
       const result = await this.api.submitBlitzRun({
@@ -1255,9 +1266,9 @@ export class BlitzApp {
       if (!result.ok) throw new Error(result.error);
       this.pendingRunStore.clear();
       host.querySelector('.blitz-retry-submit')?.remove();
-      status.textContent = `VERIFIED #${result.value.row.rank} / ${ticket.username} / ${shortWallet(ticket.walletAddress)}`;
+      status.textContent = `VERIFIED. RANK ${result.value.row.rank} FOR ${ticket.username}.`;
     } catch (error) {
-      status.textContent = error instanceof Error ? `NOT VERIFIED / ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
+      status.textContent = error instanceof Error ? `NOT VERIFIED. ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
       host.querySelector('.blitz-retry-submit')?.remove();
       host.append(button('Retry verification', 'blitz-retry-submit', () => {
         const retry = host.querySelector('.blitz-retry-submit');
@@ -1402,7 +1413,7 @@ export class BlitzApp {
     const level = blitzRiderLevel(career);
     const next = blitzNextRiderLevel(career);
     const host = node('section', 'blitz-ladder');
-    host.append(node('span', 'blitz-ladder-label', `RIDER LEVEL ${level.level} / ${level.title.toUpperCase()}`));
+    host.append(node('span', 'blitz-ladder-label', `RIDER LEVEL ${level.level}, ${level.title.toUpperCase()}`));
     if (level.unlock) host.append(node('p', 'blitz-ladder-unlock', level.unlock));
     if (next) {
       const track = node('div', 'blitz-ladder-meter');
@@ -1490,7 +1501,7 @@ export class BlitzApp {
           ? 'The screen was interrupted. This ranked attempt will not submit. Restart a free run to try again.'
           : 'The course is paused. Resume when the trail is clear.';
       }
-      if (this.feedbackNode) { this.feedbackNode.textContent = 'RUN PAUSED / RECOVERY READY'; this.feedbackNode.className = 'blitz-feedback is-paused'; }
+      if (this.feedbackNode) { this.feedbackNode.textContent = 'PAUSED. YOUR RUN IS SAFE.'; this.feedbackNode.className = 'blitz-feedback is-paused'; }
     }
     this.syncAudioScene();
   };
@@ -1637,10 +1648,10 @@ const REWARD_ROWS = 4;
  * the server made; only "Paid" is a claim about the chain.
  */
 const REWARD_STATE_LABEL: Readonly<Record<'owed' | 'sending' | 'paid' | 'attention', string>> = {
-  owed: 'OWED / AWAITING RELEASE',
-  sending: 'SENDING / ON CHAIN SOON',
-  paid: 'PAID / CONFIRMED',
-  attention: 'HELD / NEEDS A LOOK',
+  owed: 'OWED, AWAITING RELEASE',
+  sending: 'SENDING',
+  paid: 'PAID',
+  attention: 'HELD, NEEDS A LOOK',
 };
 
 /*
