@@ -35,7 +35,6 @@ docs/shots/
 # the README that would otherwise be seven long sections, so it is as public as
 # the README is. Without this line the link is a 404 for everybody but us, and
 # nothing about the local checkout would show it.
-!docs/stage-1-to-7.md
 
 # What we hit building on the Mini App SDK, linked from the README. It belongs
 # in the public repo for the same reason the stage guide does: the README points
@@ -48,12 +47,10 @@ docs/shots/
 # cannot re-include a file whose parent directory is excluded, so keeping it
 # there would have meant un-ignoring the folder and re-ignoring its contents one
 # by one, which is a rule that breaks the next time somebody adds a file.
-!docs/feedback.md
 
 # The 250 word description the submission portal asks for. Kept in the repo so
 # the text that was submitted is the text in version control, rather than a
 # paragraph that only ever existed in a form field.
-!docs/description.md
 
 # The player-facing how to play guide.
 #
@@ -69,15 +66,12 @@ docs/shots/
 # The older Cycle I plans remain ignored or explicitly marked historical, but
 # these files are linked from the current README and must travel with it.
 !docs/README.md
-!docs/nim-atlas-current-state.md
+!docs/how-nim-rush-works.md
+!docs/roadmap.md
 !docs/nim-atlas-architecture.md
 !docs/deploy.md
-!docs/submission.md
 !docs/privacy.md
-!docs/marketing.md
-!docs/submit/
 docs/submit/*
-!docs/submit/*.md
 !docs/shots/
 !docs/shots/*.png
 !docs/shots/captions.json
@@ -217,3 +211,18 @@ STORY-SCRIPT.md
 
 # Throwaway Chrome profile from scripts/render-brand.mjs.
 .brand-render-profile/
+
+# Internal working copies.
+#
+# Submission checklists, portal copy, launch posts, planning specs and status
+# notes are the work, not the product. They stay on the machine that wrote
+# them. The public repository carries the README, the rules, the roadmap, the
+# architecture, the deploy runbook and the privacy notes, and nothing else.
+internal/
+docs/submission.md
+docs/description.md
+docs/marketing.md
+docs/feedback.md
+docs/nim-atlas-current-state.md
+docs/stage-1-to-7.md
+docs/submit/

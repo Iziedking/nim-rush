@@ -1,22 +1,17 @@
-# Documentation map
+# Documentation
 
-These are the current NIM Atlas documents:
+The public documents for NIM RUSH.
 
-- [Current state](nim-atlas-current-state.md) records what the build does and
-  what still needs owner evidence.
-- [Architecture](nim-atlas-architecture.md) records module boundaries and
-  authority flow.
-- [How to play](nim-atlas-how-to-play.md) explains the player loop and controls.
-- [Deployment](deploy.md) covers the static client, optional service, and
-  rollout gates.
-- [Submission checklist](submission.md) separates local proof from device,
-  portal, chain, and treasury actions.
-- [Description](description.md), [marketing](marketing.md), and
-  [submission copy](submit/copy.md) contain current public copy.
-- [Privacy notes](privacy.md) describe the current local and server data model.
-- [Feedback](feedback.md) preserves implementation findings and known limits.
+| Document | What it covers |
+| --- | --- |
+| [How NIM RUSH works](how-nim-rush-works.md) | Every rule the game plays by: controls, supplies, scoring, contracts, rider levels, ranked runs and the daily pool. |
+| [Roadmap](roadmap.md) | What we want to add over the next few months. |
+| [Architecture](nim-atlas-architecture.md) | Module boundaries and where authority sits between the client, the server and the chain. |
+| [Deployment](deploy.md) | The static client, the optional service, and the gates a release has to pass. |
+| [Privacy](privacy.md) | What is stored, where it lives, and what leaves the device. |
+| [Atlas adventure](nim-atlas-how-to-play.md) | The earlier payment-evidence adventure, still reachable at `/?atlas=legacy`. |
 
-The Cycle I market game, its deployment notes, and the early plans remain in
-the repository as historical records. They are not instructions for the NIM
-Atlas build. The ignored `docs/superpowers` folder contains internal planning
-records and is not part of the public documentation set.
+The root [README](../README.md) describes the game itself.
+
+Planning notes, working drafts and release paperwork are kept outside the
+repository. The documents listed above are the whole public set.

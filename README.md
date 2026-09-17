@@ -2,45 +2,92 @@
 
 [![NIM RUSH checks](https://github.com/Iziedking/sFace/actions/workflows/ci.yml/badge.svg)](https://github.com/Iziedking/sFace/actions/workflows/ci.yml)
 
-NIM RUSH is a daily downhill skill-racing Mini App for Nimiq. Ride the ridge,
-read the terrain, and prove a cleaner descent than your last run.
+NIM RUSH is a daily downhill race inside Nimiq Pay. One city, 1.9 km, 90
+seconds. Your wallet signs the run, the server re-simulates it from your input
+trace, and the day's top three split a funded Nimiq mainnet pool.
 
-[Play NIM RUSH](https://sface.site/) · [Nimiq Mini Apps](https://nimiq.dev/mini-apps/)
+Every verified run is recorded as a line. The next rider down the hill races
+three of them as solid bikes, so the descent is traffic to get through rather
+than an empty time trial.
+
+[Play NIM RUSH](https://sface.site/) · [Roadmap](docs/roadmap.md) · [Rules](docs/how-nim-rush-works.md) · [Nimiq Mini Apps](https://nimiq.dev/mini-apps/)
 
 ## The game
 
-Every run is a short, deterministic descent over the Ridge Run course. Your
-speed is only useful when you can control it. The course rewards a clean line,
-late braking, stable landings, and deliberate risk.
+A run is one descent of a city course: about 1.9 km, 90 seconds, no laps and no
+second chance inside it. The bike does not hold its own speed, so the whole run
+is a series of decisions about how much of it you can afford to carry.
 
 The loop is:
 
-1. Choose the daily descent and its fixed ranked rules.
-2. Read the surface, corner, jump, and obstacle ahead.
-3. Steer, brake, drift, boost, or tuck to shape the run.
-4. Complete three physical mission contracts: one line, one control, and one risk contract.
-5. Review the result ledger and return with one clear improvement to chase.
+1. Connect once with Nimiq. The signature proves who you are and moves nothing.
+2. Pick a mode: a free run to practise, or today's challenge to take a rank.
+3. Read the ridge ahead: the surface, the corner, the jump, the traffic.
+4. Work the controls. Tuck for speed, sit up and brake for grip, spend a
+   gearbox on a slide, spend nitro on a straight.
+5. Collect what you need off the road. Nothing refills on its own.
+6. Clear three contracts: one for your line, one for control, one for risk.
+7. Read the ledger, find the one thing that cost you, and drop in again.
+
+## Modes
+
+**Free run.** Practise any city at Rookie or Pro rules. Contracts are live and
+the ledger is the same. A free run never takes a place on the leaderboard.
+
+**Daily challenge.** One course, one seed, the same for everybody, reset at
+00:00 UTC. Free to enter. This is the run that ranks, and the run the day's
+funded pool pays out on.
+
+**Private lobbies.** Open a lobby, send the link, and the first seven riders
+through the door are the field. First come, first served, free to enter. The
+link is the invitation, so lobby ids are twenty-four random bytes.
 
 ## Controls
 
 | Action | Keyboard | Touch |
 | --- | --- | --- |
 | Steer | Left / Right arrows or A / D | Drag the steering pad |
-| Drift | Space | Drift |
-| Boost | Shift | Boost |
-| Brake | Down arrow or S | Brake |
 | Tuck | Up arrow or W | Tuck |
+| Brake | Down arrow or S | Brake |
+| Drift | Shift | Drift |
+| Boost | Space | Boost |
 | Pause | P or Escape | Pause |
 
-The surface changes grip and speed. Dirt invites a different line from wood;
-ramps create airtime; landings preserve or destroy momentum; collisions cost
-score and time. The rider has full control, with only a small recovery guard to
-prevent a bad landing from becoming an unrecoverable input lock.
+Each control costs something. Tuck adds about 16% to your speed and takes
+roughly 38% of your steering authority. Brake trades speed for grip. Drift
+spends a gearbox and buys a slide. Boost spends nitro. A rider who touches
+nothing coasts about 14% below the speed the course was built around, which is
+enough to finish and not enough to win.
+
+Braking into a corner and tucking out of it is faster than holding one position
+through both. That is the skill the course is built to reward.
+
+## Supplies
+
+Boost and drift are carried, not granted.
+
+- **Nitro bottles** — twelve per city, roughly a second of boost each.
+- **Gearboxes** — six per city, one slide each.
+
+They sit in lanes rather than on the centre line, so the line you take decides
+the fuel you finish with. A slide feeds the tank back, which turns a gearbox
+into speed and makes control worth spending.
+
+## The pack
+
+You do not ride alone. Every verified run records the line it drew, and the
+next rider's ticket pins three of them. They ride as solid bikes: you can be
+held up behind one, squeeze past on the inside, and put a shoulder in going
+through.
+
+Contact moves you and never them. Their run was ridden before yours existed, so
+the game is overtaking traffic rather than fighting it, and the replay stays
+honest.
 
 ## Scoring
 
-The finish screen exposes the complete score instead of hiding it behind a
-single number:
+The finish screen shows the whole score rather than hiding it behind one
+number:
 
 - finish time
 - racing-line quality
@@ -51,20 +98,37 @@ single number:
 - collision penalties
 - missed-gate penalties
 
-Ranked riders use equal fixed loadouts. Progression is earned through skill;
-there is no paid physics advantage or pay-to-win boost.
+A contact costs points, drains fifteen nitro and cuts your speed to a third, so
+it is paid for twice.
+
+## Rider levels
+
+Career score is the sum of your best run in each city, so the ladder is climbed
+by riding better rather than by riding more. Levels widen the frame you work
+in: a fourth gearbox, a bigger tank, longer slides, a wider reach for supplies.
+
+Levels change free rides only. **Every ranked run is ridden on the same
+equipment.** That is not a policy the client is trusted to keep: the server
+rebuilds every ranked run from the city and the seed alone, so a client that
+handed itself a bigger tank produces a trace the server disagrees with, and the
+run is refused rather than ranked.
 
 ## Verified competition
 
-Practice is playable without a wallet. For ranked participation, Nimiq can
-provide identity and signed participation while the server issues a scoped run
-ticket and verifies the deterministic input trace. The browser's score is a
-claim; the verified replay is the result. A future friend challenge can compare
-verified asynchronous ghost runs without pretending to be live multiplayer.
+Nimiq provides identity. The wallet signs who you are; it never signs a
+payment, and entry is free.
 
-Rewards are shown only when they are genuinely funded, transparent, and
-reconciled. NIM RUSH does not use gambling, chance-based rewards, fake players,
-or fake prize pools.
+The server issues a scoped ticket, pins the pack to it, and re-simulates the
+submitted input trace against that same pack. The browser's score is a claim.
+The verified replay is the result.
+
+The daily pool pays the top three from a Nimiq mainnet treasury. A reward reads
+as paid only once the transfer has been seen on chain, from the treasury to the
+rider's wallet, at the right amount, deeply enough to trust. Until then it
+reads as owed, sending, or held, and a held payout keeps its reason.
+
+NIM RUSH has no gambling, no chance-based rewards, no entry fee, no fake
+players, and no prize pool that is not funded.
 
 ## Screenshots
 

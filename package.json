@@ -37,7 +37,8 @@
     "verify:atlas:contrast": "node scripts/verify-atlas-contrast.mjs",
     "format:check": "node scripts/check-format.mjs",
     "build:atlas:character:v2": "node scripts/build-atlas-character-v2.mjs",
-    "brand:render": "node scripts/render-brand.mjs"
+    "brand:render": "node scripts/render-brand.mjs",
+    "voice": "node scripts/make-voice-lines.mjs"
   },
   "//": "express, zod and tsx are runtime dependencies of the service, not build tools. They were in devDependencies, which meant an npm ci --omit=dev on the VPS produced a server that could not start. The SDK is pinned rather than tracking latest, because its published surface is what src/nimiq is written against.",
   "dependencies": {
