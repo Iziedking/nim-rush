@@ -224,9 +224,27 @@ describe('what the board would owe if it closed now', () => {
     expect(table.qualifiedRiders).toBe(2);
   });
 
+  /*
+   * Two riders, three prize places. The day pays the places that were actually
+   * finished in and keeps third place's share rather than spreading it across
+   * the riders who did turn up, because paying somebody more than their stated
+   * share is the same lie as inventing a rider to pay.
+   */
   it('pays only the places that exist and keeps the rest', async () => {
+    const table = await boardOf(pool(10_000), [1, 2]);
+    expect(table.allocations).toHaveLength(2);
+    expect(table.remainderLuna).toBe(2_000);
+  });
+
+  /*
+   * And a day that never became a race pays nothing at all. One rider beating
+   * nobody is not a competition, so the pot is held whole rather than handed
+   * to the only person who showed up.
+   */
+  it('holds the whole pot when only one rider entered', async () => {
     const table = await boardOf(pool(10_000), [1]);
-    expect(table.allocations).toHaveLength(1);
-    expect(table.remainderLuna).toBe(5_000);
+    expect(table.qualifiedRiders).toBe(1);
+    expect(table.allocations).toEqual([]);
+    expect(table.remainderLuna).toBe(10_000);
   });
 });

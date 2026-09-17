@@ -61,6 +61,14 @@ export interface BlitzPrizeAllocationResult {
   readonly remainderLuna: number;
 }
 
+/**
+ * How many riders make a day a race.
+ *
+ * Two. Not because two is a crowd, but because one is not a contest, and the
+ * board's whole claim is that a place on it was taken from somebody.
+ */
+export const BLITZ_MINIMUM_FIELD = 2;
+
 export function allocateBlitzPrizes(input: {
   readonly poolLuna: number | null;
   readonly candidates: readonly BlitzPrizeCandidate[];
@@ -240,4 +248,23 @@ export function planBlitzPayouts(input: {
       walletAddress: allocation.walletAddress,
       amountLuna: allocation.luna,
     }));
+}
+
+/**
+ * Hold a pot back until the day is a race.
+ *
+ * Separate from the split on purpose. `allocateBlitzPrizes` answers "who gets
+ * which share", which is arithmetic and has a right answer for a field of one.
+ * This answers "should today pay at all", which is policy, and the two were
+ * worth being able to read - and test - apart.
+ *
+ * A held pot is returned whole in the remainder rather than dropped, so a day
+ * that was short of riders can still be accounted for to the last Luna.
+ */
+export function withMinimumField(
+  result: BlitzPrizeAllocationResult,
+  input: { readonly poolLuna: number | null; readonly riders: number },
+): BlitzPrizeAllocationResult {
+  if (input.riders >= BLITZ_MINIMUM_FIELD) return result;
+  return { allocations: [], remainderLuna: input.poolLuna ?? 0 };
 }

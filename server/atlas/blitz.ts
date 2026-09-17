@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { AtlasIdentityService } from './identity';
 import type { AtlasStateStore } from './persistence';
 import type { AtlasDailyService } from './daily';
-import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, type BlitzPrizeAllocation } from '../../shared/atlas/blitz/prize';
+import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, withMinimumField, type BlitzPrizeAllocation } from '../../shared/atlas/blitz/prize';
 import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
 import { hashBlitzTrace, replayBlitzTraceWithPath, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
@@ -316,7 +316,7 @@ export function createAtlasBlitzService(options: {
         poolLuna = null;
       }
 
-      const { allocations, remainderLuna } = allocateBlitzPrizes({
+      const { allocations, remainderLuna } = withMinimumField(allocateBlitzPrizes({
         poolLuna: state === 'funded' ? poolLuna : null,
         candidates: rows.map((row) => ({
           walletAddress: row.walletAddress,
@@ -326,7 +326,7 @@ export function createAtlasBlitzService(options: {
           verifiedAt: row.verifiedAt,
           runId: row.runId,
         })),
-      });
+      }), { poolLuna: state === 'funded' ? poolLuna : null, riders: new Set(rows.map((row) => row.walletAddress)).size });
 
       return {
         state,

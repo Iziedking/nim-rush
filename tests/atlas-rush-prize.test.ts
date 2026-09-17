@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, planBlitzPayouts } from '../shared/atlas/blitz/prize';
+import { BLITZ_PRIZE_SPLIT_BPS, allocateBlitzPrizes, planBlitzPayouts, withMinimumField } from '../shared/atlas/blitz/prize';
 import type { BlitzPrizeCandidate } from '../shared/atlas/blitz/prize';
 
 /*
@@ -296,5 +296,48 @@ describe('what a closed day owes', () => {
     for (const challengeId of ['', ' ', 'has space', 'a'.repeat(200)]) {
       expect(() => planBlitzPayouts({ challengeId, allocations })).toThrow(/challenge/i);
     }
+  });
+});
+
+/*
+ * A day with one rider on it does not pay.
+ *
+ * The board's claim is that a place was taken from somebody. A single entrant
+ * beating nobody is not that, and a pool that pays them anyway is a withdrawal
+ * dressed as a prize - so the whole pot stays in the remainder and rolls into
+ * a day that has a race in it.
+ */
+describe('a prize needs a field', () => {
+  const rider = (walletAddress: string, score: number) => ({
+    walletAddress, score, elapsedMs: 88_000, collisions: 0, verifiedAt: 1_000, runId: `run-${walletAddress}`,
+  });
+
+  const split = (candidates: BlitzPrizeCandidate[]) => allocateBlitzPrizes({ poolLuna: 100_000, candidates });
+  const field = (candidates: BlitzPrizeCandidate[]) => new Set(candidates.map((c) => c.walletAddress)).size;
+  const settle = (candidates: BlitzPrizeCandidate[]) =>
+    withMinimumField(split(candidates), { poolLuna: 100_000, riders: field(candidates) });
+
+  it('pays nothing to a field of one and keeps the whole pot named', () => {
+    const result = settle([rider('NQ01', 9_000)]);
+    expect(result.allocations).toEqual([]);
+    expect(result.remainderLuna).toBe(100_000);
+  });
+
+  it('pays as soon as a second rider makes it a race', () => {
+    const result = settle([rider('NQ01', 9_000), rider('NQ02', 8_000)]);
+    expect(result.allocations.map((a) => a.walletAddress)).toEqual(['NQ01', 'NQ02']);
+    expect(result.allocations[0]!.luna).toBeGreaterThan(result.allocations[1]!.luna);
+  });
+
+  it('counts wallets, not runs, so one rider cannot make their own field', () => {
+    const twice = [rider('NQ01', 9_000), { ...rider('NQ01', 8_000), runId: 'run-second' }];
+    expect(settle(twice).allocations).toEqual([]);
+    expect(settle(twice).remainderLuna).toBe(100_000);
+  });
+
+  it('leaves the split itself alone, which still has a right answer for one', () => {
+    // The arithmetic and the policy are deliberately separable: a field of one
+    // still has a first place, it just does not get paid today.
+    expect(split([rider('NQ01', 9_000)]).allocations).toHaveLength(1);
   });
 });
