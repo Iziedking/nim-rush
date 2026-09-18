@@ -3,12 +3,11 @@
 [![NIM RUSH checks](https://github.com/Iziedking/sFace/actions/workflows/ci.yml/badge.svg)](https://github.com/Iziedking/sFace/actions/workflows/ci.yml)
 
 NIM RUSH is a daily downhill race inside Nimiq Pay. One city, 1.9 km, 120
-seconds, one run. Your wallet signs it, the server re-simulates it from your
+seconds, three attempts. Your wallet signs it, the server re-simulates it from your
 input trace, and the day's top three split a funded Nimiq mainnet pool.
 
-You ride today's course once. The score you post is your score for that day,
-kept forever, so the board measures a descent rather than how many attempts
-you had time for.
+You get three goes at today's course and your best one stands, so the board
+measures a descent rather than how many hours you had free.
 
 Every verified run is recorded as a line. The next rider down the hill races
 three of them as solid bikes, so the descent is traffic to get through rather
@@ -19,8 +18,8 @@ than an empty time trial.
 ## The game
 
 A run is one descent of a city course: about 1.9 km, 120 seconds, no laps and
-no second chance inside it, and on the daily challenge no second attempt at
-it either. The bike does not hold its own speed, so the whole run
+no second chance inside it. The daily challenge gives you three of those
+descents, and keeps the best. The bike does not hold its own speed, so the whole run
 is a series of decisions about how much of it you can afford to carry.
 
 The loop is:
@@ -46,9 +45,11 @@ funded pool pays out on. Rules are fixed here: the Rookie/Pro chooser applies
 to free runs and private lobbies only, because a ranked board on which riders
 picked their own difficulty would not be a board.
 
-One ranked run per wallet per day. Once your run is verified it is your score
-for that day and the board will not issue you another ticket, so nobody grinds
-a place by riding until they like the number.
+Three attempts per wallet per day, and the best of them is the score that
+stands. Unlimited runs made the daily a grind that measured patience rather
+than a descent; exactly one made a beginner's first ever run their score for
+the day. Three is the honest middle: learning the course is part of the day,
+grinding it is not.
 
 That is what lets the day settle on whoever turned up. The pool used to hold
 until a second wallet posted, which charged the rider who showed up for the

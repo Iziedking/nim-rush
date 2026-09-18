@@ -100,16 +100,18 @@ describe('a finished run becomes somebody else\'s rival', () => {
     await rideAndSubmit(blitz, clock, 'alpha', 'Alpha');
     clock.now += 60_000;
     /*
-     * The same rider comes back for another go, and no longer gets one: today
-     * is ridden once. This used to assert that a second ticket simply carried
-     * an empty pack, because racing your own line would make a good previous
-     * run a punishment. The stronger rule makes that unreachable, so the test
-     * now holds the rule that replaced it. Self-exclusion across days is still
-     * covered by 'still refuses to hand a rider their own ghost across days'.
+     * The same rider comes back for their second of three attempts.
+     *
+     * Being blocked by your own best line is absurd, and would make a good
+     * previous run a punishment - which is exactly what three attempts at one
+     * course would produce without this. The rule briefly became unreachable
+     * while the daily allowed a single run; it is reachable again, and matters
+     * more now than it did.
      */
-    await expect(blitz.issueTicket({
+    const again = await blitz.issueTicket({
       actorId: 'alpha', walletAddress: 'wallet-alpha', username: 'Alpha', cityId: 'lagos', seasonId: 'cycle-2',
-    })).rejects.toThrow(/already posted/i);
+    });
+    expect(again.rivals ?? []).toEqual([]);
   });
 
   it('keeps the pack small enough for the road to stay readable', async () => {

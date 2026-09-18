@@ -9,9 +9,9 @@ four sentences after every single run and still had nowhere to look things up.
 A run is one city, about 1.9 km, with a 120 second limit. There is no lap and
 no second chance inside a run: you get down the hill once.
 
-On the daily challenge there is no second chance at the run either. Each wallet
-rides today's course once, and that verified score is the one it keeps for the
-day, permanently.
+On the daily challenge each wallet gets **three attempts**, and the best of them
+is the score that stands for the day. Learning the day's course is part of the
+day; grinding it is not, which is why there is a number and the number is small.
 
 ## Riding position
 

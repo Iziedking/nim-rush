@@ -101,7 +101,14 @@ describe('Blitz integrity regressions', () => {
     const original = f.service;
     const pending = await original.submit(f.submission);
     expect(pending.row.verified).toBe(true);
-    expect(original.serialise().qualificationOutbox).toMatchObject([{ id: 'run-a:blitz-ranked', attempts: 1, lastError: 'reward service unavailable' }]);
+    /*
+     * One entry, whatever it is called. The id was pinned to the run id, and
+     * it is keyed on the wallet and the day now: three attempts at a daily
+     * must qualify a rider once, not three times.
+     */
+    const outbox = original.serialise().qualificationOutbox;
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({ attempts: 1, lastError: 'reward service unavailable' });
 
     let retried = 0;
     const restored = createAtlasBlitzService({

@@ -62,10 +62,31 @@ describe('Beacon Blitz verified competition service', () => {
     const accepted = await service.submit(input);
     expect(accepted.row).toMatchObject({ rank: 1, verified: true, username: 'Sface', walletAddress: walletA, score: trace.score });
     expect((await service.submit(input)).duplicate).toBe(true);
-    // Today is ridden once. The board will not issue a second ticket, so a
-    // rider cannot ride until they like the number and keep that one.
+    /*
+     * Three goes at today's course, and no more.
+     *
+     * The board took a rider's best of unlimited runs once, which made the
+     * daily a grind; then exactly one run, which made a beginner's first ever
+     * descent their score for the day. Three is the honest middle - learning
+     * the course is part of the day, grinding it is not - so the fourth ticket
+     * is refused.
+     */
+    const ride = async (runId: string) => {
+      const next = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
+      // The clock moves the way a rider does: a ticket is issued, a run takes
+      // its ninety-odd seconds, and only then does it arrive. Submitting a
+      // full-length trace instantly is refused, correctly.
+      current += trace.elapsedMs + 3_000;
+      await service.submit({ ...input, runId, ticketId: next.id });
+    };
+    await ride('run-second');
+    await ride('run-third');
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' }))
-      .rejects.toThrow(/already posted/i);
+      .rejects.toThrow(/all 3 attempts/i);
+
+    // And the board still shows one row for this wallet, not three.
+    const board = await service.leaderboard('season-1', 'lagos');
+    expect(board.filter((row) => row.walletAddress === walletA)).toHaveLength(1);
   });
 
   it('keeps one username per wallet and ranks by score then time and collisions', async () => {
