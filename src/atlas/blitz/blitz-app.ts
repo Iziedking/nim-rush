@@ -725,7 +725,20 @@ export class BlitzApp {
       meter.dataset.missionMeter = mission.id;
       const meterTrack = node('span', 'blitz-mission-meter');
       meterTrack.append(meter);
-      card.append(top, node('p', 'blitz-mission-verb', mission.verb), progress, meterTrack);
+      /*
+       * The instruction, then how to do it, then how far away it is.
+       *
+       * The card used to show a four-word verb and a counter. "Respect the
+       * surface" with 0/1 beside it tells a rider nothing they can act on, and
+       * the description that would have - which every contract already carries
+       * - was never rendered anywhere in the app. Nor was failureReason, so a
+       * contract went from READY to MISSED without ever saying why.
+       */
+      const detail = node('p', 'blitz-mission-detail', mission.description);
+      detail.dataset.missionDetail = mission.id;
+      const distance = node('span', 'blitz-mission-distance', '');
+      distance.dataset.missionDistance = mission.id;
+      card.append(top, node('p', 'blitz-mission-verb', mission.verb), detail, progress, meterTrack, distance);
       this.missionHost.append(card);
     }
   }
@@ -741,6 +754,16 @@ export class BlitzApp {
       if (progress) progress.textContent = `${Math.min(mission.progress, mission.target)}/${mission.target}`;
       const meter = card.querySelector(`[data-mission-meter="${mission.id}"]`);
       if (meter instanceof HTMLElement) meter.style.width = `${Math.min(100, mission.progress / mission.target * 100)}%`;
+      const detail = card.querySelector(`[data-mission-detail="${mission.id}"]`);
+      // A failed contract explains itself. It knew all along; it just never said.
+      if (detail) detail.textContent = mission.status === 'failed' && mission.failureReason ? mission.failureReason : mission.description;
+      const distance = card.querySelector(`[data-mission-distance="${mission.id}"]`);
+      if (distance instanceof HTMLElement) {
+        // A rider cannot plan for something they first hear about as it starts.
+        const away = Math.round(mission.gateDistance - state.distanceMeters);
+        distance.textContent = mission.status === 'pending' && away > 0 ? `IN ${away} M` : '';
+        distance.hidden = distance.textContent === '';
+      }
       card.classList.toggle('is-active', mission.status === 'active');
       card.classList.toggle('is-complete', mission.status === 'complete');
       card.classList.toggle('is-failed', mission.status === 'failed');

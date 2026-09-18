@@ -34,6 +34,21 @@ export interface BlitzInput {
   readonly relayChoice?: BlitzChoice;
 }
 
+/**
+ * Where a contract's window sits on the course.
+ *
+ * Windows used to be fixed fractions per kind, chosen without reference to what
+ * is actually built into the road. That is how AIR JUDGE ended up asking for a
+ * jump between 0.46 and 0.62 of a course whose only jumps are at 0.18 and 0.75
+ * - a contract that could not be completed on any city, ever, and still took
+ * 220 points off every run for failing. Anchoring to real features means a
+ * window cannot be authored somewhere the thing it asks for does not exist.
+ */
+export type BlitzMissionAnchor =
+  | { readonly kind: 'gates' }
+  | { readonly kind: 'jump' }
+  | { readonly kind: 'fraction'; readonly start: number; readonly end: number };
+
 export interface BlitzMissionDefinition {
   readonly id: string;
   readonly label: string;
@@ -42,6 +57,8 @@ export interface BlitzMissionDefinition {
   readonly description: string;
   readonly target: number;
   readonly bonus: number;
+  /** Where on the course this contract opens. Defaults to the gate span. */
+  readonly anchor?: BlitzMissionAnchor;
   /** Legacy relay fields are optional so old saved traces fail closed. */
   readonly prompt?: string;
   readonly left?: string;
@@ -57,6 +74,10 @@ export interface BlitzMissionState extends BlitzMissionDefinition {
   readonly status: BlitzMissionStatus;
   readonly startedAtTick: number | null;
   readonly contactsAtStart: number | null;
+  /** Supplies banked when the window opened, so a contract counts its own. */
+  readonly suppliesAtStart?: number | null;
+  /** Unbroken ticks of tuck, for the contract that asks for a held posture. */
+  readonly tuckTicks?: number;
   readonly failureReason: string | null;
   readonly resolved?: boolean;
   readonly selectedChoice?: BlitzChoice | null;

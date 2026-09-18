@@ -1,7 +1,7 @@
 import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles } from './cities';
 import { BLITZ_BASE_LOADOUT, type BlitzLoadout } from './rider';
 import { blitzRivalAt, blitzRivalContact, type BlitzRivalPath } from './rivals';
-import { missionWindow, selectBlitzMissions } from './missions';
+import { blitzMissionWindow, selectBlitzMissions } from './missions';
 import { blitzRules, type BlitzDifficultyRules } from './rules';
 import { blitzSurface } from './surfaces';
 import { courseGroundLift, courseTerrainHeight, nearbyCourseColliders, sampleCourse } from './course';
@@ -18,6 +18,8 @@ export const BLITZ_TICK_RATE = 30;
 const TAKEDOWN_STEER = 0.55;
 const TAKEDOWN_SPEED_MPS = 14;
 export const TAKEDOWN_POINTS = 1_500;
+/** Six seconds, which is what HOLD THE TUCK asks for. */
+const TUCK_HOLD_TICKS = BLITZ_TICK_RATE * 6;
 export const BLITZ_LIMIT_SECONDS = 120;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
 // The gates a rider can see. One list, shared with the renderer, because a
@@ -68,7 +70,7 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
   const rules = blitzRules(difficulty);
   const city = blitzCity(input.cityId);
   const missions: BlitzMissionState[] = selectBlitzMissions(input.seed, difficulty).map((mission) => {
-    const window = missionWindow(mission.kind, rules.riskWindowStart, rules.riskWindowEnd);
+    const window = blitzMissionWindow(city, mission);
     return {
       ...mission,
       gateDistance: city.lengthMeters * window.start,
@@ -77,6 +79,8 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
       status: 'pending',
       startedAtTick: null,
       contactsAtStart: null,
+      suppliesAtStart: null,
+      tuckTicks: 0,
       failureReason: null,
       resolved: false,
       selectedChoice: null,
@@ -441,7 +445,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
 
   const finished = distanceMeters >= city.lengthMeters;
   const timedOut = !finished && elapsedTicks >= BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE;
-  const missionResult = updateMissions({ city, rules, state, missions, distanceMeters, elapsedTicks, input, surface, airborne, collisions, finished, lastEvent });
+  const missionResult = updateMissions({ city, rules, state, missions, distanceMeters, elapsedTicks, input, surface, airborne, collisions, finished, suppliesTaken: nitroTaken + gearboxTaken, lastEvent });
   missions = missionResult.missions;
   missionScore += missionResult.missionScore;
   controlScore += missionResult.controlScore;
@@ -528,6 +532,7 @@ function updateMissions(input: {
   airborne: boolean;
   collisions: number;
   finished: boolean;
+  suppliesTaken: number;
   lastEvent: BlitzPhysicsEvent | null;
 }): { missions: BlitzMissionState[]; activeMission: BlitzRunState['activeMission']; missionScore: number; controlScore: number; airtimeScore: number; missedGatePenalty: number } {
   let missionScore = 0;
@@ -537,17 +542,26 @@ function updateMissions(input: {
   const missions = input.missions.map((mission) => {
     let next = mission;
     if (next.status === 'pending' && input.distanceMeters >= next.gateDistance) {
-      next = { ...next, status: 'active', startedAtTick: input.elapsedTicks, contactsAtStart: input.collisions };
+      next = { ...next, status: 'active', startedAtTick: input.elapsedTicks, contactsAtStart: input.collisions, suppliesAtStart: input.suppliesTaken, tuckTicks: 0 };
     }
     if (next.status !== 'active') return next;
     const cleanLine = !input.airborne && input.surface !== 'grass'
       && Math.abs(input.state.laneOffset) <= input.city.roadWidth * input.rules.lineTolerance
       && input.collisions === (next.contactsAtStart ?? input.collisions);
     if (next.id === 'line-master') {
-      const checkpoint = next.gateDistance + (next.windowEndDistance - next.gateDistance) / next.target * (next.progress + 1);
-      if (input.distanceMeters >= checkpoint) {
+      /*
+       * Scored on the gates that are actually built and lit on the road.
+       *
+       * This used to divide its own window into three even checkpoints, which
+       * landed at 0.36 / 0.56 / 0.76 while the gates a rider can see stand at
+       * 0.26 / 0.50 / 0.74. So the contract was won or lost several car lengths
+       * away from the only thing on the course that told you where to be.
+       */
+      for (const fraction of LINE_GATE_FRACTIONS) {
+        const gate = input.city.lengthMeters * fraction;
+        if (input.state.distanceMeters >= gate || input.distanceMeters < gate) continue;
         if (cleanLine) next = { ...next, progress: next.progress + 1 };
-        else next = { ...next, status: 'failed', failureReason: 'The racing line was lost.' };
+        else next = { ...next, status: 'failed', failureReason: 'A gate was taken outside the line.' };
       }
     } else if (next.id === 'surface-discipline') {
       if (input.surface === 'grass' || input.collisions > (next.contactsAtStart ?? input.collisions)) next = { ...next, status: 'failed', failureReason: 'The surface was left uncontrolled.' };
@@ -564,15 +578,31 @@ function updateMissions(input: {
         if (next.progress >= 1 && input.lastEvent.intensity <= 0.75) next = { ...next, progress: 2, status: 'complete' };
         else next = { ...next, status: 'failed', failureReason: 'The landing was too heavy.' };
       } else if (input.distanceMeters > next.windowEndDistance && next.progress < 2) next = { ...next, status: 'failed', failureReason: 'The jump was not completed.' };
-    } else if (next.id === 'risk-route') {
-      if (input.distanceMeters <= next.windowEndDistance && input.surface === 'grass') next = { ...next, progress: 1 };
-      else if (input.distanceMeters > next.windowEndDistance) {
-        if (next.progress >= 1 && input.surface !== 'grass' && input.collisions === (next.contactsAtStart ?? input.collisions)) next = { ...next, progress: 2, status: 'complete' };
-        else next = { ...next, status: 'failed', failureReason: 'The risk line was not recovered cleanly.' };
+    } else if (next.id === 'supply-line') {
+      // Counts only what was taken after the window opened, so a rider who
+      // arrived with a full tank still has to work inside it.
+      const taken = input.suppliesTaken - (next.suppliesAtStart ?? input.suppliesTaken);
+      next = { ...next, progress: Math.min(next.target, Math.max(0, taken)) };
+      if (input.distanceMeters > next.windowEndDistance && next.progress < next.target) {
+        next = { ...next, status: 'failed', failureReason: 'The window closed before four supplies were taken.' };
       }
-    } else if (next.id === 'perfect-descent' && input.finished) {
-      const otherComplete = input.missions.filter((candidate) => candidate.id !== next.id).every((candidate) => candidate.status === 'complete');
-      next = input.collisions === 0 && otherComplete ? { ...next, progress: 1, status: 'complete' } : { ...next, status: 'failed', failureReason: 'A clean descent still had unfinished work.' };
+    } else if (next.id === 'hold-the-tuck') {
+      /*
+       * Unbroken: letting go or hitting something resets the count to zero,
+       * which is what makes six seconds an ask rather than an accumulation.
+       *
+       * The break is measured against the previous tick, not against the
+       * contact count when the window opened. Comparing to the window would
+       * mean one early contact barred the contract for the rest of its length,
+       * however cleanly the rider rode afterwards - a rule that punishes a
+       * mistake twice and cannot be recovered from.
+       */
+      const hitThisTick = input.collisions > input.state.collisions;
+      const held = input.input.tuck === true && !hitThisTick ? (next.tuckTicks ?? 0) + 1 : 0;
+      next = { ...next, tuckTicks: held, progress: held >= TUCK_HOLD_TICKS ? 1 : 0 };
+      if (input.distanceMeters > next.windowEndDistance && next.progress < 1) {
+        next = { ...next, status: 'failed', failureReason: 'Six unbroken seconds of tuck were not held.' };
+      }
     }
     if (next.progress >= next.target && next.status === 'active') next = { ...next, status: 'complete' };
     if (next.status === 'complete' && mission.status !== 'complete') missionScore += next.bonus;
