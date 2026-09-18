@@ -496,7 +496,18 @@ export class BlitzApp {
     const screen = node('main', 'blitz-run');
     screen.setAttribute('data-blitz-screen', 'run');
     const top = node('header', 'blitz-hud');
-    const cityName = node('div', 'blitz-city-name', `${city.circuit} · ${this.difficulty.toUpperCase()}`);
+    /*
+     * A ranked run says which of the day's goes it is.
+     *
+     * The count was known only to the server, so the first a rider heard of the
+     * limit was being turned away at the fourth ticket - and a rider on their
+     * last attempt had no way to know it was the last one, which is exactly the
+     * moment the information is worth having.
+     */
+    const attempt = this.rankedTicket?.attemptsUsed && this.rankedTicket.attemptsAllowed
+      ? ` · ATTEMPT ${this.rankedTicket.attemptsUsed} OF ${this.rankedTicket.attemptsAllowed}`
+      : '';
+    const cityName = node('div', 'blitz-city-name', `${city.circuit} · ${this.difficulty.toUpperCase()}${attempt}`);
     this.timerNode = node('div', 'blitz-timer', '90.0');
     this.scoreNode = node('div', 'blitz-score', '000000');
     this.pauseButton = button(this.rankedTicket ? 'LIVE' : 'II', 'blitz-pause', this.togglePause);
@@ -1079,6 +1090,28 @@ export class BlitzApp {
     supplies.append(supplyRow);
     ledger.append(supplies, this.riderLadder());
     screen.append(ledger);
+    /*
+     * "Ride again" on a daily with nothing left is an offer that cannot be
+     * taken, so the button says what it would actually spend.
+     */
+    const left = this.rankedTicket?.attemptsAllowed && this.rankedTicket.attemptsUsed
+      ? this.rankedTicket.attemptsAllowed - this.rankedTicket.attemptsUsed
+      : null;
+    const rematchLabel = left === null ? 'Ride again'
+      : left <= 0 ? 'Free run - no attempts left today'
+      : left === 1 ? 'Ride again - 1 attempt left'
+      : `Ride again - ${left} attempts left`;
+    /*
+     * After a ranked run with goes remaining, this spends one.
+     *
+     * It used to call startRun with no ticket, which is a free run - so a
+     * button offering another attempt would have handed back an unranked ride.
+     * With nothing left it stays a free run, and says so.
+     */
+    const rematch = button(rematchLabel, 'blitz-start blitz-rematch', () => {
+      if (left === null || left <= 0) { void this.startRun(state.cityId); return; }
+      void this.rideAnotherAttempt(state.cityId, rematch, rematchLabel);
+    });
     const resultActions = node('nav', 'blitz-result-actions');
     resultActions.setAttribute('aria-label', 'Result actions');
     /*
@@ -1089,7 +1122,7 @@ export class BlitzApp {
      * lobby, or to stop. Every screen needs a door.
      */
     resultActions.append(
-      button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)),
+      rematch,
       button('Menu', 'blitz-again blitz-result-home', () => this.renderIntro()),
       this.soundControl(),
       createNimiqPoweredBy(),
@@ -1187,6 +1220,33 @@ export class BlitzApp {
     }
     host.append(heading, list);
     return host;
+  }
+
+  /**
+   * Spend one of the day's remaining attempts, using the name already bound.
+   *
+   * The two existing ranked paths both take a username input and validate it,
+   * which the result screen has no reason to show: the rider named themselves
+   * before their first run and the ticket carries it.
+   */
+  private async rideAnotherAttempt(cityId: BlitzCityId, trigger: HTMLButtonElement, label: string): Promise<void> {
+    const username = this.rankedTicket?.username;
+    if (!username) { await this.startRun(cityId); return; }
+    trigger.disabled = true;
+    trigger.textContent = 'OPENING NIMIQ WALLET...';
+    try {
+      const ticket = await this.issueRankedTicket(cityId, username);
+      await this.startRun(cityId, ticket.value);
+    } catch (error) {
+      // Put the button back the way it was: a failed attempt must not look
+      // like a spent one.
+      trigger.disabled = false;
+      trigger.textContent = label;
+      if (this.feedbackNode) {
+        this.feedbackNode.textContent = error instanceof Error ? error.message.toUpperCase() : 'RANKED MODE IS UNAVAILABLE.';
+        this.feedbackNode.className = 'blitz-feedback is-wrong';
+      }
+    }
   }
 
   private async prepareRankedStart(cityId: BlitzCityId, usernameInput: HTMLInputElement, buttonNode: HTMLButtonElement, status: HTMLElement): Promise<void> {

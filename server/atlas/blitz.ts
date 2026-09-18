@@ -266,6 +266,9 @@ export function createAtlasBlitzService(options: {
            * means the first rider down has the hill to themselves.
            */
           rivals: packFor(challenge.challengeId, input.walletAddress, username),
+          // This attempt is the one about to be ridden, so it counts itself.
+          attemptsUsed: used + 1,
+          attemptsAllowed: BLITZ_DAILY_ATTEMPTS,
         };
         if (!/^[a-zA-Z0-9_-]{1,128}$/.test(ticket.id)) throw new AtlasBlitzError('invalid', 'Beacon Blitz ticket id is invalid.');
         tickets.set(ticket.id, structuredClone(ticket));

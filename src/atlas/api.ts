@@ -459,6 +459,8 @@ function isBlitzTicket(value: unknown): value is BlitzTicket {
     && /^\d{4}-\d{2}-\d{2}$/.test(String(ticket.challengeDate))
     && typeof ticket.rulesetVersion === 'string'
     && typeof ticket.seed === 'string'
+    && (ticket.attemptsUsed === undefined || Number.isSafeInteger(ticket.attemptsUsed))
+    && (ticket.attemptsAllowed === undefined || Number.isSafeInteger(ticket.attemptsAllowed))
     && Number.isSafeInteger(ticket.issuedAt)
     && Number.isSafeInteger(ticket.expiresAt);
 }

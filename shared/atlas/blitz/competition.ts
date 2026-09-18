@@ -20,6 +20,18 @@ export interface BlitzTicket {
    * ticket without its pack would verify an honest run as a mismatch.
    */
   readonly rivals?: readonly BlitzRivalPath[];
+  /*
+   * How many goes this wallet has had at today's course, and how many it gets.
+   *
+   * Display only. The server counts attempts from its own board and refuses a
+   * fourth ticket on that count, so nothing here is trusted for the rule - but
+   * without it the only way a rider learns they are out of goes is by being
+   * turned away, which is a poor way to find out.
+   *
+   * Optional because tickets persisted before this existed have neither.
+   */
+  readonly attemptsUsed?: number;
+  readonly attemptsAllowed?: number;
   readonly issuedAt: number;
   readonly expiresAt: number;
 }

@@ -117,8 +117,14 @@ describe('Beacon Blitz public arcade experience', () => {
   });
 
   it('keeps same-course rematch ahead of wallet setup and optional circuits', () => {
-    expect(app.indexOf("button('Ride again'")).toBeGreaterThan(-1);
-    expect(app.indexOf("button('Ride again'")).toBeLessThan(app.indexOf("screen.append(competition)"));
+    /*
+     * Pinned to the class, not the label. The label is computed now - it says
+     * how many of the day's three attempts are left, and reads "Free run" once
+     * none are - so grepping for the words made this test fail the moment the
+     * button started telling the truth about what it would spend.
+     */
+    expect(app.indexOf("'blitz-start blitz-rematch'")).toBeGreaterThan(-1);
+    expect(app.indexOf("'blitz-start blitz-rematch'")).toBeLessThan(app.indexOf("screen.append(competition)"));
     expect(app).toContain('best:${state.rulesetVersion}:${state.cityId}');
     expect(css).toContain('.blitz-pool[hidden] { display: none; }');
     expect(app).toContain('BlitzFrameGovernor');
