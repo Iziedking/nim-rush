@@ -334,6 +334,12 @@ function createWebAudioBackend(): AtlasAudioBackend {
   let bikeAirborne = false;
   let bikeSlip = 0;
   let impactAt = -1;
+  // Trail tokens sit 16 m apart, about 0.6 s at racing speed, so a window of
+  // 1.1 s holds a streak through a clean line and breaks it on one missed coin.
+  const COIN_STREAK_WINDOW = 1.1;
+  const COIN_STREAK_STEPS = 12;
+  let coinAt = -Infinity;
+  let coinStreak = 0;
   let pendingNarration: { text: string; locale: string; speaker: AtlasVoiceProfile } | null = null;
   let voiceListenerInstalled = false;
 
@@ -621,6 +627,21 @@ function createWebAudioBackend(): AtlasAudioBackend {
        * the two kinds take different intervals so a rider can tell what they
        * picked up without looking down at the HUD.
        */
+      if (event.pickup === 'token') {
+        /*
+         * NIM off the trail. It used to share the gearbox chime - two quiet
+         * notes falling - which under the engine read as nothing, or as a loss.
+         * A coin rings upward, and a run of coins climbs: each one taken inside
+         * the streak window lands a semitone higher, so holding the trail is
+         * heard as a rising ladder and missing a coin drops back to the bottom.
+         */
+        coinStreak = now - coinAt < COIN_STREAK_WINDOW ? Math.min(coinStreak + 1, COIN_STREAK_STEPS) : 0;
+        coinAt = now;
+        const lift = 2 ** (coinStreak / 12);
+        chime(now, output, 988 * lift, .11, .07);
+        chime(now + .06, output, 1319 * lift, .1, .16);
+        return;
+      }
       const nitro = event.pickup === 'nitro';
       chime(now, output, nitro ? 784 : 523, .055, .07);
       chime(now + .075, output, nitro ? 1175 : 392, .05, .1);
