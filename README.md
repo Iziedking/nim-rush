@@ -1,6 +1,6 @@
 # NIM RUSH
 
-[![NIM RUSH checks](https://github.com/Iziedking/sFace/actions/workflows/ci.yml/badge.svg)](https://github.com/Iziedking/sFace/actions/workflows/ci.yml)
+[![NIM RUSH checks](https://github.com/Iziedking/nim-rush/actions/workflows/ci.yml/badge.svg)](https://github.com/Iziedking/nim-rush/actions/workflows/ci.yml)
 
 NIM RUSH is a daily downhill race inside Nimiq Pay. One city, 1.9 km, 120
 seconds, three attempts. Your wallet signs it, the server re-simulates it from your

@@ -20,5 +20,5 @@ loadouts and server-side replay verification. A browser-submitted score is not
 accepted as proof by itself.
 
 Play: https://nim-rush.xyz/
-Source: https://github.com/Iziedking/sFace
+Source: https://github.com/Iziedking/nim-rush
 Nimiq Mini Apps: https://nimiq.dev/mini-apps/
