@@ -29,6 +29,9 @@ import { blitzFieldPosition, blitzRivalGaps, type BlitzRivalPath } from '../../.
 import { createNimiqPoweredBy, createRushLogo } from './blitz-brand';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
+/* Long enough to see the bike stop and read FINISH; short enough that nobody
+ * taps the screen wondering whether the game has hung. */
+const FINISH_HOLD_MS = 2_200;
 /* Shared with the server's maintenance worker; see shared/atlas/blitz/daily.ts. */
 const BLITZ_SEASON = BLITZ_SEASON_ID;
 
@@ -392,6 +395,8 @@ export class BlitzApp {
       command.append(ranked, free);
     }
 
+    // A board nobody can find is a board nobody rides for.
+    command.append(button('Leaderboard', 'blitz-again blitz-open-board', () => void this.renderLeaderboard('today')));
     const rules = node('a', 'blitz-rules-link', 'Rules');
     rules.href = '/docs/how-nim-rush-works.md';
     rules.target = '_blank';
@@ -458,6 +463,7 @@ export class BlitzApp {
     this.state = createBlitzRun({ cityId, seed, difficulty: rankedTicket ? 'rookie' : this.difficulty, loadout, rivals: this.rivals });
     this.previousRenderState = null;
     this.frames = [];
+    this.finishHoldUntil = null;
     this.lastPhysicsAudioTick = -1;
     this.paused = false;
     this.input.reset();
@@ -672,7 +678,37 @@ export class BlitzApp {
       this.renderer.render(next, this.input.sample().steer, this.previousRenderState, this.accumulator / STEP_MS);
       this.updateRunHud(next);
     }
+    /*
+     * Arriving, rather than being cut off mid-stride.
+     *
+     * The result screen used to replace the world on the exact tick the finish
+     * line was crossed, at a hundred and something kilometres an hour - so a
+     * run ended by the trail vanishing underneath a rider still travelling. The
+     * course geometry stops at the line too, which is what made it read as
+     * riding off the end of the world.
+     *
+     * A finish now holds the world for a couple of seconds while the bike rolls
+     * to a stop and the banner reads FINISH. A timeout gets none of this: the
+     * clock running out is not an arrival, and pretending it is would be a
+     * flourish for the one ending that has not earned one.
+     */
+    if (next.phase === 'finished' && this.finishHoldUntil === null) {
+      this.finishHoldUntil = timestamp + FINISH_HOLD_MS;
+      this.finishSpeedMps = next.speedMps;
+      this.input.reset();
+      if (this.countdownNode) { this.countdownNode.textContent = 'FINISH'; this.countdownNode.classList.add('is-live'); }
+    }
+    if (this.finishHoldUntil !== null && timestamp < this.finishHoldUntil) {
+      const remaining = (this.finishHoldUntil - timestamp) / FINISH_HOLD_MS;
+      // Rolling to a halt, not braking: the rider has already done the work.
+      const coasting = { ...next, speedMps: this.finishSpeedMps * remaining * remaining, boostActive: false };
+      if (this.frameGovernor.shouldRender(timestamp)) this.renderer.render(coasting, 0, coasting, 0);
+      this.audio.setBikeSpeed(coasting.speedMps);
+      this.frameHandle = requestAnimationFrame(this.frame);
+      return;
+    }
     if (next.phase === 'finished' || next.phase === 'timeout') {
+      this.finishHoldUntil = null;
       this.renderResult(next);
       return;
     }
@@ -726,6 +762,8 @@ export class BlitzApp {
    * coming straight back when progress moves or the contract does. Nothing is
    * removed from the DOM, so the update path and its tests are unchanged.
    */
+  private finishHoldUntil: number | null = null;
+  private finishSpeedMps = 0;
   private boostKey: HTMLElement | null = null;
   private driftKey: HTMLElement | null = null;
   private missionShownId: string | null = null;
@@ -846,6 +884,74 @@ export class BlitzApp {
       this.feedbackNode.className = this.paused ? 'blitz-feedback is-paused' : 'blitz-feedback';
     }
   };
+
+  /**
+   * The public board, as a screen of its own.
+   *
+   * It existed only as five rows tucked inside a collapsed panel on the result
+   * screen, which meant the only people who ever saw who was winning were the
+   * people who had just ridden - and even they had to go looking. A daily
+   * contest that hides its standings is asking riders to care about something
+   * they cannot see.
+   *
+   * Today and all time come from the same endpoint: the season board is the
+   * all-time board, and passing a challenge id narrows it to one day.
+   */
+  private async renderLeaderboard(scope: 'today' | 'all'): Promise<void> {
+    this.setAudioScene('menu');
+    this.input.clearBindings();
+    this.ui.replaceChildren();
+    const screen = node('main', 'blitz-board blitz-fullscreen-page');
+    screen.setAttribute('data-blitz-screen', 'leaderboard');
+
+    const head = node('section', 'blitz-board-head');
+    head.append(createRushLogo('compact'), node('h1', 'blitz-board-title', 'LEADERBOARD'));
+
+    const tabs = node('nav', 'blitz-board-tabs');
+    tabs.setAttribute('aria-label', 'Leaderboard range');
+    const today = button("Today", `blitz-board-tab${scope === 'today' ? ' is-current' : ''}`, () => void this.renderLeaderboard('today'));
+    const allTime = button('All time', `blitz-board-tab${scope === 'all' ? ' is-current' : ''}`, () => void this.renderLeaderboard('all'));
+    if (scope === 'today') today.setAttribute('aria-current', 'page');
+    else allTime.setAttribute('aria-current', 'page');
+    tabs.append(today, allTime);
+
+    const body = node('section', 'blitz-board-body');
+    body.append(node('p', 'blitz-board-status', 'READING THE BOARD...'));
+    const back = node('nav', 'blitz-board-actions');
+    back.append(button('Back', 'blitz-again blitz-board-back', () => this.renderIntro()), createNimiqPoweredBy());
+    screen.append(head, tabs, body, back);
+    this.ui.append(screen);
+
+    const cityId: BlitzCityId = 'lagos';
+    const challengeId = scope === 'today'
+      ? getBlitzDailyChallenge({ now: Date.now(), cityId, seasonId: BLITZ_SEASON }).challengeId
+      : undefined;
+    try {
+      const rows = await this.api.getBlitzLeaderboard(BLITZ_SEASON, cityId, challengeId);
+      body.replaceChildren();
+      body.append(node('p', 'blitz-board-scope', scope === 'today'
+        ? `${blitzCity(cityId).name.toUpperCase()} - TODAY, RESETS 00:00 UTC`
+        : `${blitzCity(cityId).name.toUpperCase()} - EVERY VERIFIED RUN THIS SEASON`));
+      if (rows.length === 0) {
+        body.append(node('p', 'blitz-board-empty', scope === 'today'
+          ? 'Nobody has posted a verified run today. The first one takes the board.'
+          : 'No verified runs yet this season.'));
+      }
+      for (const row of rows.slice(0, 25)) {
+        const item = node('div', `blitz-board-row${row.rank <= 3 ? ' is-podium' : ''}`);
+        item.append(
+          node('b', 'blitz-board-rank', `#${row.rank}`),
+          node('span', 'blitz-board-name', row.username),
+          node('small', 'blitz-board-wallet', shortWallet(row.walletAddress)),
+          node('span', 'blitz-board-time', `${(row.elapsedMs / 1_000).toFixed(1)}s`),
+          node('strong', 'blitz-board-score', row.score.toLocaleString()),
+        );
+        body.append(item);
+      }
+    } catch {
+      body.replaceChildren(node('p', 'blitz-board-status', 'THE BOARD IS OFFLINE. YOUR RUNS ARE STILL VERIFIED.'));
+    }
+  }
 
   private renderResult(state: BlitzRunState): void {
     if (this.frameHandle !== null) cancelAnimationFrame(this.frameHandle);

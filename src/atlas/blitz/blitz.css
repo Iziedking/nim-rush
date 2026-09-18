@@ -2182,3 +2182,85 @@ button + .blitz-quiet { margin-top: 11px; }
 .blitz-run .blitz-actions { grid-template-columns: 64px 1fr; }
 .blitz-run .blitz-actions .blitz-brake { height: 52px; padding: 0; }
 .blitz-run .blitz-actions .blitz-tuck { grid-column: 2; }
+
+/* ==========================================================================
+ * THE PUBLIC BOARD
+ *
+ * The leaderboard lived as five rows inside a collapsed panel on the result
+ * screen, so the only people who saw who was winning were people who had just
+ * ridden, and only if they went looking. A daily contest that hides its
+ * standings is asking riders to care about something they cannot see.
+ * ========================================================================== */
+
+.blitz-board.blitz-fullscreen-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(18px, 5vw, 42px) clamp(16px, 5vw, 42px) clamp(22px, 6vw, 48px);
+  background: linear-gradient(180deg, rgb(5 15 16 / .96), rgb(5 15 16 / .88));
+}
+.blitz-board-head { display: flex; align-items: center; gap: 12px; }
+.blitz-board-title {
+  margin: 0;
+  color: var(--rush-ink);
+  font: 400 clamp(30px, 8vw, 46px)/1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: -.01em;
+  text-shadow: 4px 5px 0 var(--rush-keyline);
+}
+
+.blitz-board-tabs { display: flex; gap: 8px; }
+/* Qualified with .blitz-ui on purpose. A lone class is (0,1,0) and loses to
+ * `.blitz-ui button` at (0,1,1), which paints near-white - so the unselected
+ * tab came out cream on cream and could not be read. Same trap that hid TAP TO
+ * START for weeks. */
+.blitz-ui .blitz-board-tab {
+  flex: 1;
+  min-height: 46px;
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: var(--rush-paper);
+  color: var(--rush-keyline);
+  font: 400 clamp(15px, 4vw, 18px)/1 AtlasDisplay, Impact, sans-serif;
+}
+.blitz-ui .blitz-board-tab.is-current { background: var(--rush-lime); box-shadow: var(--rush-drop-tight); }
+
+.blitz-board-body {
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+  border: 3px solid var(--rush-keyline);
+  border-radius: var(--rush-radius);
+  background: var(--rush-paper);
+}
+.blitz-board-scope,
+.blitz-board-status {
+  margin: 0 0 10px;
+  color: #6d604a;
+  font: 900 11px/1.4 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .12em;
+}
+.blitz-board-empty { margin: 0; color: var(--rush-keyline); font: 600 14px/1.45 system-ui, sans-serif; }
+
+.blitz-board-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  grid-template-areas: 'rank name score' 'rank wallet time';
+  gap: 1px 10px;
+  align-items: center;
+  padding: 9px 4px;
+  border-top: 2px solid rgb(20 19 29 / .12);
+}
+.blitz-board-row:first-of-type { border-top: 0; }
+/* The three places the day actually pays. */
+.blitz-board-row.is-podium .blitz-board-rank { color: #8a5a12; }
+.blitz-board-rank { grid-area: rank; color: #6d604a; font: 400 clamp(17px, 4.6vw, 21px)/1 AtlasDisplay, Impact, sans-serif; }
+.blitz-board-name { grid-area: name; color: var(--rush-keyline); font: 900 15px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-board-wallet { grid-area: wallet; color: #6d604a; font: 700 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-board-time { grid-area: time; justify-self: end; color: #6d604a; font: 700 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-board-score { grid-area: score; justify-self: end; color: var(--rush-keyline); font: 400 clamp(17px, 4.6vw, 21px)/1 AtlasDisplay, Impact, sans-serif; font-variant-numeric: tabular-nums; }
+
+/* Wraps rather than clipping: the Nimiq lockup was running off the right edge
+ * at phone width, where it is the one mark that should never be half-shown. */
+.blitz-board-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.blitz-board-actions .blitz-board-back { flex: 1 1 140px; min-width: 140px; margin-top: 0; }
+.blitz-board-actions .blitz-powered { flex: 0 0 auto; margin-left: auto; }
