@@ -161,7 +161,7 @@ export function renderSettings(root: HTMLElement, options: SettingsOptions): voi
             el('p', { class: 'settings__installhead', text: 'NARRATION' }),
             el('p', {
               class: 'settings__installsay',
-              text: 'This app has no voice available, which happens inside some wallets and in-app browsers. Every line the narrator would read is written on the screen it belongs to, so nothing is missing. Open sface.site in Chrome or Safari to hear it.',
+              text: 'This app has no voice available, which happens inside some wallets and in-app browsers. Every line the narrator would read is written on the screen it belongs to, so nothing is missing. Open nim-rush.xyz in Chrome or Safari to hear it.',
             }),
           )
         : null,

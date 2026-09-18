@@ -19,6 +19,6 @@ Practice is available without a wallet. Ranked participation uses equal fixed
 loadouts and server-side replay verification. A browser-submitted score is not
 accepted as proof by itself.
 
-Play: https://sface.site/
+Play: https://nim-rush.xyz/
 Source: https://github.com/Iziedking/sFace
 Nimiq Mini Apps: https://nimiq.dev/mini-apps/

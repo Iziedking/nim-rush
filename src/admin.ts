@@ -1,6 +1,6 @@
 ﻿const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
 const adminRoot = document.querySelector<HTMLElement>('#admin');
-const RESOLVED_API_BASE = API_BASE || (window.location.hostname === 'sface.site' || window.location.hostname === 'www.sface.site' ? 'https://api.sface.site' : '');
+const RESOLVED_API_BASE = API_BASE || (['nim-rush.xyz', 'www.nim-rush.xyz', 'sface.site', 'www.sface.site'].includes(window.location.hostname) ? 'https://api.sface.site' : '');
 if (!adminRoot) throw new Error('Admin root is missing.');
 const root = adminRoot;
 

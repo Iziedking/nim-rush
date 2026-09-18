@@ -13,7 +13,7 @@ Every verified run is recorded as a line. The next rider down the hill races
 three of them as solid bikes, so the descent is traffic to get through rather
 than an empty time trial.
 
-[Play NIM RUSH](https://sface.site/) · [Roadmap](docs/roadmap.md) · [Rules](docs/how-nim-rush-works.md) · [Nimiq Mini Apps](https://nimiq.dev/mini-apps/)
+[Play NIM RUSH](https://nim-rush.xyz/) · [Roadmap](docs/roadmap.md) · [Rules](docs/how-nim-rush-works.md) · [Nimiq Mini Apps](https://nimiq.dev/mini-apps/)
 
 ## The game
 
