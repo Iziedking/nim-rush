@@ -203,7 +203,7 @@ jobs:
           HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
         run: |
           set -euo pipefail
-          URL="${HEALTH_URL:-https://api.sface.site/health}"
+          URL="${HEALTH_URL:-https://api.nim-rush.xyz/health}"
 
           # A deploy that finished is not a deploy that worked. Give the
           # container a moment to bind, then insist on a 200 before calling this

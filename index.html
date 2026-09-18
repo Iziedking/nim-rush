@@ -40,7 +40,7 @@
     />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-180.png" sizes="180x180" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <!-- Open Graph, so a shared challenge link is not a bare URL in a feed. -->
@@ -50,8 +50,19 @@
       property="og:description"
       content="Ride the ridge. Beat your line. Prove the run."
     />
-    <meta property="og:image" content="/icon.svg" />
-    <meta name="twitter:card" content="summary" />
+    <!--
+      Absolute and raster: X, Telegram, WhatsApp and Discord ignore a relative
+      og:image and will not render an SVG, so the old /icon.svg preview showed
+      nothing anywhere a link was pasted.
+    -->
+    <meta property="og:url" content="https://www.nim-rush.xyz/" />
+    <meta property="og:site_name" content="NIM RUSH" />
+    <meta property="og:image" content="https://www.nim-rush.xyz/og-nim-rush.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="NIM RUSH: a daily downhill race in Nimiq Pay" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://www.nim-rush.xyz/og-nim-rush.png" />
     <!--
       Preloaded, because the wordmark on the very first screen is set in it and
       a display face that arrives late makes the splash visibly reflow. Only the

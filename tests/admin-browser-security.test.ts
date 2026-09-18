@@ -13,7 +13,7 @@ describe('admin token browser handling', () => {
 
   it('uses the production API host and exposes login failures', () => {
     const source = readFileSync(new URL('../src/admin.ts', import.meta.url), 'utf8');
-    expect(source).toContain("'https://api.sface.site'");
+    expect(source).toContain("'https://api.nim-rush.xyz'");
     expect(source).toContain('Could not reach the admin API.');
     expect(source).toContain('Admin API is unavailable.');
   });
