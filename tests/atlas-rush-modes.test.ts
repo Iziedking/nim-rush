@@ -55,7 +55,23 @@ describe('free run and daily challenge', () => {
   it('keeps the arithmetic off the panel and in the rules', () => {
     expect(app).not.toMatch(/Paid to the top three/);
     expect(rules).toContain('50% / 30% / 20%');
-    expect(app).toContain('blitz-rules-link');
+    expect(app).toContain('blitz-open-rules');
+  });
+
+  it('reads the rules in the app rather than navigating away from it', () => {
+    /*
+     * Rules used to be an anchor to /docs/how-nim-rush-works.md. That file is
+     * not deployed, so production's single-page fallback answered it with
+     * index.html and a 200 - the app reloaded and the rider was dropped back on
+     * the start screen having read nothing. It only ever worked in dev, where
+     * Vite serves the repository root.
+     */
+    // The path still appears in the comment explaining this; what must not
+    // come back is anything that navigates to it.
+    expect(app).not.toMatch(/rules\.href\s*=/);
+    expect(app).not.toContain('blitz-rules-link');
+    expect(app).toContain("data-blitz-screen', 'rules'");
+    expect(app).toContain('createBlitzRulesBody');
   });
 
   /*

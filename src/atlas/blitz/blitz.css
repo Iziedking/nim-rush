@@ -2294,3 +2294,47 @@ button + .blitz-quiet { margin-top: 11px; }
   to { transform: scale(1); color: var(--rush-ink); }
 }
 @media (prefers-reduced-motion: reduce) { .blitz-nim-count.is-banked { animation: none; } }
+
+/*
+ * THE RULES, ON A SCREEN
+ *
+ * Reusing the leaderboard's frame on purpose: both are somewhere a rider goes
+ * to read rather than to ride, and a second visual language for that would be
+ * a second thing to maintain for no gain.
+ */
+.blitz-rules-screen .blitz-board-body { padding: 16px 16px 20px; }
+.blitz-rules-body { color: var(--rush-keyline); }
+.blitz-rules-body h2 {
+  margin: 20px 0 6px;
+  font: 400 clamp(19px, 5vw, 24px)/1.1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: .01em;
+}
+.blitz-rules-body h2:first-child { margin-top: 0; }
+.blitz-rules-body h3 {
+  margin: 14px 0 4px;
+  font: 900 13px/1.2 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .1em;
+}
+.blitz-rules-body p { margin: 0 0 10px; font: 500 14px/1.5 system-ui, sans-serif; }
+.blitz-rules-body strong { font-weight: 800; }
+.blitz-rules-list { margin: 0 0 12px; padding-left: 20px; font: 500 14px/1.5 system-ui, sans-serif; }
+.blitz-rules-list li { margin-bottom: 4px; }
+
+/* Tables scroll on their own rather than pushing the page sideways. */
+.blitz-rules-table {
+  display: block;
+  width: 100%;
+  margin: 0 0 14px;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font: 700 12px/1.35 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  white-space: nowrap;
+}
+.blitz-rules-table th,
+.blitz-rules-table td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 2px solid rgb(20 19 29 / .12);
+  text-align: left;
+}
+.blitz-rules-table th { color: #6d604a; font-weight: 900; letter-spacing: .1em; }
+.blitz-rules-table td { color: var(--rush-keyline); }

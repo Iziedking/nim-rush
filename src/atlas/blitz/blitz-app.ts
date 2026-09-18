@@ -27,6 +27,7 @@ import { createBlitzLobbyScreen } from './blitz-lobby-screen';
 import { createBlitzNimiqRequired } from './blitz-nimiq-required';
 import { blitzFieldPosition, blitzRivalGaps, type BlitzRivalPath } from '../../../shared/atlas/blitz/rivals';
 import { createNimiqPoweredBy, createRushLogo } from './blitz-brand';
+import { createBlitzRulesBody } from './blitz-rules';
 
 const STEP_MS = 1_000 / BLITZ_TICK_RATE;
 /* Long enough to see the bike stop and read FINISH; short enough that nobody
@@ -397,11 +398,15 @@ export class BlitzApp {
 
     // A board nobody can find is a board nobody rides for.
     command.append(button('Leaderboard', 'blitz-again blitz-open-board', () => void this.renderLeaderboard('today')));
-    const rules = node('a', 'blitz-rules-link', 'Rules');
-    rules.href = '/docs/how-nim-rush-works.md';
-    rules.target = '_blank';
-    rules.rel = 'noreferrer';
-    command.append(rules);
+    /*
+     * Rules opens a screen, not a file.
+     *
+     * This was an anchor to /docs/how-nim-rush-works.md, which is not deployed:
+     * production's single-page fallback answered it with index.html and a 200,
+     * so the app reloaded and the rider was returned to the start screen having
+     * read nothing. It only ever worked in dev, where Vite serves the repo.
+     */
+    command.append(button('Rules', 'blitz-again blitz-open-rules', () => this.renderRules()));
     const utility = node('nav', 'blitz-intro-utility');
     utility.setAttribute('aria-label', 'Game utilities');
     utility.append(button('How to ride', 'blitz-help', () => this.renderOnboarding(blitzOnboardingSeen(safeLocalStorage()) ? 1 : 0)), this.soundControl(), createNimiqPoweredBy());
@@ -967,6 +972,23 @@ export class BlitzApp {
     } catch {
       body.replaceChildren(node('p', 'blitz-board-status', 'THE BOARD IS OFFLINE. YOUR RUNS ARE STILL VERIFIED.'));
     }
+  }
+
+  /** The rules document, on screen, with a way back. */
+  private renderRules(): void {
+    this.setAudioScene('menu');
+    this.input.clearBindings();
+    this.ui.replaceChildren();
+    const screen = node('main', 'blitz-board blitz-rules-screen blitz-fullscreen-page');
+    screen.setAttribute('data-blitz-screen', 'rules');
+    const head = node('section', 'blitz-board-head');
+    head.append(createRushLogo('compact'), node('h1', 'blitz-board-title', 'HOW IT WORKS'));
+    const body = node('section', 'blitz-board-body');
+    body.append(createBlitzRulesBody());
+    const actions = node('nav', 'blitz-board-actions');
+    actions.append(button('Back', 'blitz-again blitz-board-back', () => this.renderIntro()), createNimiqPoweredBy());
+    screen.append(head, body, actions);
+    this.ui.append(screen);
   }
 
   private renderResult(state: BlitzRunState): void {
