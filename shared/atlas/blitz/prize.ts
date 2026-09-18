@@ -64,10 +64,20 @@ export interface BlitzPrizeAllocationResult {
 /**
  * How many riders make a day a race.
  *
- * Two. Not because two is a crowd, but because one is not a contest, and the
- * board's whole claim is that a place on it was taken from somebody.
+ * One. This was two, on the argument that a board's claim is that a place on
+ * it was taken from somebody. That argument held the pot back on every day
+ * nobody else turned up, which punished the rider who did turn up for the
+ * absence of the rider who did not - and a new game has a lot of those days.
+ *
+ * What makes the day a contest is now the run limit rather than the field
+ * size: one ranked run per wallet per day, scored once and kept forever. A
+ * rider cannot grind the board down, so a field of one is still a real result
+ * rather than somebody's best of twenty.
+ *
+ * Zero riders still pays nobody, which is why this is a constant and not a
+ * deleted check.
  */
-export const BLITZ_MINIMUM_FIELD = 2;
+export const BLITZ_MINIMUM_FIELD = 1;
 
 export function allocateBlitzPrizes(input: {
   readonly poolLuna: number | null;

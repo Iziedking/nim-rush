@@ -17,8 +17,8 @@ export const BLITZ_TICK_RATE = 30;
  */
 const TAKEDOWN_STEER = 0.55;
 const TAKEDOWN_SPEED_MPS = 14;
-export const TAKEDOWN_POINTS = 420;
-export const BLITZ_LIMIT_SECONDS = 90;
+export const TAKEDOWN_POINTS = 1_500;
+export const BLITZ_LIMIT_SECONDS = 120;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
 // The gates a rider can see. One list, shared with the renderer, because a
 // rider threading the gate in front of them must be the rider being scored.
@@ -219,12 +219,12 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   // spending: a slide is how a rider turns control into fuel.
   let boostEnergy = clamp(state.boostEnergy + (driftActive ? BOOST_DRIFT_REGEN : 0) - (boostActive ? BOOST_DRAIN : 0), 0, state.boostCapacity);
   let distanceMeters = Math.min(city.lengthMeters, state.distanceMeters + speedMps / BLITZ_TICK_RATE);
-  let distanceScore = Math.floor(distanceMeters * 10);
+  let distanceScore = Math.floor(distanceMeters * 1);
   let lineScore = state.lineScore;
   let controlScore = state.controlScore;
   let airtimeScore = state.airtimeScore;
   let missionScore = state.missionScore;
-  let driftScore = state.driftScore + (driftActive ? Math.max(1, Math.round(Math.abs(input.steer) * speedMps * 0.16)) : 0);
+  let driftScore = state.driftScore + (driftActive ? Math.max(1, Math.round(Math.abs(input.steer) * speedMps * 0.55)) : 0);
   let collisionPenalty = state.collisionPenalty;
   let missedGatePenalty = state.missedGatePenalty;
   let offRoadPenalty = state.offRoadPenalty;
@@ -300,7 +300,17 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
       if (!processedObstacleIds.includes(obstacle.id)) {
         processedObstacleIds.push(obstacle.id);
         collisions += 1;
-        collisionPenalty += 420;
+        /*
+         * Contacts escalate: 300 for the first, 250 more for each after it.
+         *
+         * A flat 420 treated one mistake and eight the same way per hit, which
+         * let a rider who bounced down the whole hill keep a finish bonus and
+         * a pile of near misses - weaving through the obstacle field badly
+         * scored better than holding a line through it. One contact is a
+         * mistake and stays cheap at 300. Eight is not eight mistakes, it is
+         * a way of riding, and it now costs 9,400.
+         */
+        collisionPenalty += 300 + (collisions - 1) * 250;
         // Impact removes charge as well as speed, so a collision cannot be
         // hidden behind the score penalty alone.
         boostEnergy = Math.max(0, boostEnergy - 15);
@@ -373,11 +383,18 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
       // Crossed them. Counted on the tick the lead changes hands, so sitting
       // alongside somebody cannot farm it.
       overtakes += 1;
-      distanceScore += 150;
+      distanceScore += 600;
     }
   }
 
-  distanceScore += nearMisses * 180;
+  /*
+   * A near miss is a garnish, not a strategy. At 450 it paid a rider who wove
+   * at random through the obstacle field about 4,950 a run - more racing line
+   * than a rider holding a clean line earned - because weaving past things is
+   * what produces near misses, and doing it badly produces more of them. It
+   * pays enough to notice and never enough to aim for.
+   */
+  distanceScore += nearMisses * 150;
 
   /*
    * Supplies taken off the road.
@@ -409,8 +426,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     const gateDistance = city.lengthMeters * fraction;
     if (processedFeatureIds.includes(gateId) || state.distanceMeters >= gateDistance || distanceMeters < gateDistance) continue;
     processedFeatureIds.push(gateId);
-    if (!airborne && Math.abs(laneOffset) <= city.roadWidth * rules.lineTolerance && collisions === state.collisions) lineScore += 180;
-    else missedGatePenalty += 180;
+    if (!airborne && Math.abs(laneOffset) <= city.roadWidth * rules.lineTolerance && collisions === state.collisions) lineScore += 900;
+    else missedGatePenalty += 300;
   }
   if (!airborne) heightMeters = courseGroundLift(city.id, distanceMeters, laneOffset);
 
@@ -422,7 +439,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   controlScore += missionResult.controlScore;
   airtimeScore += missionResult.airtimeScore;
   missedGatePenalty += missionResult.missedGatePenalty;
-  const timeBonus = finished ? Math.max(0, Math.floor((BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE - elapsedTicks) / BLITZ_TICK_RATE) * 100) : 0;
+  const timeBonus = finished ? Math.max(0, Math.floor((BLITZ_LIMIT_SECONDS * BLITZ_TICK_RATE - elapsedTicks) / BLITZ_TICK_RATE) * 150) : 0;
   if (!lastEvent && driftActive && Math.abs(lateralVelocityMps) >= surfaceProfile.skidThreshold) lastEvent = { type: 'skid', tick: state.tick + 1, intensity: clamp(Math.abs(lateralVelocityMps) / 10, 0.35, 1), surface };
   if (!lastEvent && state.boostActive !== boostActive) lastEvent = { type: boostActive ? 'boost-start' : 'boost-end', tick: state.tick + 1, intensity: 1, surface };
   return withScore({

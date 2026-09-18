@@ -125,7 +125,16 @@ export function createAtlasBlitzService(options: {
   const randomId = options.randomId ?? (() => randomBytes(16).toString('hex'));
   const tickets = new Map<string, StoredTicket>();
   const runs = new Map<string, { row: StoredRow; fingerprint: string }>();
-  const best = new Map<string, StoredRow>();
+  /*
+   * The one ranked run each wallet posted, per city, per day.
+   *
+   * This was the rider's BEST run and the board took the lowest of however
+   * many they rode. That made the daily challenge a grind: ride it twenty
+   * times, keep the good one, and the board measured patience rather than a
+   * descent. It is now the FIRST verified run and it is never replaced, so
+   * the score a rider posts is the score they live with for that day.
+   */
+  const posted = new Map<string, StoredRow>();
   const qualificationOutbox = new Map<string, BlitzQualificationOutboxItem>();
   const usernameWallet = new Map<string, { walletAddress: string; display: string }>();
   const walletUsername = new Map<string, string>();
@@ -199,6 +208,17 @@ export function createAtlasBlitzService(options: {
         bindUsername(input.seasonId, input.walletAddress, username);
         const issuedAt = now();
         const challenge = getBlitzDailyChallenge({ now: issuedAt, cityId: input.cityId, seasonId: input.seasonId });
+        /*
+         * One ranked run per wallet per day.
+         *
+         * Refused here rather than at submission because the alternative is
+         * letting somebody ride a full two minutes and then telling them it
+         * never counted. The submit path checks again, since two tickets can
+         * be issued before either is used.
+         */
+        if (posted.has(postedKey({ seasonId: input.seasonId, cityId: input.cityId, challengeId: challenge.challengeId, walletAddress: input.walletAddress }))) {
+          throw new AtlasBlitzError('duplicate', 'This wallet has already posted a ranked run today.');
+        }
         const ticket: BlitzTicket = {
           id: randomId(), actorId: input.actorId, walletAddress: input.walletAddress, username,
           cityId: input.cityId, seasonId: input.seasonId, challengeId: challenge.challengeId,
@@ -245,6 +265,17 @@ export function createAtlasBlitzService(options: {
         }
         if (ticket.usedByRunId && ticket.usedByRunId !== input.runId) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket has already been used.');
         /*
+         * The authoritative half of the one-run-a-day rule. Issuance refuses
+         * early for the rider's sake; this refuses for the board's, because
+         * two tickets issued back to back would both pass that check. A
+         * resubmission of the same run never reaches here: it is answered as
+         * idempotent by run id above, which is what keeps the saved-run
+         * recovery working.
+         */
+        if (posted.has(postedKey({ seasonId: input.seasonId, cityId: input.cityId, challengeId: ticket.challengeId, walletAddress: input.walletAddress }))) {
+          throw new AtlasBlitzError('duplicate', 'This wallet has already posted a ranked run today.');
+        }
+        /*
          * Verified against the pack the ticket was issued with.
          *
          * A solid rival changes the physics, so replaying this run without the
@@ -273,9 +304,11 @@ export function createAtlasBlitzService(options: {
         runs.set(input.runId, { row, fingerprint });
         // The line this rider drew becomes somebody else's rival.
         rememberRivalPath(ticket.challengeId, blitzRivalPathFrom({ runId: input.runId, username: input.username, positions }), replay.score);
-        const key = bestKey(row);
-        const current = best.get(key);
-        if (!current || compareRows(row, current) < 0) best.set(key, row);
+        const key = postedKey(row);
+        // First wins. Never replaced, even by a better run: the submit guard
+        // above should have refused a second run, and if one ever reaches
+        // here the rider's original score is the one that stands.
+        if (!posted.has(key)) posted.set(key, row);
         if (options.daily) {
           const qualificationId = `${input.runId}:blitz-ranked`;
           if (!qualificationOutbox.has(qualificationId)) qualificationOutbox.set(qualificationId, {
@@ -471,7 +504,7 @@ export function createAtlasBlitzService(options: {
     if (!raw || typeof raw !== 'object' || ![1, 2].includes((raw as { version?: unknown }).version as number)) throw new AtlasBlitzError('invalid', 'Beacon Blitz snapshot is unsupported.');
     const snapshot = raw as AtlasBlitzSnapshot & { version: 1 | 2 };
     if (!Array.isArray(snapshot.tickets) || !Array.isArray(snapshot.runs) || !Array.isArray(snapshot.usernames)) throw new AtlasBlitzError('invalid', 'Beacon Blitz snapshot is malformed.');
-    tickets.clear(); runs.clear(); best.clear(); usernameWallet.clear(); walletUsername.clear(); qualificationOutbox.clear();
+    tickets.clear(); runs.clear(); posted.clear(); usernameWallet.clear(); walletUsername.clear(); qualificationOutbox.clear();
     /*
      * Rivals survive the restart too. Losing them would empty every pack for
      * the rest of the day and quietly turn the race back into a time trial -
@@ -489,9 +522,12 @@ export function createAtlasBlitzService(options: {
     for (const stored of snapshot.runs) {
       const upgraded = { row: upgradeRow(stored.row), fingerprint: stored.fingerprint };
       runs.set(upgraded.row.runId, structuredClone(upgraded));
-      const key = bestKey(upgraded.row);
-      const current = best.get(key);
-      if (!current || compareRows(upgraded.row, current) < 0) best.set(key, structuredClone(upgraded.row));
+      const key = postedKey(upgraded.row);
+      // Snapshots written before the one-run-a-day rule can hold several rows
+      // for one wallet and day. Keep the earliest verified one, which is the
+      // run that rule would have kept.
+      const current = posted.get(key);
+      if (!current || upgraded.row.verifiedAt < current.verifiedAt) posted.set(key, structuredClone(upgraded.row));
     }
     for (const item of snapshot.usernames) {
       usernameWallet.set(`${item.seasonId}:${item.normalized}`, { walletAddress: item.walletAddress, display: item.display });
@@ -520,13 +556,13 @@ export function createAtlasBlitzService(options: {
   async function rankedRow(row: StoredRow): Promise<BlitzLeaderboardRow> {
     const found = (await ranked(row.seasonId, row.cityId, row.challengeId)).find((candidate) => candidate.runId === row.runId);
     if (found) return found;
-    const bestForWallet = best.get(bestKey(row));
-    const rank = bestForWallet ? (await ranked(row.seasonId, row.cityId, row.challengeId)).find((candidate) => candidate.walletAddress === row.walletAddress)?.rank ?? 0 : 0;
+    const postedForWallet = posted.get(postedKey(row));
+    const rank = postedForWallet ? (await ranked(row.seasonId, row.cityId, row.challengeId)).find((candidate) => candidate.walletAddress === row.walletAddress)?.rank ?? 0 : 0;
     return { ...row, rank };
   }
 
   function ranked(seasonId: string, cityId: BlitzCityId, challengeId?: string): BlitzLeaderboardRow[] {
-    const rows = [...best.values()].filter((row) => row.seasonId === seasonId && row.cityId === cityId && (challengeId === undefined || row.challengeId === challengeId)).sort(compareRows);
+    const rows = [...posted.values()].filter((row) => row.seasonId === seasonId && row.cityId === cityId && (challengeId === undefined || row.challengeId === challengeId)).sort(compareRows);
     let previous: StoredRow | null = null;
     return rows.map((row, index) => {
       const rank = previous && equalRank(row, previous) ? index : index + 1;
@@ -578,7 +614,7 @@ function equalRank(left: StoredRow, right: StoredRow): boolean {
   return left.score === right.score && left.elapsedMs === right.elapsedMs && left.collisions === right.collisions;
 }
 
-function bestKey(row: Pick<StoredRow, 'seasonId' | 'cityId' | 'walletAddress' | 'challengeId'>): string {
+function postedKey(row: Pick<StoredRow, 'seasonId' | 'cityId' | 'walletAddress' | 'challengeId'>): string {
   return `${row.seasonId}:${row.cityId}:${row.challengeId}:${row.walletAddress}`;
 }
 

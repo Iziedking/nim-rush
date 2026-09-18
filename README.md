@@ -2,9 +2,13 @@
 
 [![NIM RUSH checks](https://github.com/Iziedking/sFace/actions/workflows/ci.yml/badge.svg)](https://github.com/Iziedking/sFace/actions/workflows/ci.yml)
 
-NIM RUSH is a daily downhill race inside Nimiq Pay. One city, 1.9 km, 90
-seconds. Your wallet signs the run, the server re-simulates it from your input
-trace, and the day's top three split a funded Nimiq mainnet pool.
+NIM RUSH is a daily downhill race inside Nimiq Pay. One city, 1.9 km, 120
+seconds, one run. Your wallet signs it, the server re-simulates it from your
+input trace, and the day's top three split a funded Nimiq mainnet pool.
+
+You ride today's course once. The score you post is your score for that day,
+kept forever, so the board measures a descent rather than how many attempts
+you had time for.
 
 Every verified run is recorded as a line. The next rider down the hill races
 three of them as solid bikes, so the descent is traffic to get through rather
@@ -14,8 +18,9 @@ than an empty time trial.
 
 ## The game
 
-A run is one descent of a city course: about 1.9 km, 90 seconds, no laps and no
-second chance inside it. The bike does not hold its own speed, so the whole run
+A run is one descent of a city course: about 1.9 km, 120 seconds, no laps and
+no second chance inside it, and on the daily challenge no second attempt at
+it either. The bike does not hold its own speed, so the whole run
 is a series of decisions about how much of it you can afford to carry.
 
 The loop is:
@@ -41,9 +46,13 @@ funded pool pays out on. Rules are fixed here: the Rookie/Pro chooser applies
 to free runs and private lobbies only, because a ranked board on which riders
 picked their own difficulty would not be a board.
 
-A day needs a field. Until two different wallets have posted a verified run,
-the day is not a race, so the pool pays nothing and stays whole rather than
-handing a prize to the only person who turned up.
+One ranked run per wallet per day. Once your run is verified it is your score
+for that day and the board will not issue you another ticket, so nobody grinds
+a place by riding until they like the number.
+
+That is what lets the day settle on whoever turned up. The pool used to hold
+until a second wallet posted, which charged the rider who showed up for the
+absence of one who did not. Places nobody took are not paid out.
 
 **Private lobbies.** Open a lobby, send the link, and the first seven riders
 through the door are the field. First come, first served, free to enter. The
@@ -69,9 +78,9 @@ spends a gearbox and buys a slide. Boost spends nitro.
 Steering is not optional. A rider who holds the centre line and touches nothing
 else does not finish: they stall against the traffic at around 895 m of 1,900,
 whatever they do with the throttle. Pick a line through the obstacles and the
-same course comes in around 71 seconds of the 90 - about twenty seconds of
-margin, which is the room you have to spend on going faster rather than on
-getting down at all.
+same course comes in around 71 seconds of the 120. The rest is not spare time,
+it is score: the finish bonus pays 150 a second for every second you did not
+need, which is the largest single thing a good descent earns.
 
 Braking into a corner and tucking out of it is faster than holding one position
 through both. That is the skill the course is built to reward.
@@ -89,8 +98,9 @@ into speed and makes control worth spending.
 
 ## The pack
 
-You do not ride alone. Every verified run records the line it drew, and the
-next rider's ticket pins three of them. They ride as solid bikes: you can be
+The hill fills as the day does. Every verified run records the line it drew,
+and the next rider's ticket pins three of them, so the first rider of a new
+course has it to themselves and everybody after them has company. They ride as solid bikes: you can be
 held up behind one, squeeze past on the inside, and put a shoulder in going
 through.
 
@@ -144,8 +154,14 @@ number:
 - collision penalties
 - missed-gate penalties
 
-A contact costs points, drains fifteen nitro and cuts your speed to a third, so
-it is paid for twice.
+Distance pays one point a metre, so reaching the bottom is a floor of about
+1,900 rather than the score. The rest is finish time at 150 a second under the
+limit, 900 a route gate held, 700 to 1,400 a contract, 1,500 a takedown, and
+drift by angle and speed.
+
+Contacts escalate: 300 for the first and 250 more for each after it, so one
+mistake is cheap and flailing down the hill is not. A contact also drains
+fifteen nitro and cuts your speed to a third, so it is paid for twice.
 
 ## Rider levels
 

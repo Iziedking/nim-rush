@@ -317,8 +317,19 @@ describe('a prize needs a field', () => {
   const settle = (candidates: BlitzPrizeCandidate[]) =>
     withMinimumField(split(candidates), { poolLuna: 100_000, riders: field(candidates) });
 
-  it('pays nothing to a field of one and keeps the whole pot named', () => {
+  it('pays the field of one, and names the places nobody took', () => {
+    // This used to hold the whole pot back until a second wallet posted. That
+    // charged the rider who turned up for the absence of one who did not, and
+    // a new game has a lot of days like that. One ranked run per wallet per
+    // day is what keeps a field of one honest.
     const result = settle([rider('NQ01', 9_000)]);
+    expect(result.allocations).toHaveLength(1);
+    expect(result.allocations[0]!.luna).toBe(50_000);
+    expect(result.remainderLuna).toBe(50_000);
+  });
+
+  it('pays nobody on a day nobody rode', () => {
+    const result = settle([]);
     expect(result.allocations).toEqual([]);
     expect(result.remainderLuna).toBe(100_000);
   });
@@ -329,15 +340,20 @@ describe('a prize needs a field', () => {
     expect(result.allocations[0]!.luna).toBeGreaterThan(result.allocations[1]!.luna);
   });
 
-  it('counts wallets, not runs, so one rider cannot make their own field', () => {
+  it('counts wallets, not runs, so one rider cannot take two places', () => {
+    // This matters more now that a field of one pays: if two rows from one
+    // wallet could hold first and second, a single rider would collect 80% of
+    // a day they rode alone.
     const twice = [rider('NQ01', 9_000), { ...rider('NQ01', 8_000), runId: 'run-second' }];
-    expect(settle(twice).allocations).toEqual([]);
-    expect(settle(twice).remainderLuna).toBe(100_000);
+    const result = settle(twice);
+    expect(result.allocations).toHaveLength(1);
+    expect(result.allocations[0]!.walletAddress).toBe('NQ01');
   });
 
   it('leaves the split itself alone, which still has a right answer for one', () => {
-    // The arithmetic and the policy are deliberately separable: a field of one
-    // still has a first place, it just does not get paid today.
+    // The arithmetic and the policy stay separable. The split has always had a
+    // right answer for a field of one; the policy is only whether a day with
+    // that few riders settles at all, and now it does.
     expect(split([rider('NQ01', 9_000)]).allocations).toHaveLength(1);
   });
 });

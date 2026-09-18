@@ -6,8 +6,12 @@ four sentences after every single run and still had nowhere to look things up.
 
 ## The descent
 
-A run is one city, about 1.9 km, with a 90 second limit. There is no lap and no
-second chance inside a run: you get down the hill once.
+A run is one city, about 1.9 km, with a 120 second limit. There is no lap and
+no second chance inside a run: you get down the hill once.
+
+On the daily challenge there is no second chance at the run either. Each wallet
+rides today's course once, and that verified score is the one it keeps for the
+day, permanently.
 
 ## Riding position
 
@@ -39,9 +43,29 @@ the fuel you finish with.
 
 ## Scoring
 
-Points come from the racing line, finish time, airtime and landings, contracts,
-and drift. Contacts and missed gates take points away. A contact also drains 15
-nitro and cuts your speed to a third, so it costs the run twice.
+Distance pays one point a metre, so getting to the bottom is a floor of about
+1,900 and not a score. Everything above that is ridden for:
+
+| Earns | Worth |
+| --- | --- |
+| Each second you finish under the limit | 150 |
+| Holding the line through a route gate | 900 |
+| Clearing a contract | 700 to 1,400 |
+| Putting a rival down | 1,500 |
+| Passing a rival | 600 |
+| Drifting | by angle and speed, while the slide lasts |
+
+Missing a gate costs 300, and a near miss pays 150 — enough to notice, never
+enough to aim for.
+
+Contacts escalate: 300 for the first, 250 more for each after it. One contact
+is a mistake and stays cheap. Eight is not eight mistakes, it is a way of
+riding, and it costs 9,400. A contact also drains 15 nitro and cuts your speed
+to a third, so it is paid for twice over.
+
+Distance used to pay ten a metre, which meant 19,000 of a run's score came from
+arriving at the bottom however you got there. A rider who held a control and
+weaved scored 6,599; the same input now scores 130.
 
 ## Contracts
 

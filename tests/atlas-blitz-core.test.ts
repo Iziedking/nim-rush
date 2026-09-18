@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLITZ_TICK_RATE, createBlitzRun, getBlitzScoreBreakdown, sampleBlitzRoute, stepBlitzRun } from '../shared/atlas/blitz/core';
+import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, getBlitzScoreBreakdown, sampleBlitzRoute, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { BLITZ_CITIES, nextBlitzCity } from '../shared/atlas/blitz/cities';
 import { selectBlitzMissions } from '../shared/atlas/blitz/missions';
 import type { BlitzInput, BlitzRunState } from '../shared/atlas/blitz/types';
@@ -214,7 +214,7 @@ describe('Beacon Blitz deterministic arcade core', () => {
 
   it('times out a rider who stays off the racing line', () => {
     let state = createBlitzRun({ cityId: 'dubai', seed: 'timeout' });
-    for (let tick = 0; tick < BLITZ_TICK_RATE * 94 && state.phase !== 'timeout' && state.phase !== 'finished'; tick += 1) {
+    for (let tick = 0; tick < BLITZ_TICK_RATE * (BLITZ_LIMIT_SECONDS + 4) && state.phase !== 'timeout' && state.phase !== 'finished'; tick += 1) {
       state = stepBlitzRun(state, { steer: 1, drift: false, boost: false });
     }
     expect(state.phase).toBe('timeout');

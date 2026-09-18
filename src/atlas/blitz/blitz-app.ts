@@ -292,7 +292,7 @@ export class BlitzApp {
      * once; giving each of them a bordered card made three objects out of one
      * sentence and turned the top of the panel into furniture.
      */
-    const meta = node('p', 'blitz-trail-meta', `DROP 01 · LAGOS · 1.9 KM · 90 SEC · RESETS\u00a0${formatUtcTime(daily.expiresAt)}`);
+    const meta = node('p', 'blitz-trail-meta', `DROP 01 · LAGOS · 1.9 KM · ${BLITZ_LIMIT_SECONDS} SEC · RESETS\u00a0${formatUtcTime(daily.expiresAt)}`);
 
     const command = node('section', 'blitz-intro-command');
     command.setAttribute('aria-label', 'Start a run');
@@ -832,7 +832,17 @@ export class BlitzApp {
     // The same separator the trail data above uses. A slash between three
     // facts reads as a machine listing them rather than a run being described.
     resultHero.append(node('p', 'blitz-result-time', ledgerLine.join(' · ')));
-    resultHero.append(node('p', 'blitz-result-best', best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
+    /*
+     * A zero is not a personal best.
+     *
+     * The score floors at zero, and a rider who bounced down the hill can land
+     * there with a first run behind them and be congratulated for it. Nothing
+     * is the one score that never deserves the line, so it says what happened
+     * instead.
+     */
+    resultHero.append(node('p', 'blitz-result-best', state.score === 0
+      ? 'NO SCORE. THE CONTACTS TOOK IT ALL.'
+      : best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
     primary.append(resultHero, this.resultContracts(state));
     screen.append(primary);
     const ledger = node('section', 'blitz-result-ledger');
@@ -1216,13 +1226,10 @@ export class BlitzApp {
        */
       if (table.qualifiedRiders < BLITZ_MINIMUM_FIELD) {
         /*
-         * A funded pot with one rider on it is not a prize, it is a withdrawal
-         * waiting to happen, so the pool says what the day is short of rather
-         * than dangling a number nobody can win yet.
+         * Nobody has ridden. There is no standing to show and no shortfall to
+         * explain, so the pool says the pot is there and open.
          */
-        host.append(node('p', 'blitz-pool-note', table.qualifiedRiders === 0
-          ? 'Nobody has ridden today. Two riders make it a race.'
-          : 'One rider so far. The day pays out once a second rider posts a verified run.'));
+        host.append(node('p', 'blitz-pool-note', 'Nobody has ridden today. First run takes the board.'));
       } else if (table.allocations.length === 0) {
         host.append(node('p', 'blitz-pool-note', 'First place open.'));
       } else {

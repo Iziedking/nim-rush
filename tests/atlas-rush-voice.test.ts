@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBlitzRun } from '../shared/atlas/blitz/core';
+import { BLITZ_LIMIT_SECONDS, createBlitzRun } from '../shared/atlas/blitz/core';
 import { BlitzVoice, blitzCallout } from '../src/atlas/blitz/blitz-callouts';
 import type { BlitzRunState } from '../shared/atlas/blitz/types';
 
@@ -36,11 +36,11 @@ describe('the race voice', () => {
   });
 
   it('calls the clock once, on the way past ten seconds', () => {
-    const before = run({ phase: 'running', elapsedMs: 79_000 });
-    const after = run({ phase: 'running', elapsedMs: 80_500 });
+    const before = run({ phase: 'running', elapsedMs: (BLITZ_LIMIT_SECONDS - 11) * 1_000 });
+    const after = run({ phase: 'running', elapsedMs: (BLITZ_LIMIT_SECONDS - 9.5) * 1_000 });
     expect(blitzCallout(before, after)?.id).toBe('ten');
     // Already past it: not again on every tick that follows.
-    expect(blitzCallout(after, run({ phase: 'running', elapsedMs: 82_000 }))).toBeNull();
+    expect(blitzCallout(after, run({ phase: 'running', elapsedMs: (BLITZ_LIMIT_SECONDS - 8) * 1_000 }))).toBeNull();
   });
 
   /*

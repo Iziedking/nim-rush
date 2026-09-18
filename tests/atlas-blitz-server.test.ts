@@ -34,10 +34,10 @@ describe('Beacon Blitz verified competition service', () => {
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     expect(ticket).toMatchObject({ id: 'ticket-a', cityId: 'lagos', seasonId: 'season-1', username: 'Sface' });
     expect(ticket).toMatchObject({
-      challengeId: 'season-1:lagos:1970-01-01:rush-missions-v5-rookie',
+      challengeId: 'season-1:lagos:1970-01-01:rush-skill-v8-rookie',
       challengeDate: '1970-01-01',
-      rulesetVersion: 'rush-missions-v5-rookie',
-      seed: 'season-1:lagos:1970-01-01:rush-missions-v5-rookie',
+      rulesetVersion: 'rush-skill-v8-rookie',
+      seed: 'season-1:lagos:1970-01-01:rush-skill-v8-rookie',
     });
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletB, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' })).rejects.toThrow(/wallet binding/i);
   });
@@ -50,11 +50,21 @@ describe('Beacon Blitz verified competition service', () => {
     const trace = await completeTrace('lagos', ticket.seed, ticket.rivals);
     current += trace.elapsedMs + 3_000;
     const input = { runId: 'run-a', ticketId: ticket.id, actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos' as const, seasonId: 'season-1', seed: ticket.seed, frames: trace.frames, traceHash: trace.hash, claimedScore: trace.score };
+    /*
+     * Tampering is checked first, while this wallet still has no row for the
+     * day. One ranked run per wallet per day would otherwise refuse the second
+     * submission before the replay ever ran, and the tamper assertion would
+     * pass for the wrong reason. A refused submit does not consume the ticket,
+     * so the honest run below still uses it.
+     */
+    await expect(service.submit({ ...input, runId: 'run-tamper', claimedScore: trace.score + 1 })).rejects.toThrow(/score/i);
     const accepted = await service.submit(input);
     expect(accepted.row).toMatchObject({ rank: 1, verified: true, username: 'Sface', walletAddress: walletA, score: trace.score });
     expect((await service.submit(input)).duplicate).toBe(true);
-    const second = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
-    await expect(service.submit({ ...input, runId: 'run-b', ticketId: second.id, claimedScore: trace.score + 1 })).rejects.toThrow(/score/i);
+    // Today is ridden once. The board will not issue a second ticket, so a
+    // rider cannot ride until they like the number and keep that one.
+    await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' }))
+      .rejects.toThrow(/already posted/i);
   });
 
   it('keeps one username per wallet and ranks by score then time and collisions', async () => {
@@ -241,10 +251,16 @@ describe('what the board would owe if it closed now', () => {
    * nobody is not a competition, so the pot is held whole rather than handed
    * to the only person who showed up.
    */
-  it('holds the whole pot when only one rider entered', async () => {
+  it('pays the only rider who turned up, and keeps the places nobody took', async () => {
+    // A day used to hold the whole pot until a second wallet posted, which
+    // charged the rider who showed up for the absence of one who did not. One
+    // ranked run per wallet per day is what makes a field of one a real
+    // result, so first place pays and the unclaimed places stay put.
     const table = await boardOf(pool(10_000), [1]);
     expect(table.qualifiedRiders).toBe(1);
-    expect(table.allocations).toEqual([]);
-    expect(table.remainderLuna).toBe(10_000);
+    expect(table.allocations).toHaveLength(1);
+    expect(table.allocations[0]?.rank).toBe(1);
+    expect(table.allocations[0]?.luna).toBe(5_000);
+    expect(table.remainderLuna).toBe(5_000);
   });
 });
