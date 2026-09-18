@@ -29,10 +29,21 @@ export class BlitzInputController {
   }
 
   bindSteering(zone: HTMLElement, thumb: HTMLElement): void {
+    /*
+     * A stick that centres wherever the thumb lands, not a slider.
+     *
+     * Steer used to be read as the absolute x of the finger inside a 200px
+     * card, while the thumb graphic only ever moved 42px - so the affordance
+     * and the mapping disagreed, and a rider had to find the middle of a
+     * control they could not see under their own hand before they could go
+     * straight. Measuring from where the finger landed means the middle is
+     * always under the thumb, which is how every stick on a phone works.
+     */
+    let originX = 0;
+    let travel = 48;
     const update = (event: PointerEvent) => {
       if (event.pointerId !== this.steeringPointer) return;
-      const bounds = zone.getBoundingClientRect();
-      const raw = clamp(((event.clientX - bounds.left) / Math.max(1, bounds.width) - 0.5) * 2, -1, 1);
+      const raw = clamp((event.clientX - originX) / travel, -1, 1);
       /*
        * Quantised to three decimals, here, before the simulation ever sees it.
        *
@@ -43,7 +54,7 @@ export class BlitzInputController {
        * later would make two different runs hash the same.
        */
       this.steer = Math.round(raw * 1_000) / 1_000;
-      thumb.style.transform = `translateX(${Math.round(this.steer * 42)}px)`;
+      thumb.style.transform = `translateX(${Math.round(this.steer * travel)}px)`;
     };
     const down = (event: PointerEvent) => {
       // Before anything else: iOS will otherwise start its own long-press,
@@ -51,6 +62,10 @@ export class BlitzInputController {
       event.preventDefault();
       if (this.steeringPointer !== null) return;
       this.steeringPointer = event.pointerId;
+      // Full lock is a third of the pad either way, so a thumb reaches it
+      // without lifting, and the stick recentres on every fresh press.
+      travel = Math.max(34, Math.round(zone.getBoundingClientRect().width * 0.33));
+      originX = event.clientX;
       update(event);
       /*
        * Capture is a nicety, and it is attempted last on purpose. WebKit throws

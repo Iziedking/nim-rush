@@ -2007,3 +2007,60 @@ button + .blitz-quiet { margin-top: 11px; }
   font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .12em;
 }
+
+/* ==========================================================================
+ * GIVE THE ROAD BACK
+ *
+ * Measured on a 390px phone, the control cluster was about 362 x 132px sitting
+ * on a 34px safe-area inset, with the supply rack above it - so the bottom
+ * ~190px of an 844px screen was furniture, and all of it sat over the one part
+ * of the trail a rider is reading. The buttons were also the only region of the
+ * screen that took a touch at all, so there was no way to make them smaller by
+ * moving them out of the way.
+ *
+ * The steer pad shrinks hardest because it no longer needs width to be usable:
+ * it reads from where the thumb lands rather than from an absolute position
+ * inside the card, so a wide card bought nothing but occlusion.
+ * ========================================================================== */
+
+.blitz-run .blitz-controls {
+  /* A fixed pad and everything else to the right of it. The pad used to be a
+   * fraction of the width, which is why it grew to half the screen. */
+  grid-template-columns: 118px 1fr;
+  gap: 10px;
+}
+.blitz-run .blitz-steer-zone {
+  justify-self: start;
+  width: 118px;
+  height: 118px;
+  padding: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  /* A round pad, because it is a stick now. The old 200px card read as a
+   * slider with a middle you had to find, and the thumb it drew only ever
+   * travelled 42px of it. */
+  border-radius: 50%;
+}
+.blitz-run .blitz-steer-zone > span { font-size: 9px; letter-spacing: .16em; }
+.blitz-run .blitz-steer-rail { width: 82px; margin: 0 auto; }
+.blitz-run .blitz-actions { width: min(252px, 100%); gap: 7px; }
+.blitz-run .blitz-actions .blitz-control {
+  height: 52px;
+  padding: 0 5px;
+  font-size: clamp(13px, 3.4vw, 16px);
+}
+/* The supply rack follows the shorter cluster down instead of floating over
+ * the trail where the old one used to end. */
+.blitz-run .blitz-boost-wrap {
+  bottom: max(118px, calc(env(safe-area-inset-bottom) + 104px));
+  width: 94px;
+}
+
+@media (max-height: 670px) {
+  .blitz-run .blitz-controls { grid-template-columns: 100px 1fr; }
+  .blitz-run .blitz-steer-zone { width: 100px; height: 100px; }
+  .blitz-run .blitz-steer-rail { width: 68px; }
+  .blitz-run .blitz-actions .blitz-control { height: 46px; }
+  .blitz-run .blitz-boost-wrap { bottom: max(104px, calc(env(safe-area-inset-bottom) + 92px)); }
+}

@@ -31,7 +31,7 @@ describe('Beacon Blitz public arcade experience', () => {
     const onboarding = readFileSync(new URL('../src/atlas/blitz/blitz-onboarding.ts', import.meta.url), 'utf8');
     expect(onboarding).toContain('THE JOB');
     expect(onboarding).toContain('THE RIDE');
-    expect(onboarding).toContain('THE CHECKS');
+    expect(onboarding).toContain('THE CONTRACTS');
     expect(app).toContain('renderOnboarding');
     expect(app).toContain('blitzOnboardingSeen');
     // Nimiq is the way in: the landing asks for the signature first and says
@@ -280,17 +280,40 @@ describe('Beacon Blitz public arcade experience', () => {
 describe('the Beacon Blitz opening', () => {
   const onboarding = readFileSync(new URL('../src/atlas/blitz/blitz-onboarding.ts', import.meta.url), 'utf8');
 
-  it('is three beats, in the order a person needs them', () => {
-    const order = ['THE JOB', 'THE RIDE', 'THE CHECKS'].map((kicker) => onboarding.indexOf(kicker));
+  it('is five beats, in the order a person needs them', () => {
+    /*
+     * THE CHECKS used to sit at the end, describing a forking road with a right
+     * and a wrong gate. That mechanic was removed long enough ago that
+     * activeRelay is hardcoded null - so the only thing teaching a new player
+     * what this game is was teaching them a game that did not exist, and
+     * nothing here said so. It is contracts and the board now, which is what
+     * the run actually asks of somebody.
+     */
+    const order = ['THE JOB', 'THE RIDE', 'THE SUPPLIES', 'THE CONTRACTS', 'THE BOARD']
+      .map((kicker) => onboarding.indexOf(kicker));
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order]).toEqual([...order].sort((a, b) => a - b));
+    expect(onboarding).not.toContain('THE CHECKS');
+  });
+
+  it('explains the parts of the game a player has to act on', () => {
+    // A beat that does not name the clock, the cost of a control, the contracts
+    // or how a rank is earned leaves a player to find all of it by losing.
+    expect(onboarding).toContain('Two minutes');
+    expect(onboarding).toContain('TUCK');
+    expect(onboarding).toContain('BRAKE');
+    expect(onboarding).toContain('BOOST');
+    expect(onboarding).toContain('DRIFT');
+    expect(onboarding).toContain('Three jobs on the way down');
+    expect(onboarding).toContain('re-ridden by the server');
+    expect(onboarding).toContain('real NIM on Nimiq mainnet');
   });
 
   it('draws its own pictures rather than shipping generated art', () => {
     // Authored geometry, in the game's own flat-shape language. Every beat is
     // an inline SVG in this module; nothing loads an image.
     expect(onboarding).not.toMatch(/<img|\.png|\.jpg|\.jpeg|\.webp/);
-    expect((onboarding.match(/<svg /g) ?? []).length).toBe(4);
+    expect((onboarding.match(/<svg /g) ?? []).length).toBe(5);
   });
 
   it('can always be left, and is only shown once', () => {
@@ -313,7 +336,7 @@ describe('the Beacon Blitz opening', () => {
   });
 
   it('every beat carries a described picture for a screen reader', () => {
-    expect((onboarding.match(/role="img"/g) ?? []).length).toBe(4);
+    expect((onboarding.match(/role="img"/g) ?? []).length).toBe(5);
     expect((onboarding.match(/aria-label="[^"]{12,}"/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 });

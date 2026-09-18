@@ -15,7 +15,7 @@
  * flat-shape language as the game itself. Nothing is generated.
  */
 
-export type BlitzOnboardingBeatId = 'job' | 'controls' | 'supplies' | 'checks';
+export type BlitzOnboardingBeatId = 'job' | 'controls' | 'supplies' | 'contracts' | 'board';
 
 export interface BlitzOnboardingBeat {
   readonly id: BlitzOnboardingBeatId;
@@ -153,57 +153,86 @@ const CONTROLS_ART = `
  * the whole game in one picture, which is why it is the beat that comes last
  * and the only one that shows a wrong answer.
  */
-const CHECKS_ART = `
-<svg viewBox="0 0 320 170" role="img" aria-label="A relay gate forking the road into a safe route and a wrong one" focusable="false">
-  <path d="M160 168 L160 104" stroke="${ROAD}" stroke-width="46" stroke-linecap="butt"/>
-  <path d="M160 108 C 150 78, 108 60, 58 50" fill="none" stroke="${ROAD}" stroke-width="34" stroke-linecap="round"/>
-  <path d="M160 108 C 170 78, 212 60, 262 50" fill="none" stroke="${ROAD}" stroke-width="34" stroke-linecap="round"/>
-  <path d="M160 168 L160 112" stroke="${DIM}" stroke-width="3" stroke-dasharray="10 12" opacity=".8"/>
-  <g>
-    <path d="M160 108 C 150 78, 108 60, 58 50" fill="none" stroke="${CYAN}" stroke-width="4" stroke-linecap="round" opacity=".95"/>
-    <rect x="18" y="24" width="80" height="30" rx="9" fill="${ROAD}" stroke="${CYAN}" stroke-width="3"/>
-    <path d="M36 39 L45 48 L62 30" fill="none" stroke="${CYAN}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+/*
+ * Three contracts along the descent: one cleared, one live, one still ahead.
+ *
+ * This replaces a picture of a forking road with a right and a wrong gate - a
+ * relay mechanic that was removed so long ago that `activeRelay` is hardcoded
+ * null, and `relayChoice` is validated on every frame and never read. The
+ * onboarding was teaching a game that no longer existed.
+ */
+const CONTRACTS_ART = `
+<svg viewBox="0 0 320 170" role="img" aria-label="Three contract cards along the road, the first cleared, the second live" focusable="false">
+  <path d="M10 152 C 104 152, 124 62, 312 40" fill="none" stroke="${ROAD}" stroke-width="30" stroke-linecap="round"/>
+  <path d="M10 152 C 104 152, 124 62, 312 40" fill="none" stroke="${DIM}" stroke-width="2" stroke-dasharray="9 13" opacity=".85"/>
+  <g transform="translate(20 96)">
+    <rect x="0" y="0" width="80" height="36" rx="9" fill="${ROAD}" stroke="${CYAN}" stroke-width="3"/>
+    <path d="M14 19 L22 27 L39 9" fill="none" stroke="${CYAN}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="48" y="13" width="20" height="4" rx="2" fill="${DIM}"/>
+    <rect x="48" y="22" width="13" height="4" rx="2" fill="${DIM}"/>
   </g>
-  <g opacity=".62">
-    <rect x="222" y="24" width="80" height="30" rx="9" fill="${ROAD}" stroke="${DIM}" stroke-width="3"/>
-    <path d="M247 32 L277 48 M277 32 L247 48" stroke="${SIGNAL}" stroke-width="5" stroke-linecap="round"/>
+  <g transform="translate(118 56)">
+    <rect x="0" y="0" width="80" height="36" rx="9" fill="${ROAD}" stroke="${GOLD}" stroke-width="3"/>
+    <rect x="13" y="12" width="36" height="4" rx="2" fill="${GOLD}"/>
+    <rect x="13" y="22" width="23" height="4" rx="2" fill="${DIM}"/>
+    <circle cx="64" cy="18" r="7" fill="none" stroke="${GOLD}" stroke-width="3"/>
   </g>
-  <g transform="translate(160 132)">
-    <circle cx="-11" cy="10" r="7" fill="none" stroke="${INK}" stroke-width="3"/>
-    <circle cx="12" cy="10" r="7" fill="none" stroke="${INK}" stroke-width="3"/>
-    <path d="M-11 10 L-2 -3 L10 -3 L12 10" fill="none" stroke="${GOLD}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="3" cy="-12" r="5.5" fill="${INK}"/>
+  <g transform="translate(216 22)" opacity=".55">
+    <rect x="0" y="0" width="80" height="36" rx="9" fill="${ROAD}" stroke="${DIM}" stroke-width="3"/>
+    <rect x="13" y="12" width="31" height="4" rx="2" fill="${DIM}"/>
+    <rect x="13" y="22" width="18" height="4" rx="2" fill="${DIM}"/>
   </g>
+</svg>`;
+
+/* The day's pool over a podium of three, in the proportion it is actually paid. */
+const BOARD_ART = `
+<svg viewBox="0 0 320 170" role="img" aria-label="A podium of three riders beneath the day's Nimiq pool" focusable="false">
+  <g transform="translate(160 30)">
+    <path d="M0 -20 L17 -10 L17 10 L0 20 L-17 10 L-17 -10 Z" fill="${GOLD}"/>
+  </g>
+  <rect x="116" y="74" width="88" height="82" rx="9" fill="${ROAD}" stroke="${GOLD}" stroke-width="3"/>
+  <rect x="22" y="100" width="86" height="56" rx="9" fill="${ROAD}" stroke="${CYAN}" stroke-width="3"/>
+  <rect x="212" y="116" width="86" height="40" rx="9" fill="${ROAD}" stroke="${DIM}" stroke-width="3"/>
+  <rect x="140" y="96" width="40" height="5" rx="2" fill="${GOLD}"/>
+  <rect x="46" y="120" width="38" height="5" rx="2" fill="${CYAN}"/>
+  <rect x="236" y="134" width="38" height="5" rx="2" fill="${DIM}"/>
 </svg>`;
 
 export const BLITZ_ONBOARDING_BEATS: readonly BlitzOnboardingBeat[] = [
   {
     id: 'job',
     kicker: 'THE JOB',
-    title: 'A payment is stuck.',
-    body: 'You are the route it takes. Ride it across the city and get it somewhere it cannot be undone.',
+    title: 'One hill. Two minutes.',
+    body: 'A payment is stuck and you are the route it takes. You get one descent, and your wallet signs it, so the board can prove the run was yours.',
     art: JOB_ART,
   },
   {
     id: 'controls',
     kicker: 'THE RIDE',
-    title: 'Steer. Drift. Boost.',
-    body: 'Hold TUCK to make speed and BRAKE to make grip - the bike coasts if you do neither. A gearbox buys one slide, and a slide earns nitro back.',
+    title: 'Nothing here is free.',
+    body: 'TUCK buys speed and costs you steering. BRAKE buys grip and costs speed. BOOST spends nitro. DRIFT spends a gearbox and buys a sharper line. Do none of it and the bike coasts - and coasting scores almost nothing.',
     art: CONTROLS_ART,
   },
   {
     id: 'supplies',
     kicker: 'THE SUPPLIES',
     title: 'Fuel is on the road.',
-    body: 'Nitro bottles and gearboxes lie in the lanes. Nothing refills on its own, so the line you take is the speed you finish with.',
+    body: 'Nitro bottles and gearboxes lie in the lanes, and nothing refills on its own. A gearbox buys one slide, and a slide earns nitro back, so the line you take is the speed you finish with.',
     art: SUPPLIES_ART,
   },
   {
-    id: 'checks',
-    kicker: 'THE CHECKS',
-    title: 'Three calls, at speed.',
-    body: 'The road forks and both ways are open. One keeps the payment alive. You do not get to slow down.',
-    art: CHECKS_ART,
+    id: 'contracts',
+    kicker: 'THE CONTRACTS',
+    title: 'Three jobs on the way down.',
+    body: 'Every day sets three. The card names each one, says what it wants, and counts down the metres until it opens. Clearing them is most of your score.',
+    art: CONTRACTS_ART,
+  },
+  {
+    id: 'board',
+    kicker: 'THE BOARD',
+    title: 'The day pays the top three.',
+    body: 'A ranked run is re-ridden by the server from your own inputs, so a score cannot be typed in. The pool for the day is real NIM on Nimiq mainnet, split fifty, thirty, twenty.',
+    art: BOARD_ART,
   },
 ];
 
