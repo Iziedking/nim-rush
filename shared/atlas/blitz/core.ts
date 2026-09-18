@@ -161,7 +161,15 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    * button has to be released before another can be spent, or holding it would
    * empty the frame in a second and a half.
    */
-  const wantsDrift = input.drift && Math.abs(input.steer) >= 0.2 && state.speedMps >= 8;
+  /*
+   * A slide still needs a direction - that is what makes it a cornering move
+   * rather than a speed button - but 0.2 of steering was far more than a thumb
+   * gives you, and a press below it did nothing at all: no slide, no charge
+   * spent, no sound, and the button lit up anyway because the highlight is
+   * client-side. On a phone that reads as a broken control, and it is the first
+   * thing a rider tries.
+   */
+  const wantsDrift = input.drift && Math.abs(input.steer) >= 0.05 && state.speedMps >= 8;
   let driftCharges = state.driftCharges;
   let driftTicksLeft = 0;
   let driftLatched = state.driftLatched;

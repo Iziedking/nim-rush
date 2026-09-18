@@ -15,7 +15,7 @@ export interface HttpBoundaryOptions {
  * 129kb of frames; 320kb leaves room for a longer course without becoming a
  * useful amount of memory to throw at the service.
  */
-const TRACE_BODY_LIMIT = '320kb';
+const TRACE_BODY_LIMIT = '768kb';
 
 export function allowedRequestHeaders(networkHeader: string): string {
   return `content-type, authorization, ${networkHeader}`;

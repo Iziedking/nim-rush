@@ -32,14 +32,34 @@ export class BlitzInputController {
     const update = (event: PointerEvent) => {
       if (event.pointerId !== this.steeringPointer) return;
       const bounds = zone.getBoundingClientRect();
-      this.steer = clamp(((event.clientX - bounds.left) / Math.max(1, bounds.width) - 0.5) * 2, -1, 1);
+      const raw = clamp(((event.clientX - bounds.left) / Math.max(1, bounds.width) - 0.5) * 2, -1, 1);
+      /*
+       * Quantised to three decimals, here, before the simulation ever sees it.
+       *
+       * A full double costs thirteen characters in every one of a run's 3,600
+       * trace frames, which is most of the reason a finished run was too large
+       * to save or send. Rounding at the boundary keeps the number the sim
+       * consumes and the number the server replays byte-identical; rounding
+       * later would make two different runs hash the same.
+       */
+      this.steer = Math.round(raw * 1_000) / 1_000;
       thumb.style.transform = `translateX(${Math.round(this.steer * 42)}px)`;
     };
     const down = (event: PointerEvent) => {
+      // Before anything else: iOS will otherwise start its own long-press,
+      // selection and callout handling on a control that is meant to be held.
+      event.preventDefault();
       if (this.steeringPointer !== null) return;
       this.steeringPointer = event.pointerId;
-      zone.setPointerCapture(event.pointerId);
       update(event);
+      /*
+       * Capture is a nicety, and it is attempted last on purpose. WebKit throws
+       * NotFoundError when the pointer id is already gone, and this used to run
+       * first: the exception escaped the listener and the steering was never
+       * armed at all. The same pattern, for the same reason, is at
+       * src/atlas/app/atlas-app.ts:2531.
+       */
+      try { zone.setPointerCapture?.(event.pointerId); } catch { /* the window listeners below cover it */ }
     };
     const up = (event: PointerEvent) => {
       if (event.pointerId !== this.steeringPointer) return;
@@ -48,14 +68,22 @@ export class BlitzInputController {
       thumb.style.transform = 'translateX(0)';
     };
     zone.addEventListener('pointerdown', down);
-    zone.addEventListener('pointermove', update);
-    zone.addEventListener('pointerup', up);
-    zone.addEventListener('pointercancel', up);
+    /*
+     * Move and release are watched on the window, not the element.
+     *
+     * Without capture - which WebKit can refuse or drop - a finger that slid
+     * off the card left the steer frozen at its last value and the bike turning
+     * by itself. Listening wider also makes the pad behave the way a thumb
+     * expects: the steer keeps tracking when the finger wanders past the edge.
+     */
+    window.addEventListener('pointermove', update);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     this.bindingCleanups.push(
       () => zone.removeEventListener('pointerdown', down),
-      () => zone.removeEventListener('pointermove', update),
-      () => zone.removeEventListener('pointerup', up),
-      () => zone.removeEventListener('pointercancel', up),
+      () => window.removeEventListener('pointermove', update),
+      () => window.removeEventListener('pointerup', up),
+      () => window.removeEventListener('pointercancel', up),
     );
   }
 
@@ -67,20 +95,43 @@ export class BlitzInputController {
       else this.brake = active;
       button.classList.toggle('is-held', active);
     };
+    let holdPointer: number | null = null;
     const down = (event: PointerEvent) => {
-      button.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      if (holdPointer !== null) return;
+      holdPointer = event.pointerId;
+      /*
+       * The state is set before capture is attempted, and this is the whole bug
+       * that made DRIFT and TUCK dead on iPhone. setPointerCapture threw
+       * NotFoundError inside WebKit, the exception escaped this listener, and
+       * set(true) never ran - so the simulation never saw the hold. Tuck is
+       * worth twenty seconds over a run and it did nothing, all session.
+       */
       set(true);
+      try { button.setPointerCapture?.(event.pointerId); } catch { /* the window listeners below cover it */ }
     };
-    const up = () => set(false);
+    const up = (event?: PointerEvent) => {
+      if (event && holdPointer !== null && event.pointerId !== holdPointer) return;
+      holdPointer = null;
+      set(false);
+    };
     button.addEventListener('pointerdown', down);
     button.addEventListener('pointerup', up);
     button.addEventListener('pointercancel', up);
-    button.addEventListener('lostpointercapture', up);
+    /*
+     * No lostpointercapture handler. WebKit drops capture while a finger is
+     * still down, and releasing the control on that signal is how a held BOOST
+     * quietly turned itself off mid-run. The window listeners are the honest
+     * release: they fire when the finger actually lifts, wherever it is.
+     */
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     this.bindingCleanups.push(
       () => button.removeEventListener('pointerdown', down),
       () => button.removeEventListener('pointerup', up),
       () => button.removeEventListener('pointercancel', up),
-      () => button.removeEventListener('lostpointercapture', up),
+      () => window.removeEventListener('pointerup', up),
+      () => window.removeEventListener('pointercancel', up),
     );
   }
 

@@ -101,7 +101,6 @@ export class BlitzApp {
    */
   private connectedWallet: string | null = null;
   private gapHost: HTMLElement | null = null;
-  private rankedInterrupted = false;
 
   constructor(private readonly ui: HTMLElement, canvas: HTMLCanvasElement) {
     this.renderer = new BlitzRenderer(canvas);
@@ -439,7 +438,6 @@ export class BlitzApp {
     this.audio.unlock();
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
-    this.rankedInterrupted = false;
     const seed = rankedTicket?.seed ?? options.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
     // Ranked keeps one visible, equal loadout and the shared Rookie ruleset
     // until the server ticket contract carries Pro as an explicit version.
@@ -569,6 +567,12 @@ export class BlitzApp {
       node('p', 'blitz-pause-copy', 'Your course position is safe. Resume when the trail is clear.'),
       button('Resume', 'blitz-start blitz-resume', this.togglePause),
       button('Restart run', 'blitz-again blitz-restart', () => void this.startRun(this.cityId)),
+      /*
+       * A way out. Pausing offered Resume and Restart and nothing else, so the
+       * only exit from a run was to finish it or close the app - which, on a
+       * ranked attempt, is the one thing that loses it.
+       */
+      button('Back to menu', 'blitz-again blitz-pause-menu', () => this.renderIntro()),
     );
 
     const controls = node('section', 'blitz-controls');
@@ -771,7 +775,7 @@ export class BlitzApp {
   }
 
   private togglePause = (): void => {
-    if (this.rankedTicket && !this.rankedInterrupted) {
+    if (this.rankedTicket) {
       if (this.feedbackNode) {
         this.feedbackNode.textContent = 'A RANKED RUN CANNOT BE PAUSED';
         this.feedbackNode.className = 'blitz-feedback is-wrong';
@@ -933,8 +937,7 @@ export class BlitzApp {
       : alreadyConnected ? '' : 'CONNECT ONCE TO START A VERIFIED RUN. NO PAYMENT.');
     competition.append(rankStatus);
     if (this.rankedTicket) {
-      if (this.rankedInterrupted) rankStatus.textContent = 'NOT VERIFIED. THIS RANKED RUN LEFT THE SCREEN.';
-      else void this.submitRankedRun(state, rankStatus, competition);
+      void this.submitRankedRun(state, rankStatus, competition);
     } else {
       const username = node('input', 'blitz-username');
       username.type = 'text';
@@ -1310,7 +1313,19 @@ export class BlitzApp {
         runId: crypto.randomUUID(), ticket, frames: structuredClone(this.frames), traceHash,
         claimedScore: state.score, savedAt: Date.now(),
       };
-      this.pendingRunStore.save(pending);
+      /*
+       * Written down before it is sent, and the answer is read.
+       *
+       * The run is ninety to a hundred and twenty seconds of somebody's
+       * attention. If the network is out, or the app is closed on the result
+       * screen, the trace has to survive - that is what the recovery panel
+       * exists for. save() returns false when the record will not fit, and
+       * that boolean used to be discarded, so a run too large to store was
+       * dropped in silence and the rider was told nothing.
+       */
+      if (!this.pendingRunStore.save(pending)) {
+        status.textContent = 'THIS RUN IS TOO LARGE TO SAVE LOCALLY. SENDING IT NOW - KEEP THIS SCREEN OPEN.';
+      }
       await this.submitPendingRun(pending, status, host);
     } catch (error) {
       status.textContent = error instanceof Error ? `NOT VERIFIED. ${error.message.toUpperCase()}` : 'THIS RUN COULD NOT BE VERIFIED.';
@@ -1607,7 +1622,6 @@ export class BlitzApp {
 
   private visibilityChanged = (): void => {
     if (document.hidden && this.audioScene !== 'menu') {
-      if (this.rankedTicket) this.rankedInterrupted = true;
       this.paused = true;
       this.previousTimestamp = null;
       this.accumulator = 0;
@@ -1617,11 +1631,26 @@ export class BlitzApp {
       if (this.pauseOverlay) {
         this.pauseOverlay.hidden = false;
         const copy = this.pauseOverlay.querySelector('.blitz-pause-copy');
-        if (copy) copy.textContent = this.rankedInterrupted
-          ? 'The screen was interrupted. This ranked attempt will not submit. Restart a free run to try again.'
-          : 'The course is paused. Resume when the trail is clear.';
+        if (copy) copy.textContent = 'The course is paused. Resume when the trail is clear.';
       }
       if (this.feedbackNode) { this.feedbackNode.textContent = 'PAUSED. YOUR RUN IS SAFE.'; this.feedbackNode.className = 'blitz-feedback is-paused'; }
+    } else if (!document.hidden && this.paused && this.rankedTicket && this.state && this.state.phase === 'running') {
+      /*
+       * Coming back resumes a ranked run.
+       *
+       * A ranked run refuses the pause button on purpose, so without this it
+       * had no way back: hiding the screen for an instant left it paused
+       * forever with the only control that could unpause it disabled.
+       */
+      this.paused = false;
+      this.previousTimestamp = null;
+      this.accumulator = 0;
+      this.frameGovernor.reset();
+      this.input.reset();
+      this.setAudioScene('riding');
+      if (this.pauseOverlay) this.pauseOverlay.hidden = true;
+      if (this.pauseButton) { this.pauseButton.textContent = 'LIVE'; this.pauseButton.setAttribute('aria-label', 'A ranked run cannot be paused'); }
+      if (this.feedbackNode) { this.feedbackNode.textContent = ''; this.feedbackNode.className = 'blitz-feedback'; }
     }
     this.syncAudioScene();
   };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { withStateTransactions } from '../server/atlas/persistence';
 import { createBlitzRun, stepBlitzRun } from '../shared/atlas/blitz/core';
-import { hashBlitzTrace, replayBlitzTrace } from '../shared/atlas/blitz/replay';
+import { BLITZ_TRACE_FRAME_LIMIT, hashBlitzTrace, replayBlitzTrace } from '../shared/atlas/blitz/replay';
 import type { BlitzTraceFrame } from '../shared/atlas/blitz/types';
 import type { BlitzSubmissionInput } from '../shared/atlas/blitz/competition';
 import { createAtlasBlitzService } from '../server/atlas/blitz';
@@ -44,11 +44,33 @@ describe('Blitz integrity regressions', () => {
   });
 
   it('bounds hash work and validates boolean controls before digesting', async () => {
-    const frames = Array.from({ length: 3_001 }, (_, tick) => ({ tick, input: { steer: 0, drift: false, boost: false } }));
+    // Derived, not a literal. This test read 3_001 against a limit of 3_000
+    // until the run clock moved to 120 seconds and the real limit passed it,
+    // at which point the test quietly stopped testing anything.
+    const frames = Array.from({ length: BLITZ_TRACE_FRAME_LIMIT + 1 }, (_, tick) => ({ tick, input: { steer: 0, drift: false, boost: false } }));
     await expect(hashBlitzTrace(frames)).rejects.toThrow(/long|limit/i);
     // Deliberately malformed wire input must be rejected even outside the HTTP schema.
     const malformed = [{ tick: 0, input: { steer: 0, drift: 'yes', boost: false } }] as unknown as BlitzTraceFrame[];
     await expect(hashBlitzTrace(malformed)).rejects.toThrow(/input/i);
+  });
+
+  /*
+   * The frame count was never the only ceiling. A full-length trace also has to
+   * fit the localStorage record and the HTTP body, and on the day the clock
+   * moved to 120 seconds it fit none of the three - so a finished run was
+   * dropped locally and refused remotely, and the rider was told it "left the
+   * screen". This holds all three together.
+   */
+  it('keeps a maximum-length trace inside the store and body limits', () => {
+    const worst = Array.from({ length: BLITZ_TRACE_FRAME_LIMIT }, (_, tick) => ({
+      tick,
+      // Steer is quantised to three decimals at the input boundary, so this is
+      // the widest a real frame gets.
+      input: { steer: -0.123, drift: true, boost: true, brake: true, tuck: true },
+    }));
+    const bytes = JSON.stringify({ runId: 'r'.repeat(36), traceHash: 'a'.repeat(64), frames: worst }).length;
+    expect(bytes).toBeLessThan(768_000);   // MAX_SERIALISED_BYTES in pending-run.ts
+    expect(bytes).toBeLessThan(768 * 1024); // TRACE_BODY_LIMIT in http-boundary.ts
   });
 
   it('refuses a complete computed replay delivered before its duration elapsed', async () => {

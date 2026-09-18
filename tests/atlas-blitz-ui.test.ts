@@ -50,7 +50,18 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(app).toContain('blitz-timer');
     expect(app).toContain('blitz-score');
     expect(app).toContain('A RANKED RUN CANNOT BE PAUSED');
-    expect(app).toContain('NOT VERIFIED. THIS RANKED RUN LEFT THE SCREEN.');
+    /*
+     * The opposite assertion to the one that used to live here.
+     *
+     * A single visibilitychange marked a ranked run dead, one-way, from before
+     * the course had even loaded - so the wallet overlay closing after a
+     * signature could void the attempt, and nothing was saved on that path
+     * either. Hiding the screen pauses a run now; the wall-clock bound is the
+     * server's submission window, which is authoritative and cannot be lied to.
+     */
+    expect(app).not.toContain('LEFT THE SCREEN');
+    expect(app).not.toContain('rankedInterrupted');
+    expect(app).toContain('The course is paused. Resume when the trail is clear.');
     expect(app).toContain('blitz-boost-meter');
     expect(app).not.toContain('Passport');
     expect(app).not.toContain('Knowledge Book');

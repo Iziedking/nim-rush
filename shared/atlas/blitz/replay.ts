@@ -1,10 +1,24 @@
-import { createBlitzRun, stepBlitzRun } from './core';
+import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from './core';
 import type { BlitzCityId, BlitzRunState, BlitzTraceFrame } from './types';
 import type { BlitzRivalPath } from './rivals';
 
 // Browser recording and Node verification share this input boundary. Hash the
 // exact numbers the simulation consumes; rounding only the hash aliases runs.
-export const BLITZ_TRACE_FRAME_LIMIT = 3_000;
+
+/*
+ * The longest trace a legitimate run can produce.
+ *
+ * This was the literal 3_000, written when a run was 90 seconds. The clock is
+ * 120 now, which is 3,600 frames at 30 Hz, so every full-length ranked run
+ * became unsaveable locally and rejectable by the server on the same day the
+ * clock changed - and the rider was told their run "left the screen" rather
+ * than that it was too long.
+ *
+ * Derived, so the next clock change carries the limit with it. The margin
+ * covers the three-second countdown, which records frames like any other tick,
+ * and a few seconds of overrun.
+ */
+export const BLITZ_TRACE_FRAME_LIMIT = (BLITZ_LIMIT_SECONDS + 15) * BLITZ_TICK_RATE;
 
 export function replayBlitzTrace(input: {
   cityId: BlitzCityId;

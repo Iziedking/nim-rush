@@ -1,8 +1,18 @@
+import { BLITZ_TRACE_FRAME_LIMIT } from '../../../shared/atlas/blitz/replay';
 import type { BlitzTraceFrame } from '../../../shared/atlas/blitz/types';
 import type { BlitzTicket } from '../../../shared/atlas/blitz/competition';
 
 const DEFAULT_KEY = 'nim-atlas:blitz:pending-ranked-run';
-const MAX_SERIALISED_BYTES = 256_000;
+/*
+ * How large a saved run may be.
+ *
+ * A full 120-second trace is about 380 KB before steer is quantised and still
+ * over 250 KB after, so the old 256_000 silently refused to save exactly the
+ * runs worth saving - and save()'s boolean was discarded at the call site, so
+ * nothing noticed. localStorage gives several megabytes; the headroom costs
+ * nothing and a silent drop costs a rider their run.
+ */
+const MAX_SERIALISED_BYTES = 768_000;
 
 export interface BlitzPendingSubmission {
   readonly runId: string;
@@ -61,7 +71,7 @@ function isPendingSubmission(value: unknown): value is BlitzPendingSubmission {
   return /^[a-zA-Z0-9:_-]{1,128}$/.test(String(candidate.runId))
     && isTicket(candidate.ticket)
     && Array.isArray(candidate.frames)
-    && candidate.frames.length <= 3_000
+    && candidate.frames.length <= BLITZ_TRACE_FRAME_LIMIT
     && candidate.frames.every(isFrame)
     && /^[a-f0-9]{64}$/.test(String(candidate.traceHash))
     && Number.isSafeInteger(candidate.claimedScore)

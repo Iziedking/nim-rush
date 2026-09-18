@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BLITZ_LIMIT_SECONDS } from '../shared/atlas/blitz/core';
 
 import { BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { hashBlitzTrace } from '../shared/atlas/blitz/replay';
@@ -34,10 +35,10 @@ describe('Beacon Blitz verified competition service', () => {
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     expect(ticket).toMatchObject({ id: 'ticket-a', cityId: 'lagos', seasonId: 'season-1', username: 'Sface' });
     expect(ticket).toMatchObject({
-      challengeId: 'season-1:lagos:1970-01-01:rush-skill-v8-rookie',
+      challengeId: 'season-1:lagos:1970-01-01:rush-skill-v9-rookie',
       challengeDate: '1970-01-01',
-      rulesetVersion: 'rush-skill-v8-rookie',
-      seed: 'season-1:lagos:1970-01-01:rush-skill-v8-rookie',
+      rulesetVersion: 'rush-skill-v9-rookie',
+      seed: 'season-1:lagos:1970-01-01:rush-skill-v9-rookie',
     });
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletB, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' })).rejects.toThrow(/wallet binding/i);
   });
@@ -83,7 +84,7 @@ describe('Beacon Blitz verified competition service', () => {
     expect(board.every((row) => row.verified)).toBe(true);
   });
 
-  it('rejects a ranked trace held beyond the two-minute live-run window', async () => {
+  it('rejects a ranked trace held beyond the live-run window', async () => {
     let current = 1_000;
     const service = createAtlasBlitzService({
       identity: identity({ 'season-1:actor-a': walletA }),
@@ -94,7 +95,10 @@ describe('Beacon Blitz verified competition service', () => {
       actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'dubai', seasonId: 'season-1',
     });
     const trace = await completeTrace('dubai', ticket.seed, ticket.rivals);
-    current = ticket.issuedAt + 120_001;
+    // The window is derived from the run clock now (limit + 90s for the scene,
+    // the countdown, the wallet and the network), so this reaches past it
+    // rather than restating a number the clock can outgrow.
+    current = ticket.issuedAt + BLITZ_LIMIT_SECONDS * 1_000 + 90_001;
     await expect(service.submit({
       runId: 'run-slow', ticketId: ticket.id, actorId: ticket.actorId,
       walletAddress: ticket.walletAddress, username: ticket.username, cityId: ticket.cityId,

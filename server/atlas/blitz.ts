@@ -8,7 +8,7 @@ import type { BlitzCityId } from '../../shared/atlas/blitz/types';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
 import { hashBlitzTrace, replayBlitzTraceWithPath, validateBlitzTrace } from '../../shared/atlas/blitz/replay';
 import { blitzRivalPathFrom, type BlitzRivalPath } from '../../shared/atlas/blitz/rivals';
-import { BLITZ_TICK_RATE } from '../../shared/atlas/blitz/core';
+import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE } from '../../shared/atlas/blitz/core';
 import { BLITZ_CITIES } from '../../shared/atlas/blitz/cities';
 import { getBlitzDailyChallenge, BLITZ_DAILY_RULESET_VERSION } from '../../shared/atlas/blitz/daily';
 
@@ -24,7 +24,20 @@ export interface BlitzQualificationOutboxItem {
   readonly lastError?: string;
   readonly completedAt?: number;
 }
-const BLITZ_RANKED_SUBMISSION_WINDOW_MS = 120_000;
+/*
+ * How long after a ticket is issued a run may still arrive.
+ *
+ * This existed to stop somebody taking a ticket away and computing an optimal
+ * run offline, and it was a flat 120 seconds. The run itself became 120
+ * seconds, so the honest path - issue, load a 3D scene, count down three, ride
+ * the whole clock, hash 3,600 frames, send - could not fit inside it, and every
+ * full-length ranked run was refused as a cheat.
+ *
+ * Derived from the clock, with ninety seconds for the scene, the countdown, the
+ * wallet and the network. A rider on a slow phone is not a cheat; somebody with
+ * three and a half minutes still cannot solve a course offline.
+ */
+const BLITZ_RANKED_SUBMISSION_WINDOW_MS = BLITZ_LIMIT_SECONDS * 1_000 + 90_000;
 
 export interface AtlasBlitzSnapshot {
   readonly version: 2;
