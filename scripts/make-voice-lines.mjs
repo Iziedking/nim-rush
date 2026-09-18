@@ -66,10 +66,49 @@ async function main() {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) {
     console.error('ELEVENLABS_API_KEY is not set. Nothing was requested and nothing was written.');
-    console.error('Run: ELEVENLABS_API_KEY=... npm run voice');
+    console.error('Put ELEVENLABS_API_KEY=<your key> on its own line in .env, then run: npm run voice');
+    console.error('.env is gitignored, so the key never reaches the repo or the browser.');
     process.exitCode = 1;
     return;
   }
+  /*
+   * Which voices this account may actually use.
+   *
+   * The default here is a library voice, and a free ElevenLabs plan cannot use
+   * library voices through the API - it answers 402 on the first line and the
+   * error says upgrade, which is true and not very helpful when the fix is to
+   * pick a different voice. Listing what the key can reach turns that into a
+   * choice rather than a wall.
+   */
+  if (process.argv.includes('--list')) {
+    const response = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } });
+    if (!response.ok) {
+      console.error([
+        `Could not list voices (${response.status}).`,
+        response.status === 401
+          // A key that speaks but cannot list is a permissions question, not a
+          // wrong key - and saying "check the key" sends somebody to re-paste
+          // a key that was fine.
+          ? 'The key is probably valid but lacks the "voices read" permission. Either'
+          : 'The key was refused. Check it in .env.',
+        response.status === 401 ? 'grant that scope, or copy a voice id from the ElevenLabs Voices page' : '',
+        response.status === 401 ? '(open a voice, then its menu, Copy voice ID) and pass it directly:' : '',
+        response.status === 401 ? '  npm run voice -- --voice=<id>' : '',
+      ].filter(Boolean).join('\n'));
+      process.exitCode = 1;
+      return;
+    }
+    const { voices = [] } = await response.json();
+    console.log(`${voices.length} voices this key can use:`);
+    console.log('');
+    for (const voice of voices) {
+      console.log(`  ${(voice.voice_id ?? '').padEnd(24)} ${(voice.name ?? '').padEnd(18)} ${voice.category ?? ''}`);
+    }
+    console.log('');
+    console.log('Pick one and run:  npm run voice -- --voice=<id>');
+    return;
+  }
+
   const voiceId = argument('voice', DEFAULT_VOICE);
   mkdirSync(OUT_DIR, { recursive: true });
 
@@ -95,6 +134,14 @@ async function main() {
       // The body can carry a quota or voice-id message worth seeing, but it is
       // read as text so a key echoed back could never be printed as JSON.
       const detail = (await response.text()).slice(0, 300);
+      if (response.status === 402) {
+        throw new Error([
+          `ElevenLabs refused "${id}" (402). This voice needs a paid plan.`,
+          'Run  npm run voice -- --list  to see the voices this key can use,',
+          'then  npm run voice -- --voice=<id>  with one of them.',
+          'Nothing was written.',
+        ].join('\n'));
+      }
       throw new Error(`ElevenLabs refused "${id}" (${response.status}): ${detail}`);
     }
     const audio = Buffer.from(await response.arrayBuffer());

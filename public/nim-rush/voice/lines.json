@@ -1,0 +1,58 @@
+{
+  "voiceId": "pqHfZKP75CvOlQylNhV4",
+  "model": "eleven_multilingual_v2",
+  "lines": {
+    "contact": {
+      "text": "Contact.",
+      "bytes": 15090
+    },
+    "contact-two": {
+      "text": "That is two.",
+      "bytes": 18852
+    },
+    "contact-many": {
+      "text": "Keep it upright!",
+      "bytes": 22613
+    },
+    "timeout": {
+      "text": "Out of time.",
+      "bytes": 18852
+    },
+    "finish": {
+      "text": "Finish!",
+      "bytes": 11328
+    },
+    "finish-clean": {
+      "text": "Finish! Not a mark on it.",
+      "bytes": 28465
+    },
+    "ten": {
+      "text": "Ten seconds!",
+      "bytes": 15926
+    },
+    "gearless": {
+      "text": "Last gear gone.",
+      "bytes": 21777
+    },
+    "dry": {
+      "text": "Tank is dry.",
+      "bytes": 21777
+    },
+    "contract": {
+      "text": "Contract clear.",
+      "bytes": 23449
+    },
+    "contract-all": {
+      "text": "All three contracts. Clean.",
+      "bytes": 35988
+    },
+    "threaded": {
+      "text": "Threaded it!",
+      "bytes": 15926
+    },
+    "landing": {
+      "text": "Landed it.",
+      "bytes": 15926
+    }
+  }
+}
