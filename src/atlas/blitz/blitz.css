@@ -1994,7 +1994,10 @@ button + .blitz-quiet { margin-top: 11px; }
  */
 .blitz-mission-detail {
   margin: 4px 0 0;
-  color: var(--rush-muted);
+  /* Muted ink, not --rush-muted. That token is a pale grey meant for dark
+   * panels, and the contract card is cream: the sentence explaining what the
+   * contract wants was the least readable thing on it. */
+  color: #6d604a;
   font: 700 11px/1.35 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .02em;
   text-wrap: pretty;

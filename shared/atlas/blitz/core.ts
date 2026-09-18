@@ -20,6 +20,22 @@ const TAKEDOWN_SPEED_MPS = 14;
 export const TAKEDOWN_POINTS = 1_500;
 /** Six seconds, which is what HOLD THE TUCK asks for. */
 const TUCK_HOLD_TICKS = BLITZ_TICK_RATE * 6;
+/*
+ * What a full gradient is worth in speed.
+ *
+ * Tuned so an average Lagos pitch (about 6%) is worth roughly 3.5 m/s and the
+ * steep drops are worth appreciably more - enough that a rider notices the
+ * ground tilting under them, and short of enough to carry a run on its own.
+ */
+const GRADE_SPEED_MPS = 60;
+/*
+ * How hard a corner throws a bike that is going too fast for it.
+ *
+ * Tuned so a rider who holds a tuck through the tight sections runs wide and a
+ * rider who brakes or steers into them does not - which is the whole trade the
+ * course is there to offer.
+ */
+const CORNER_PUSH = 26;
 export const BLITZ_LIMIT_SECONDS = 120;
 const COUNTDOWN_TICKS = BLITZ_TICK_RATE * 3;
 // The gates a rider can see. One list, shared with the renderer, because a
@@ -207,17 +223,53 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   const boostActive = surface !== 'grass' && input.boost
     && (state.boostActive ? state.boostEnergy > 0.25 : state.boostEnergy >= BOOST_ENGAGE_ENERGY);
   const postureGrip = tuckActive ? POSTURE_GRIP.tucked : brakeActive ? POSTURE_GRIP.braking : POSTURE_GRIP.neutral;
-  const lateralAcceleration = input.steer * (driftActive ? 13 : 8) * surfaceProfile.grip * postureGrip;
+  // Against the city's own cruising speed, so a corner asks the same question
+  // of every course rather than punishing the fast ones.
+  const speedRatio = state.speedMps / city.baseSpeedMps;
+  // One sample of the road under the bike, read by both the corner and the grade.
+  const roadHere = sampleCourse(city.id, state.distanceMeters);
+  /*
+   * Speed carried into a bend has to go somewhere.
+   *
+   * laneOffset is measured from the centre of the road, so a rider who touched
+   * nothing followed every corner perfectly and for free - the course could be
+   * as twisty as it liked and never ask them for anything. That is most of why
+   * the ride felt programmed: the only thing a corner could do was look like a
+   * corner.
+   *
+   * A bend now pushes the bike toward the outside, harder the faster it is
+   * going, and the rider has to hold against it or lose the line. It scales
+   * with the square of speed because that is how cornering actually works, and
+   * it is the reason braking before a corner is worth the speed it costs.
+   */
+  const corner = roadHere.bend * (speedRatio * speedRatio) * CORNER_PUSH;
+  const lateralAcceleration = input.steer * (driftActive ? 13 : 8) * surfaceProfile.grip * postureGrip
+    - corner / Math.max(0.35, surfaceProfile.grip * postureGrip);
   let lateralVelocityMps = clamp(state.lateralVelocityMps + lateralAcceleration / BLITZ_TICK_RATE, -12, 12);
   lateralVelocityMps *= driftActive ? 0.988 : Math.pow(surfaceProfile.grip, 0.35) * 0.94;
   let laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
   const offRoad = Math.abs(laneOffset) > city.roadWidth * 0.5;
   const shoulderDepth = Math.max(0, Math.abs(laneOffset) - city.roadWidth * 0.5);
   const grassProfile = blitzSurface('grass');
+  /*
+   * The hill, finally doing something.
+   *
+   * Gravity was applied in exactly one place - the off-road branch below - so
+   * on the road a 110 metre descent was scenery. The bike held one target speed
+   * from the gate to the finish whatever the ground did, which is why the ride
+   * read as programmed: there was nothing underneath it to manage. Two of the
+   * three cities were flat anyway, by 0.1 and 0.2 metres end to end.
+   *
+   * Slope is negative going down. A steep pitch now pulls the bike along and a
+   * shallow one gives it back, so a rider spends the steep sections deciding
+   * whether they can still hold the line at that speed - which is the decision
+   * a downhill is made of.
+   */
+  const gradeSpeed = clamp(-roadHere.slope, -0.24, 0.24) * GRADE_SPEED_MPS;
   const targetSpeed = brakeActive ? 0 : offRoad
     ? city.baseSpeedMps * grassProfile.resistance / (1 + shoulderDepth * 0.18)
-    : city.baseSpeedMps * surfaceProfile.resistance * (tuckActive ? POSTURE_SPEED.tucked : POSTURE_SPEED.neutral)
-      + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0);
+    : Math.max(4, city.baseSpeedMps * surfaceProfile.resistance * (tuckActive ? POSTURE_SPEED.tucked : POSTURE_SPEED.neutral)
+      + gradeSpeed + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0));
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
   if (offRoad && !brakeActive && !state.airborne) {
     const here = sampleCourse(city.id, state.distanceMeters);

@@ -82,17 +82,36 @@ describe('physical course geometry and replay', () => {
     expect(next.distanceMeters).toBeGreaterThan(d + shape.halfLength + 1.1);
   });
 
-  it('does not choose a rightward escape when a centered rider gives no steering input', () => {
-    const city = blitzCity('lagos'), obstacle = city.obstacles[0]!;
-    const shape = obstacleShape(obstacle.id), d = obstacle.distance01 * city.lengthMeters;
-    const state = { ...createBlitzRun({ cityId: 'lagos', seed: 'neutral-contact' }), phase: 'running' as const,
-      distanceMeters: d - shape.halfLength - 1.3, speedMps: 38, laneOffset: obstacle.lane };
+  it('takes its escape direction from the road, never a fixed rightward bias', () => {
+    /*
+     * The original shape of this test placed a rider dead centre on an obstacle
+     * with no steering and asserted the contact wedged rather than inventing a
+     * rightward escape. A bend now pushes the bike toward the outside, so there
+     * is almost always some sideways momentum to escape along - which is the
+     * point of the corner model, and it makes the no-information case nearly
+     * unreachable.
+     *
+     * The property worth holding is the one the old name describes: the escape
+     * follows the road. A left-hand bend and a right-hand bend must throw a
+     * rider opposite ways, which a hardcoded direction could never do.
+     */
+    const city = blitzCity('lagos');
+    const bendAt = (candidate: { distance01: number }) => sampleCourse('lagos', candidate.distance01 * city.lengthMeters).bend;
+    const sorted = [...city.obstacles].sort((a, b) => bendAt(a) - bendAt(b));
+    const leftmost = sorted[0]!;
+    const rightmost = sorted[sorted.length - 1]!;
+    expect(Math.sign(bendAt(leftmost))).not.toBe(Math.sign(bendAt(rightmost)));
 
-    const next = stepBlitzRun(state, idle);
+    const escape = (obstacle: typeof leftmost) => {
+      const shape = obstacleShape(obstacle.id), d = obstacle.distance01 * city.lengthMeters;
+      const state = { ...createBlitzRun({ cityId: 'lagos', seed: 'neutral-contact' }), phase: 'running' as const,
+        distanceMeters: d - shape.halfLength - 1.3, speedMps: 38, laneOffset: obstacle.lane };
+      const next = stepBlitzRun(state, idle);
+      expect(next.collisions).toBe(1);
+      return Math.sign(next.lateralVelocityMps);
+    };
 
-    expect(next.collisions).toBe(1);
-    expect(next.lateralVelocityMps).toBe(0);
-    expect(next.laneOffset).toBe(obstacle.lane);
+    expect(escape(leftmost)).not.toBe(escape(rightmost));
   });
 
   it('resolves lateral entry against the obstacle side even after its centre was passed', () => {

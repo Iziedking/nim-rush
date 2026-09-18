@@ -15,7 +15,7 @@ import type { BlitzCityId } from './types';
  */
 export const BLITZ_SEASON_ID = 'cycle-2';
 
-export const BLITZ_DAILY_RULESET_VERSION = 'rush-skill-v9-rookie';
+export const BLITZ_DAILY_RULESET_VERSION = 'rush-downhill-v10-rookie';
 export const BLITZ_DAY_MS = 86_400_000;
 
 export interface BlitzDailyChallenge {

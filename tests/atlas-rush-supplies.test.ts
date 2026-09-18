@@ -142,14 +142,22 @@ describe('boost and drift are spent, not granted', () => {
     expect(state.driftCharges).toBe(started - 1);
 
     // Holding must not spend the rest of the frame the instant each window ends.
+    const bankedBefore = state.gearboxTaken;
     for (let tick = 1; tick < BLITZ_TICK_RATE * 8; tick += 1) state = stepBlitzRun(state, slalom(tick, true));
-    expect(state.driftCharges).toBe(started - 1);
+    // Eight seconds covers more ground since the hill started pulling, so the
+    // rider can bank a gearbox inside the hold. What matters is that holding
+    // spent nothing further, not that the number never moved.
+    const banked = state.gearboxTaken - bankedBefore;
+    expect(state.driftCharges).toBe(Math.min(state.driftCapacity, started - 1 + banked));
     expect(state.driftActive).toBe(false);
 
     // Releasing and asking again spends the next one.
+    const beforeSecond = state.driftCharges;
+    const bankedBeforeSecond = state.gearboxTaken;
     state = stepBlitzRun(state, slalom(0, false));
     state = stepBlitzRun(state, slalom(0, true));
-    expect(state.driftCharges).toBe(started - 2);
+    const bankedDuring = state.gearboxTaken - bankedBeforeSecond;
+    expect(state.driftCharges).toBe(beforeSecond - 1 + bankedDuring);
   });
 
   it('runs a slide for exactly the window a gearbox buys', () => {

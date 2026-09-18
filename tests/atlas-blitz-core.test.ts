@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { BLITZ_CITIES } from '../shared/atlas/blitz/cities';
 import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, getBlitzScoreBreakdown, sampleBlitzRoute, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { BLITZ_CITIES, nextBlitzCity } from '../shared/atlas/blitz/cities';
 import { selectBlitzMissions } from '../shared/atlas/blitz/missions';
@@ -71,10 +72,32 @@ describe('the boost economy', () => {
     for (let tick = 0; tick < BLITZ_TICK_RATE * 30; tick += 1) state = stepBlitzRun(state, boost(state));
     const episodes: number[] = [];
     let current = 0;
+    let contactsAtEpisodeStart = state.collisions;
+    /*
+     * Start counting from the first boost that begins inside the window.
+     *
+     * The warm-up above now ends mid-boost more often than it used to, and the
+     * leading fragment of an episode already in progress was being measured as
+     * a whole one - a three-tick reading that said nothing about the threshold,
+     * because the tank had been draining since before the loop opened.
+     */
+    let counting = !state.boostActive;
     for (let tick = 0; tick < BLITZ_TICK_RATE * 20; tick += 1) {
       state = stepBlitzRun(state, boost(state));
-      if (state.boostActive) current += 1;
-      else if (current > 0) { if (state.elapsedTicks - state.lastImpactTick > BLITZ_TICK_RATE) episodes.push(current); current = 0; }
+      const onRoad = Math.abs(state.laneOffset) <= BLITZ_CITIES[0]!.roadWidth * 0.5;
+      if (!counting) { counting = !state.boostActive; continue; }
+      if (state.boostActive) { if (current === 0) contactsAtEpisodeStart = state.collisions; current += 1; }
+      else if (current > 0) {
+        /*
+         * Two ways a boost ends that are not judder, and both got commoner once
+         * corners started pushing a bike that carries too much speed: hitting
+         * something drains fifteen nitro on purpose, and boost does not run on
+         * grass at all. Only episodes that ended clean and on the road say
+         * anything about the threshold this test exists to guard.
+         */
+        if (state.collisions === contactsAtEpisodeStart && onRoad) episodes.push(current);
+        current = 0;
+      }
     }
     expect(episodes.length).toBeGreaterThan(0);
     expect(Math.min(...episodes)).toBeGreaterThan(BLITZ_TICK_RATE * 0.4);
