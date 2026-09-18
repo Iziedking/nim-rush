@@ -1,4 +1,4 @@
-import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
+import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, BOOST_ENGAGE_ENERGY, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
 import { BLITZ_CITIES, blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
 import { blitzLoadoutFor, blitzNextRiderLevel, blitzRiderLevel } from '../../../shared/atlas/blitz/rider';
 import { blitzRules } from '../../../shared/atlas/blitz/rules';
@@ -583,25 +583,47 @@ export class BlitzApp {
     steerRail.append(thumb);
     steerZone.append(node('span', '', 'STEER'), steerRail);
     /*
-     * Four tools, each with a cost.
+     * Two things you hold, and two that show up when you have them.
      *
-     * TUCK is the biggest and sits nearest the thumb, because it is the one a
-     * rider holds most of the run: the bike coasts without it. BRAKE is its
-     * opposite and sits beside it. DRIFT and BOOST are the two that spend
-     * supplies, so they share the row above.
+     * Four equal keys in a block took the bottom fifth of the screen and sat
+     * over the part of the trail a rider is reading, and two of them spent
+     * most of a run doing nothing: BOOST is dead with an empty tank and DRIFT
+     * is dead with no gearbox, but both were on screen the whole time anyway.
+     *
+     * So TUCK stays big, because the bike coasts without it and it is held for
+     * most of the descent, and BRAKE shrinks to an icon beside it. BOOST and
+     * DRIFT are no longer held at all - they appear only when there is
+     * something to spend, and a tap spends it. Boost latches until the tank is
+     * empty or it is tapped out; drift fires the one slide a gearbox buys and
+     * lets go by itself, because the simulation ends the window on its own.
      */
     const actions = node('div', 'blitz-actions');
-    const drift = button('DRIFT', 'blitz-control blitz-drift', () => undefined);
-    const brake = button('BRAKE', 'blitz-control blitz-brake', () => undefined);
-    const boostButton = button('BOOST', 'blitz-control blitz-boost', () => undefined);
+    const brake = button('', 'blitz-control blitz-brake', () => undefined);
+    brake.setAttribute('aria-label', 'Brake');
+    brake.append(node('i', 'blitz-key-glyph blitz-key-glyph-brake'));
     const tuck = button('TUCK', 'blitz-control blitz-tuck', () => undefined);
-    actions.append(drift, boostButton, brake, tuck);
-    controls.append(steerZone, actions);
+    actions.append(brake, tuck);
+
+    // The spend rack: shown only while there is something in it to spend.
+    const spend = node('div', 'blitz-spend');
+    const boostButton = button('', 'blitz-control blitz-boost blitz-spend-key', () => undefined);
+    boostButton.setAttribute('aria-label', 'Boost');
+    boostButton.append(node('i', 'blitz-key-glyph blitz-key-glyph-bottle'), node('span', 'blitz-spend-label', 'BOOST'));
+    const drift = button('', 'blitz-control blitz-drift blitz-spend-key', () => undefined);
+    drift.setAttribute('aria-label', 'Drift');
+    drift.append(node('i', 'blitz-key-glyph blitz-key-glyph-gear'), node('span', 'blitz-spend-label', 'DRIFT'));
+    spend.append(boostButton, drift);
+
+    controls.append(steerZone, spend, actions);
+    this.boostKey = boostButton;
+    this.driftKey = drift;
     this.input.bindSteering(steerZone, thumb);
-    this.input.bindHold(drift, 'drift');
     this.input.bindHold(brake, 'brake');
-    this.input.bindHold(boostButton, 'boost');
     this.input.bindHold(tuck, 'tuck');
+    this.input.bindLatch(boostButton, 'boost');
+    // A gearbox buys 1.5s of slide; the pulse outlasts it slightly so the
+    // window is never cut short by the button letting go first.
+    this.input.bindPulse(drift, 'drift', 1_700);
 
     /*
      * The speed layer.
@@ -704,6 +726,8 @@ export class BlitzApp {
    * coming straight back when progress moves or the contract does. Nothing is
    * removed from the DOM, so the update path and its tests are unchanged.
    */
+  private boostKey: HTMLElement | null = null;
+  private driftKey: HTMLElement | null = null;
   private missionShownId: string | null = null;
   private missionAwakeUntil = 0;
 
@@ -1399,7 +1423,13 @@ export class BlitzApp {
     if (!anchorAddress()) return;
 
     const note = node('p', 'blitz-anchor-note', '');
-    const action = button('Write this run onto Nimiq', 'blitz-again blitz-anchor', () => {
+    /*
+     * "Write this run onto Nimiq" described the mechanism, not the point, and
+     * a rider reading it on a result screen has no idea whether it is a thing
+     * they need to do or a thing that has already happened. The run is already
+     * verified by the time this appears; what this buys is permanence.
+     */
+    const action = button('Save this score on Nimiq forever', 'blitz-again blitz-anchor', () => {
       action.disabled = true;
       note.textContent = 'OPENING NIMIQ PAY. THIS SENDS A TRANSACTION.';
       void (async () => {
@@ -1538,7 +1568,25 @@ export class BlitzApp {
     });
   }
 
+  /*
+   * A key you cannot use is not on the screen.
+   *
+   * Boost needs enough in the tank to engage and drift needs a gearbox; with
+   * neither, both buttons were still sitting over the trail doing nothing. The
+   * boost latch is also put out here rather than by the rider, because running
+   * the tank dry is the one way to stop boosting that is not a tap.
+   */
+  private updateSpendKeys(state: BlitzRunState): void {
+    if (this.boostKey) {
+      const usable = state.boostEnergy >= BOOST_ENGAGE_ENERGY;
+      this.boostKey.hidden = !usable;
+      if (!usable) this.input.setLatch('boost', false, this.boostKey);
+    }
+    if (this.driftKey) this.driftKey.hidden = state.driftCharges <= 0;
+  }
+
   private updateSupplyHud(state: BlitzRunState): void {
+    this.updateSpendKeys(state);
     if (this.gearHost && this.gearHost.childElementCount !== state.driftCapacity) {
       this.gearHost.replaceChildren();
       for (let index = 0; index < state.driftCapacity; index += 1) this.gearHost.append(node('i', 'blitz-gear-pip'));

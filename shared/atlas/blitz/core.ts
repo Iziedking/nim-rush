@@ -51,7 +51,8 @@ const BOOST_DRAIN = 0.55;
  * nowhere else.
  */
 const BOOST_DRIFT_REGEN = 0.45;
-const BOOST_ENGAGE_ENERGY = 9;
+/** Exported so the HUD can hide the boost key on a tank too low to use it. */
+export const BOOST_ENGAGE_ENERGY = 9;
 /** What one bottle is worth: about a second of boost. */
 export const BLITZ_NITRO_BOTTLE = 18;
 

@@ -2052,8 +2052,10 @@ button + .blitz-quiet { margin-top: 11px; }
 }
 /* The supply rack follows the shorter cluster down instead of floating over
  * the trail where the old one used to end. */
+/* Above the spend keys, not behind them: the rack used to clear the old flat
+ * button block, and the round keys now stand where its labels were. */
 .blitz-run .blitz-boost-wrap {
-  bottom: max(118px, calc(env(safe-area-inset-bottom) + 104px));
+  bottom: max(206px, calc(env(safe-area-inset-bottom) + 192px));
   width: 94px;
 }
 
@@ -2062,5 +2064,118 @@ button + .blitz-quiet { margin-top: 11px; }
   .blitz-run .blitz-steer-zone { width: 100px; height: 100px; }
   .blitz-run .blitz-steer-rail { width: 68px; }
   .blitz-run .blitz-actions .blitz-control { height: 46px; }
-  .blitz-run .blitz-boost-wrap { bottom: max(104px, calc(env(safe-area-inset-bottom) + 92px)); }
+  .blitz-run .blitz-boost-wrap { bottom: max(184px, calc(env(safe-area-inset-bottom) + 172px)); }
 }
+
+/*
+ * A HELD CONTROL IS NOT A PIECE OF TEXT
+ *
+ * Long-pressing BOOST on iOS offered to copy the word "BOOST", because
+ * user-select: none stops a drag-selection but not the callout menu - that
+ * needs -webkit-touch-callout, which was never set. Holding a control is the
+ * whole interaction here, so every long press was landing on the one gesture
+ * the browser treats as a request to select something.
+ */
+.blitz-ui button,
+.blitz-ui .blitz-control,
+.blitz-ui .blitz-steer-zone {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * YOUR RANK IS NOT A FOOTNOTE
+ *
+ * RANKED RUN STATUS - the line that says whether the run counted, and the
+ * board it counted on - sat below the score breakdown, the supplies, the
+ * ladder and the pool. On a phone that is a long scroll past four cards to
+ * find out whether the last two minutes were worth anything, and a rider who
+ * does not scroll never learns they placed.
+ */
+@media (max-width: 720px) {
+  .blitz-result.blitz-fullscreen-page > * { order: 4; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-primary { order: 0; }
+  .blitz-result.blitz-fullscreen-page > .blitz-competition { order: 1; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-actions { order: 2; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-ledger { order: 3; }
+}
+
+/* ==========================================================================
+ * TWO KEYS YOU HOLD, TWO THAT ARRIVE WHEN YOU CAN USE THEM
+ *
+ * Four equal buttons owned the bottom of the screen for the whole run, and two
+ * of them spent most of it dead: boost does nothing on an empty tank and drift
+ * does nothing without a gearbox. They are contextual now - a bottle and a gear
+ * that appear over the trail when there is something to spend, and vanish when
+ * there is not. TUCK stays big because it is held for most of a descent, and
+ * BRAKE is an icon rather than a word.
+ * ========================================================================== */
+
+.blitz-run .blitz-controls { grid-template-areas: 'steer spend' 'steer actions'; align-items: end; }
+.blitz-run .blitz-steer-zone { grid-area: steer; align-self: end; }
+.blitz-run .blitz-spend { grid-area: spend; }
+.blitz-run .blitz-actions { grid-area: actions; }
+
+.blitz-spend {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+  pointer-events: auto;
+}
+.blitz-run .blitz-spend-key {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border-radius: 50%;
+  /* Translucent, so a key floating over the trail hides as little of it as a
+   * key can. It is only ever on screen when it can actually be pressed. */
+  background: rgb(247 236 214 / .82) !important;
+  animation: blitz-spend-in 180ms cubic-bezier(.2, .9, .3, 1) both;
+}
+@keyframes blitz-spend-in { from { opacity: 0; transform: scale(.78) translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .blitz-run .blitz-spend-key { animation: none; } }
+
+.blitz-spend-label {
+  color: var(--rush-keyline);
+  font: 900 9px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .12em;
+}
+.blitz-key-glyph { display: block; }
+/* A bottle, the same shape the nitro pickup uses on the road. */
+.blitz-key-glyph-bottle {
+  width: 20px; height: 28px;
+  border-radius: 5px 5px 6px 6px;
+  background: linear-gradient(#5fe3ff 0 22%, #1d4f63 22% 100%);
+  clip-path: polygon(38% 0, 62% 0, 62% 14%, 100% 34%, 100% 100%, 0 100%, 0 34%, 38% 14%);
+}
+/* A gear, matching the gearbox pickup. */
+.blitz-key-glyph-gear {
+  width: 26px; height: 26px;
+  border: 5px solid #d08b12; border-radius: 50%;
+  outline: 3px dashed #d08b12; outline-offset: -1px;
+}
+/* A brake disc: a rotor with a caliper across it. No word needed. */
+.blitz-key-glyph-brake {
+  position: relative;
+  width: 26px; height: 26px;
+  border: 4px solid var(--rush-keyline); border-radius: 50%;
+}
+.blitz-key-glyph-brake::after {
+  content: '';
+  position: absolute; top: -5px; right: -2px;
+  width: 9px; height: 15px;
+  border-radius: 3px;
+  background: var(--rush-keyline);
+}
+.blitz-run .blitz-brake { display: grid; place-items: center; }
+
+/* TUCK carries the row now, so it takes the width BRAKE gives back. */
+.blitz-run .blitz-actions { grid-template-columns: 64px 1fr; }
+.blitz-run .blitz-actions .blitz-brake { height: 52px; padding: 0; }
+.blitz-run .blitz-actions .blitz-tuck { grid-column: 2; }

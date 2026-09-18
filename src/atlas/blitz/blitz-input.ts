@@ -10,6 +10,7 @@ export class BlitzInputController {
   private readonly pressed = new Set<string>();
   private readonly cleanups: Array<() => void> = [];
   private readonly bindingCleanups: Array<() => void> = [];
+  private readonly latchTargets = new Map<string, HTMLElement>();
 
   constructor(target: Window = window) {
     const keydown = (event: KeyboardEvent) => {
@@ -169,6 +170,68 @@ export class BlitzInputController {
       () => window.removeEventListener('pointerup', up),
       () => window.removeEventListener('pointercancel', up),
     );
+  }
+
+  /**
+   * A control you tap on and tap off, rather than hold.
+   *
+   * Boost is the case this exists for. Holding it means a thumb parked on the
+   * bottom-right of the screen for as long as the tank lasts, while the other
+   * thumb is steering - which is why it was the only control anybody could
+   * reliably use, and why holding it long enough made iOS offer to copy the
+   * word off the button. A tap lights it; a tap, or an empty tank, puts it out.
+   */
+  bindLatch(button: HTMLElement, action: 'drift' | 'boost' | 'brake' | 'tuck'): void {
+    const fire = (event: PointerEvent) => {
+      event.preventDefault();
+      this.setLatch(action, !this.readAction(action), button);
+    };
+    button.addEventListener('pointerdown', fire);
+    this.latchTargets.set(action, button);
+    this.bindingCleanups.push(() => {
+      button.removeEventListener('pointerdown', fire);
+      this.latchTargets.delete(action);
+    });
+  }
+
+  /**
+   * A control that fires once and lets go by itself.
+   *
+   * Drift spends a gearbox and buys a fixed window; there is nothing to hold,
+   * because the simulation ends the slide on its own schedule. Holding it only
+   * ever meant the rider was still pressing a button that had stopped doing
+   * anything.
+   */
+  bindPulse(button: HTMLElement, action: 'drift' | 'boost' | 'brake' | 'tuck', durationMs: number): void {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const fire = (event: PointerEvent) => {
+      event.preventDefault();
+      if (timer !== null) return;
+      this.setLatch(action, true, button);
+      timer = setTimeout(() => { timer = null; this.setLatch(action, false, button); }, durationMs);
+    };
+    button.addEventListener('pointerdown', fire);
+    this.bindingCleanups.push(() => {
+      button.removeEventListener('pointerdown', fire);
+      if (timer !== null) { clearTimeout(timer); timer = null; }
+      this.setLatch(action, false, button);
+    });
+  }
+
+  /** Put a latched control out from outside - an empty tank, or a new run. */
+  setLatch(action: 'drift' | 'boost' | 'brake' | 'tuck', active: boolean, target?: HTMLElement): void {
+    if (action === 'drift') this.drift = active;
+    else if (action === 'boost') this.boost = active;
+    else if (action === 'tuck') this.tuck = active;
+    else this.brake = active;
+    (target ?? this.latchTargets.get(action))?.classList.toggle('is-held', active);
+  }
+
+  private readAction(action: 'drift' | 'boost' | 'brake' | 'tuck'): boolean {
+    if (action === 'drift') return this.drift;
+    if (action === 'boost') return this.boost;
+    if (action === 'tuck') return this.tuck;
+    return this.brake;
   }
 
   sample(): BlitzInput {
