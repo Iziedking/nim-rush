@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLITZ_CITIES } from '../shared/atlas/blitz/cities';
 import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, createBlitzRun, getBlitzScoreBreakdown, sampleBlitzRoute, stepBlitzRun } from '../shared/atlas/blitz/core';
 import { BLITZ_CITIES, nextBlitzCity } from '../shared/atlas/blitz/cities';
 import { selectBlitzMissions } from '../shared/atlas/blitz/missions';
