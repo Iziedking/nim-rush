@@ -409,7 +409,17 @@ export class BlitzApp {
       recovery.append(node('strong', '', 'SAVED RANKED RUN'), recoveryStatus);
       recovery.append(button('Verify saved run', 'blitz-verify', () => void this.submitPendingRun(pending, recoveryStatus, recovery)));
       recovery.append(button('Discard saved run', 'blitz-quiet blitz-discard-run', () => { this.pendingRunStore.clear(); recovery.remove(); }));
-      screen.append(recovery);
+      /*
+       * Into the panel, at the top.
+       *
+       * This used to be a sibling of the panel in its own grid row, which on a
+       * phone put it under the utility row and off the bottom of a screen that
+       * was already full. A rider with a ranked run still waiting to be
+       * verified would never see that it existed, and the run would sit there
+       * unclaimed. It is the first thing that matters, so it is the first thing
+       * in the panel.
+       */
+      command.prepend(recovery);
     }
     this.ui.append(screen);
   }
@@ -857,7 +867,19 @@ export class BlitzApp {
     screen.append(ledger);
     const resultActions = node('nav', 'blitz-result-actions');
     resultActions.setAttribute('aria-label', 'Result actions');
-    resultActions.append(button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)), this.soundControl(), createNimiqPoweredBy());
+    /*
+     * Ride again, or leave.
+     *
+     * The only way off this screen was to start another run, which is fine
+     * when a rider wants one and a trap when they want the daily challenge, a
+     * lobby, or to stop. Every screen needs a door.
+     */
+    resultActions.append(
+      button('Ride again', 'blitz-start blitz-rematch', () => void this.startRun(state.cityId)),
+      button('Menu', 'blitz-again blitz-result-home', () => this.renderIntro()),
+      this.soundControl(),
+      createNimiqPoweredBy(),
+    );
     screen.append(resultActions);
     /*
      * The day's pool, on the screen where a player has just earned a place in

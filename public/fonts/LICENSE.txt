@@ -4,9 +4,16 @@ Licensed under the Apache License, Version 2.0.
 
     http://www.apache.org/licenses/LICENSE-2.0
 
+Saira Condensed
+Designed by Omnibus-Type (Héctor Gatti and the Omnibus-Type team).
+Licensed under the SIL Open Font License, Version 1.1.
+
+    https://openfontlicense.org/
+
 Files in this directory are the woff2 subsets published by Google Fonts,
 bundled here rather than requested from a CDN so the app makes no third-party
 request and the headline does not reflow after first paint.
 
+Both faces above are free to bundle and redistribute under the licences named.
 No other font in this project is bundled. Anything commercially licensed must
 be added by whoever holds the licence, and never committed to this repository.

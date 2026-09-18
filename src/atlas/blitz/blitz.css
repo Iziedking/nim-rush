@@ -14,7 +14,7 @@
 }
 
 .blitz-ui button { border: 0; color: var(--atlas-ink); cursor: pointer; touch-action: none; }
-.blitz-brand { color: var(--atlas-ink); font: 900 12px/1 ui-monospace, monospace; letter-spacing: .2em; text-shadow: var(--atlas-scrim); }
+.blitz-brand { color: var(--atlas-ink); font: 900 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .2em; text-shadow: var(--atlas-scrim); }
 
 .blitz-intro {
   width: min(100%, 470px);
@@ -36,40 +36,40 @@
  * text to win.
  */
 .blitz-intro::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgb(var(--atlas-shadow-rgb) / .58) 0%, rgb(var(--atlas-shadow-rgb) / .74) 46%, rgb(var(--atlas-shadow-rgb) / .95) 100%); pointer-events: none; }
-.blitz-edition { width: max-content; margin-top: 9px; padding: 7px 10px; border: 1px solid rgb(var(--atlas-ink-rgb) / .3); border-radius: var(--atlas-radius-pill); background: rgb(var(--atlas-paper-rgb) / .9); color: var(--atlas-selected); font: 800 10px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-edition { width: max-content; margin-top: 9px; padding: 7px 10px; border: 1px solid rgb(var(--atlas-ink-rgb) / .3); border-radius: var(--atlas-radius-pill); background: rgb(var(--atlas-paper-rgb) / .9); color: var(--atlas-selected); font: 800 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .16em; }
 .blitz-title { max-width: 7ch; margin: 12px 0 0; white-space: pre-line; font: 400 clamp(58px, 18vw, 92px)/.77 AtlasDisplay, Impact, sans-serif; letter-spacing: -.025em; text-shadow: 0 5px 0 rgb(var(--atlas-shadow-rgb) / .7); }
 .blitz-tagline { max-width: 32ch; margin: 15px 0 0; color: var(--atlas-label); font-size: 15px; font-weight: 700; line-height: 1.35; }
 .blitz-brief { margin-top: 11px; padding: 10px 11px; border-left: 3px solid var(--atlas-signal); border-radius: 10px; background: rgb(var(--atlas-paper-rgb) / .88); }
-.blitz-brief-label { color: var(--atlas-selected); font: 900 8px/1 ui-monospace, monospace; letter-spacing: .14em; }
+.blitz-brief-label { color: var(--atlas-selected); font: 900 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .14em; }
 .blitz-brief p { margin: 6px 0 0; color: var(--atlas-label); font-size: 11px; line-height: 1.25; }
 .blitz-brief-verbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
 .blitz-brief-verb { min-width: 0; padding: 6px; border: 1px solid rgb(var(--atlas-ink-rgb) / .15); border-radius: 8px; background: rgb(var(--atlas-paper-rgb) / .6); }
-.blitz-brief-verb b { display: block; color: var(--atlas-label-dim); font: 800 8px/1 ui-monospace, monospace; }
-.blitz-brief-verb strong { display: block; margin-top: 4px; color: var(--atlas-ink); font: 900 10px/1 ui-monospace, monospace; }
-.blitz-brief-verb span { display: block; margin-top: 3px; overflow: hidden; color: var(--atlas-label-dim); font: 800 8px/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-brief-verb b { display: block; color: var(--atlas-label-dim); font: 800 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-brief-verb strong { display: block; margin-top: 4px; color: var(--atlas-ink); font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-brief-verb span { display: block; margin-top: 3px; overflow: hidden; color: var(--atlas-label-dim); font: 800 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .blitz-intro-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 18px; }
 .blitz-stat { min-width: 0; padding: 10px 9px; border: 1px solid rgb(var(--atlas-ink-rgb) / .18); border-radius: 13px; background: rgb(var(--atlas-paper-rgb) / .9); }
-.blitz-stat strong { display: block; overflow: hidden; color: var(--atlas-ink); font: 900 17px/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.blitz-stat span { display: block; margin-top: 5px; color: var(--atlas-label-dim); font: 800 9px/1 ui-monospace, monospace; letter-spacing: .15em; }
-.blitz-start { min-height: 58px; margin-top: 13px; padding: 0 20px; border-radius: 16px; background: var(--atlas-signal); color: var(--atlas-on-accent) !important; box-shadow: 0 12px 32px rgb(var(--atlas-signal-rgb) / .34); font: 900 18px/1 ui-monospace, monospace; letter-spacing: .03em; text-transform: uppercase; }
+.blitz-stat strong { display: block; overflow: hidden; color: var(--atlas-ink); font: 900 19px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-stat span { display: block; margin-top: 5px; color: var(--atlas-label-dim); font: 800 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .15em; }
+.blitz-start { min-height: 58px; margin-top: 13px; padding: 0 20px; border-radius: 16px; background: var(--atlas-signal); color: var(--atlas-on-accent) !important; box-shadow: 0 12px 32px rgb(var(--atlas-signal-rgb) / .34); font: 900 20px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .03em; text-transform: uppercase; }
 .blitz-start:active { transform: translateY(2px) scale(.99); }
 .blitz-quiet { margin: 10px 3px 0; color: var(--atlas-label-dim); font-size: 11px; line-height: 1.35; }
-.blitz-help { min-height: 44px; margin-top: 4px; background: transparent; font: 800 11px/1 ui-monospace, monospace; }
+.blitz-help { min-height: 44px; margin-top: 4px; background: transparent; font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 .blitz-rematch { width: 100%; }
 
 .blitz-run { position: absolute; inset: 0; pointer-events: none; }
 .blitz-hud { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 7px; align-items: center; }
 .blitz-hud > * { min-height: 42px; display: flex; align-items: center; border: 1px solid rgb(var(--atlas-ink-rgb) / .17); border-radius: 12px; background: rgb(var(--atlas-paper-rgb) / .92); box-shadow: var(--atlas-glow); }
-.blitz-city-name { min-width: 0; padding: 0 12px; overflow: hidden; color: var(--atlas-label); font: 900 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.blitz-timer { min-width: 70px; justify-content: center; color: var(--atlas-ink); font: 900 21px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-.blitz-score { min-width: 78px; justify-content: center; color: var(--atlas-verified); font: 900 14px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-.blitz-pause { min-width: 42px; min-height: 42px; justify-content: center; padding: 0; color: var(--atlas-label); font: 900 12px/1 ui-monospace, monospace; pointer-events: auto; }
+.blitz-city-name { min-width: 0; padding: 0 12px; overflow: hidden; color: var(--atlas-label); font: 900 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.blitz-timer { min-width: 70px; justify-content: center; color: var(--atlas-ink); font: 900 23px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.blitz-score { min-width: 78px; justify-content: center; color: var(--atlas-verified); font: 900 15px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.blitz-pause { min-width: 42px; min-height: 42px; justify-content: center; padding: 0; color: var(--atlas-label); font: 900 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; pointer-events: auto; }
 .blitz-speed-box { position: absolute; top: max(68px, calc(env(safe-area-inset-top) + 56px)); right: max(14px, env(safe-area-inset-right)); display: grid; justify-items: end; text-shadow: var(--atlas-scrim); }
 .blitz-speed { font: 400 clamp(36px, 11vw, 56px)/.8 AtlasDisplay, Impact, sans-serif; }
-.blitz-speed-box span { margin-top: 5px; color: var(--atlas-label); font: 800 9px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-speed-box span { margin-top: 5px; color: var(--atlas-label); font: 800 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; }
 .blitz-progress { position: absolute; top: max(62px, calc(env(safe-area-inset-top) + 50px)); right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); height: 3px; overflow: hidden; border-radius: 3px; background: rgb(var(--atlas-ink-rgb) / .16); }
 .blitz-progress-fill { display: block; width: 0; height: 100%; background: linear-gradient(90deg, var(--atlas-selected), var(--atlas-verified)); transition: width .12s linear; }
-.blitz-boost-wrap { position: absolute; right: max(15px, env(safe-area-inset-right)); bottom: max(142px, calc(env(safe-area-inset-bottom) + 126px)); width: 106px; color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .13em; text-align: right; text-shadow: var(--atlas-scrim); }
+.blitz-boost-wrap { position: absolute; right: max(15px, env(safe-area-inset-right)); bottom: max(142px, calc(env(safe-area-inset-bottom) + 126px)); width: 106px; color: var(--atlas-label); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .13em; text-align: right; text-shadow: var(--atlas-scrim); }
 .blitz-boost-meter { height: 8px; margin-top: 6px; overflow: hidden; border: 1px solid rgb(var(--atlas-ink-rgb) / .36); border-radius: 6px; background: rgb(var(--atlas-paper-rgb) / .7); }
 .blitz-boost-fill { display: block; width: 28%; height: 100%; background: linear-gradient(90deg, var(--atlas-selected), var(--atlas-verified)); box-shadow: 0 0 12px var(--atlas-selected); }
 .blitz-countdown { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 12vh; color: rgb(255 255 255 / .9); font: 700 clamp(52px, 16vw, 104px)/1 AtlasDisplay, Impact, sans-serif; letter-spacing: .12em; text-shadow: 0 2px 14px rgb(7 12 28 / .5); pointer-events: none; }
@@ -77,7 +77,7 @@
 
 .blitz-controls { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(148px, 1fr) minmax(136px, .75fr); gap: 12px; align-items: end; pointer-events: auto; }
 .blitz-control { min-height: 56px; border: 1px solid rgb(var(--atlas-ink-rgb) / .26) !important; border-radius: 18px; background: rgb(var(--atlas-paper-rgb) / .9); box-shadow: var(--atlas-glow); user-select: none; -webkit-user-select: none; }
-.blitz-steer-zone { height: 82px; display: grid; align-content: center; gap: 10px; padding: 10px 18px; color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; text-align: center; touch-action: none; }
+.blitz-steer-zone { height: 82px; display: grid; align-content: center; gap: 10px; padding: 10px 18px; color: var(--atlas-label); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .16em; text-align: center; touch-action: none; }
 .blitz-steer-rail { position: relative; height: 5px; border-radius: 5px; background: rgb(var(--atlas-ink-rgb) / .2); }
 .blitz-steer-thumb { position: absolute; top: 50%; left: calc(50% - 15px); width: 30px; height: 30px; border: 4px solid var(--atlas-ink); border-radius: 50%; background: var(--atlas-selected); box-shadow: 0 0 18px rgb(var(--atlas-selected-rgb) / .55); transform: translateY(-50%); transition: transform .05s linear; }
 /*
@@ -88,19 +88,19 @@
 .blitz-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .blitz-actions .blitz-tuck { grid-column: 1 / -1; background: rgb(var(--atlas-selected-rgb, 111 227 255) / .22); }
 .blitz-actions .blitz-tuck.is-held { background: rgb(var(--atlas-selected-rgb, 111 227 255) / .45); }
-.blitz-actions .blitz-control { height: 62px; padding: 0 7px; color: var(--atlas-ink); font: 900 11px/1 ui-monospace, monospace; letter-spacing: .04em; }
+.blitz-actions .blitz-control { height: 62px; padding: 0 7px; color: var(--atlas-ink); font: 900 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .04em; }
 .blitz-drift.is-held { background: var(--atlas-explorer); color: var(--atlas-on-accent); transform: translateY(2px); }
 .blitz-brake.is-held { background: var(--atlas-paper); color: var(--atlas-ink); transform: translateY(2px); box-shadow: inset 0 0 0 3px var(--atlas-ink); }
 .blitz-boost.is-held { background: var(--atlas-verified); color: var(--atlas-on-accent); transform: translateY(2px); }
 
 .blitz-relay-host { position: absolute; top: max(112px, calc(env(safe-area-inset-top) + 98px)); right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); display: grid; justify-items: center; pointer-events: auto; }
 .blitz-relay-card { width: min(100%, 420px); padding: 13px; border: 2px solid var(--atlas-selected); border-radius: 18px; background: rgb(var(--atlas-paper-rgb) / .97); box-shadow: 0 16px 40px rgb(var(--atlas-shadow-rgb) / .48); animation: blitz-relay-in .18s ease-out; }
-.blitz-relay-label { color: var(--atlas-selected); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
-.blitz-relay-card h2 { margin: 7px 0 0; font: 900 15px/1.15 ui-monospace, monospace; text-transform: uppercase; }
+.blitz-relay-label { color: var(--atlas-selected); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-relay-card h2 { margin: 7px 0 0; font: 900 17px/1.15 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-transform: uppercase; }
 .blitz-relay-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 11px; }
 .blitz-relay-choice { min-height: 48px; padding: 8px; border: 1px solid rgb(var(--atlas-ink-rgb) / .2) !important; border-radius: 12px; background: var(--atlas-raised); font-size: 11px; font-weight: 800; line-height: 1.2; }
 .blitz-relay-choice:active { background: var(--atlas-selected); color: var(--atlas-on-accent); }
-.blitz-feedback { position: absolute; top: max(106px, calc(env(safe-area-inset-top) + 92px)); left: 50%; width: min(calc(100% - 28px), 430px); padding: 0; border-radius: 13px; opacity: 0; transform: translate(-50%, -8px); color: var(--atlas-on-accent); font: 900 10px/1.35 ui-monospace, monospace; text-align: center; transition: opacity .15s ease, transform .15s ease, padding .15s ease; pointer-events: none; }
+.blitz-feedback { position: absolute; top: max(106px, calc(env(safe-area-inset-top) + 92px)); left: 50%; width: min(calc(100% - 28px), 430px); padding: 0; border-radius: 13px; opacity: 0; transform: translate(-50%, -8px); color: var(--atlas-on-accent); font: 900 12px/1.35 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-align: center; transition: opacity .15s ease, transform .15s ease, padding .15s ease; pointer-events: none; }
 .blitz-feedback.is-correct, .blitz-feedback.is-wrong, .blitz-feedback.is-paused { padding: 11px 13px; opacity: 1; transform: translate(-50%, 0); }
 .blitz-feedback.is-correct { background: var(--atlas-verified); }
 .blitz-feedback.is-wrong { background: var(--atlas-warn); }
@@ -108,18 +108,18 @@
 
 .blitz-result, .blitz-unavailable { width: min(100%, 520px); max-height: 100%; margin: auto; overflow: auto; padding: clamp(16px, 3.2vw, 24px); border: 2px solid rgb(var(--atlas-ink-rgb) / .18); border-radius: 24px; background: rgb(var(--atlas-paper-rgb) / .97); box-shadow: 0 24px 70px rgb(var(--atlas-shadow-rgb) / .62); pointer-events: auto; }
 .blitz-result-hero { margin-top: 16px; padding: 16px 16px 15px; border: 1px solid rgb(var(--atlas-selected-rgb) / .34); border-radius: 18px; background: var(--atlas-raised); }
-.blitz-result-kicker { margin: 0; color: var(--atlas-verified); font: 900 11px/1 ui-monospace, monospace; letter-spacing: .18em; }
-.blitz-result-score-label { display: block; margin-top: 18px; color: var(--atlas-label-dim); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-result-kicker { margin: 0; color: var(--atlas-verified); font: 900 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-result-score-label { display: block; margin-top: 18px; color: var(--atlas-label-dim); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; }
 .blitz-result-score { margin: 6px 0 0; color: var(--atlas-ink); font: 400 clamp(58px, 18vw, 94px)/.84 AtlasDisplay, Impact, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-.blitz-result-best { margin: 9px 0 0; color: var(--atlas-explorer); font: 900 11px/1 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-result-best { margin: 9px 0 0; color: var(--atlas-explorer); font: 900 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
 .blitz-contracts { margin-top: 12px; padding: 13px 14px; border: 1px solid rgb(var(--atlas-ink-rgb) / .14); border-radius: 16px; background: rgb(var(--atlas-raised-rgb) / .46); }
-.blitz-contracts-heading { display: flex; align-items: center; justify-content: space-between; color: var(--atlas-label); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .15em; }
+.blitz-contracts-heading { display: flex; align-items: center; justify-content: space-between; color: var(--atlas-label); font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .15em; }
 .blitz-contracts-count { color: var(--atlas-verified); font-size: 14px; letter-spacing: .04em; }
 .blitz-contract-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
 .blitz-contract { min-width: 0; min-height: 72px; display: grid; align-content: space-between; gap: 8px; padding: 9px; border: 1px solid rgb(var(--atlas-ink-rgb) / .14); border-radius: 11px; background: rgb(var(--atlas-paper-rgb) / .54); }
-.blitz-contract-index { color: var(--atlas-label-dim); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .12em; }
-.blitz-contract-name { overflow: hidden; color: var(--atlas-ink); font: 900 9px/1.14 ui-monospace, monospace; letter-spacing: .05em; text-overflow: ellipsis; }
-.blitz-contract-state { color: var(--atlas-label-dim); font: 900 8px/1 ui-monospace, monospace; letter-spacing: .08em; }
+.blitz-contract-index { color: var(--atlas-label-dim); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .12em; }
+.blitz-contract-name { overflow: hidden; color: var(--atlas-ink); font: 900 11px/1.14 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .05em; text-overflow: ellipsis; }
+.blitz-contract-state { color: var(--atlas-label-dim); font: 900 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .08em; }
 .blitz-contract.is-complete { border-color: rgb(var(--atlas-verified-rgb) / .7); background: rgb(var(--atlas-verified-rgb) / .1); }
 .blitz-contract.is-complete .blitz-contract-state { color: var(--atlas-verified); }
 .blitz-contract.is-failed { border-color: rgb(var(--atlas-warn-rgb) / .62); }
@@ -128,42 +128,42 @@
 .blitz-breakdown .blitz-stat { padding: 9px 6px; }
 .blitz-breakdown .blitz-stat strong { font-size: 13px; }
 .blitz-breakdown .blitz-stat span { font-size: 7px; }
-.blitz-verify, .blitz-again { width: 100%; min-height: 50px; margin-top: 12px; padding: 10px 14px; border: 1px solid rgb(var(--atlas-ink-rgb) / .24) !important; border-radius: 14px; background: var(--atlas-raised); color: var(--atlas-ink); font: 900 11px/1.2 ui-monospace, monospace; letter-spacing: .04em; }
+.blitz-verify, .blitz-again { width: 100%; min-height: 50px; margin-top: 12px; padding: 10px 14px; border: 1px solid rgb(var(--atlas-ink-rgb) / .24) !important; border-radius: 14px; background: var(--atlas-raised); color: var(--atlas-ink); font: 900 13px/1.2 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .04em; }
 .blitz-verify { border-color: var(--atlas-verified) !important; color: var(--atlas-verified) !important; }
 .blitz-verify:disabled { opacity: .75; }
 .blitz-competition { margin-top: 12px; padding: 0 12px 12px; border: 1px solid rgb(var(--atlas-ink-rgb) / .15); border-radius: 15px; background: rgb(var(--atlas-raised-rgb) / .64); }
-.blitz-competition-summary { min-height: 48px; display: flex; align-items: center; color: var(--atlas-label); cursor: pointer; font: 900 10px/1 ui-monospace, monospace; letter-spacing: .08em; list-style: none; }
+.blitz-competition-summary { min-height: 48px; display: flex; align-items: center; color: var(--atlas-label); cursor: pointer; font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .08em; list-style: none; }
 .blitz-competition-summary::-webkit-details-marker { display: none; }
 .blitz-competition-summary::after { content: '+'; margin-left: auto; color: var(--atlas-selected); font-size: 18px; }
 .blitz-competition[open] .blitz-competition-summary::after { content: '−'; }
-.blitz-rank-status { margin: 0; color: var(--atlas-label); font: 800 9px/1.35 ui-monospace, monospace; letter-spacing: .08em; }
-.blitz-daily-meta { margin: 4px 0 0; color: var(--atlas-verified); font: 800 9px/1.2 ui-monospace, monospace; letter-spacing: .12em; }
+.blitz-rank-status { margin: 0; color: var(--atlas-label); font: 800 11px/1.35 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .08em; }
+.blitz-daily-meta { margin: 4px 0 0; color: var(--atlas-verified); font: 800 11px/1.2 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .12em; }
 .blitz-pending-run { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid rgb(var(--atlas-verified-rgb) / .35); border-radius: 12px; background: rgb(var(--atlas-paper-rgb) / .84); }
-.blitz-pending-run strong { color: var(--atlas-verified); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .12em; }
-.blitz-retry-submit, .blitz-discard-run { min-height: 44px; border-radius: 10px; font: 900 10px/1 ui-monospace, monospace; text-transform: uppercase; }
+.blitz-pending-run strong { color: var(--atlas-verified); font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .12em; }
+.blitz-retry-submit, .blitz-discard-run { min-height: 44px; border-radius: 10px; font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-transform: uppercase; }
 .blitz-retry-submit { border: 1px solid var(--atlas-verified); background: rgb(var(--atlas-verified-rgb) / .12); color: var(--atlas-verified); }
 .blitz-discard-run { padding: 0; border: 0; background: transparent; color: var(--atlas-label-dim); }
-.blitz-username { width: 100%; min-height: 48px; margin-top: 10px; padding: 0 13px; border: 1px solid rgb(var(--atlas-ink-rgb) / .24); border-radius: 12px; outline: none; background: rgb(var(--atlas-paper-rgb) / .86); color: var(--atlas-ink); font: 800 14px/1 ui-monospace, monospace; }
+.blitz-username { width: 100%; min-height: 48px; margin-top: 10px; padding: 0 13px; border: 1px solid rgb(var(--atlas-ink-rgb) / .24); border-radius: 12px; outline: none; background: rgb(var(--atlas-paper-rgb) / .86); color: var(--atlas-ink); font: 800 15px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 .blitz-username:focus { border-color: var(--atlas-selected); box-shadow: 0 0 0 3px rgb(var(--atlas-selected-rgb) / .18); }
 .blitz-ranked-launch { margin-top: 8px; border: 1px solid rgb(var(--atlas-ink-rgb) / .18); border-radius: 12px; background: rgb(var(--atlas-paper-rgb) / .84); }
-.blitz-ranked-label { min-height: 44px; display: flex; align-items: center; padding: 0 12px; color: var(--atlas-verified); cursor: pointer; font: 900 9px/1 ui-monospace, monospace; letter-spacing: .1em; list-style: none; }
+.blitz-ranked-label { min-height: 44px; display: flex; align-items: center; padding: 0 12px; color: var(--atlas-verified); cursor: pointer; font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; list-style: none; }
 .blitz-ranked-label::-webkit-details-marker { display: none; }
 .blitz-ranked-label::after { content: '+'; margin-left: auto; color: var(--atlas-selected); font-size: 18px; }
 .blitz-ranked-launch[open] .blitz-ranked-label::after { content: '−'; }
 .blitz-ranked-launch .blitz-username, .blitz-ranked-launch .blitz-ranked-button, .blitz-ranked-launch .blitz-rank-status { width: calc(100% - 20px); margin-right: 10px; margin-left: 10px; }
 .blitz-ranked-launch .blitz-username { margin-top: 0; }
-.blitz-ranked-button { min-height: 48px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--atlas-verified) !important; border-radius: 12px; background: rgb(var(--atlas-verified-rgb) / .1); color: var(--atlas-verified) !important; font: 900 10px/1.15 ui-monospace, monospace; text-transform: uppercase; }
+.blitz-ranked-button { min-height: 48px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--atlas-verified) !important; border-radius: 12px; background: rgb(var(--atlas-verified-rgb) / .1); color: var(--atlas-verified) !important; font: 900 12px/1.15 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-transform: uppercase; }
 .blitz-ranked-launch .blitz-rank-status { margin-top: 8px; margin-bottom: 10px; }
 .blitz-leaderboard { display: grid; gap: 5px; margin-top: 12px; padding-top: 11px; border-top: 1px solid rgb(var(--atlas-ink-rgb) / .14); }
-.blitz-leaderboard h3 { margin: 0 0 4px; color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .13em; }
+.blitz-leaderboard h3 { margin: 0 0 4px; color: var(--atlas-label); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .13em; }
 .blitz-leaderboard p { margin: 0; color: var(--atlas-label-dim); font-size: 11px; line-height: 1.35; }
-.blitz-leaderboard-row { min-height: 30px; display: grid; grid-template-columns: 30px 1fr auto auto; gap: 7px; align-items: center; font: 800 11px/1 ui-monospace, monospace; }
+.blitz-leaderboard-row { min-height: 30px; display: grid; grid-template-columns: 30px 1fr auto auto; gap: 7px; align-items: center; font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 .blitz-leaderboard-row b { color: var(--atlas-selected); }
 .blitz-leaderboard-row small { color: var(--atlas-label-dim); font-size: 8px; }
 .blitz-leaderboard-row strong { color: var(--atlas-verified); }
 .blitz-next-city { margin-top: 15px; padding: 15px; border-left: 5px solid var(--atlas-selected); border-radius: 16px; background: var(--atlas-raised); }
-.blitz-next-city > span { color: var(--atlas-label); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .17em; }
-.blitz-next-city h2 { margin: 7px 0 0; font: 900 23px/1 ui-monospace, monospace; text-transform: uppercase; }
+.blitz-next-city > span { color: var(--atlas-label); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .17em; }
+.blitz-next-city h2 { margin: 7px 0 0; font: 900 25px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-transform: uppercase; }
 .blitz-next-city p { margin: 8px 0 0; color: var(--atlas-label); font-size: 12px; }
 .blitz-next { width: 100%; }
 .blitz-unavailable { align-self: center; }
@@ -196,7 +196,7 @@
 /* The day's pool on the result screen: the only real money in Beacon Blitz,
    so it gets its own surface rather than sitting in the score breakdown. */
 .blitz-pool { display: grid; gap: 6px; margin-top: 16px; padding: 14px 16px; border: 2px solid rgb(255 255 255 / .14); border-left: 5px solid #ffd166; border-radius: 14px; background: rgb(12 16 34 / .78); }
-.blitz-pool-label { color: #9fb0d8; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-pool-label { color: #9fb0d8; font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; }
 .blitz-pool[hidden] { display: none; }
 .blitz-pool-value { color: #ffd166; font: 800 19px/1.15 system-ui, sans-serif; }
 .blitz-pool-note { margin: 0; max-width: 46ch; color: #e8ecf8; font: 600 13px/1.4 system-ui, sans-serif; }
@@ -240,14 +240,14 @@
 .blitz-onboarding .blitz-brand { align-self: center; opacity: .72; }
 .blitz-onboarding-art { margin: 14px auto 0; width: min(100%, 360px); }
 .blitz-onboarding-art svg { display: block; width: 100%; height: auto; }
-.blitz-onboarding-kicker { display: block; color: var(--atlas-selected); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .22em; }
+.blitz-onboarding-kicker { display: block; color: var(--atlas-selected); font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .22em; }
 .blitz-onboarding-title { margin: 10px 0 0; color: var(--atlas-ink); font: 400 clamp(30px, 8vw, 44px)/1 AtlasDisplay, Impact, sans-serif; letter-spacing: -.02em; }
 .blitz-onboarding-body { margin: 12px auto 0; max-width: 36ch; color: var(--atlas-label); font: 600 15px/1.45 system-ui, sans-serif; }
 .blitz-onboarding-dots { display: flex; justify-content: center; gap: 7px; margin-top: 18px; }
 .blitz-onboarding-dot { width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--atlas-ink-rgb) / .26); }
 .blitz-onboarding-dot.is-current { width: 22px; border-radius: 4px; background: var(--atlas-signal); }
 .blitz-onboarding .blitz-start { margin-top: 18px; }
-.blitz-onboarding-skip { margin-top: 10px; padding: 10px; background: transparent; color: var(--atlas-label-dim) !important; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
+.blitz-onboarding-skip { margin-top: 10px; padding: 10px; background: transparent; color: var(--atlas-label-dim) !important; font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
 
 /* Short landscape: the picture yields first, since the sentence is the part
    that has to survive. */
@@ -280,18 +280,18 @@
 /* The mission surface is a race instrument, not a modal. It stays in the
  * player's peripheral vision while the physical gates do the teaching. */
 .blitz-mission-hud { position: absolute; top: max(112px, calc(env(safe-area-inset-top) + 98px)); left: max(14px, env(safe-area-inset-left)); z-index: 3; display: grid; gap: 6px; width: min(218px, calc(100% - 28px)); pointer-events: none; text-shadow: 0 1px 7px rgb(7 12 28 / .55); }
-.blitz-mission-heading { color: rgb(255 255 255 / .84); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-mission-heading { color: rgb(255 255 255 / .84); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .16em; }
 .blitz-mission-card { min-height: 44px; padding: 7px 9px 6px; border-left: 3px solid rgb(255 255 255 / .38); border-radius: 8px; background: rgb(7 12 28 / .62); color: white; transition: border-color .14s ease, background-color .14s ease; }
 .blitz-mission-card.is-active { border-left-color: var(--atlas-selected); background: rgb(7 12 28 / .82); }
 .blitz-mission-card.is-complete { border-left-color: var(--atlas-verified); }
 .blitz-mission-card.is-failed { border-left-color: var(--atlas-warn); opacity: .78; }
 .blitz-mission-top { display: flex; align-items: center; gap: 8px; }
-.blitz-mission-label { overflow: hidden; color: rgb(255 255 255 / .95); font: 900 9px/1.1 ui-monospace, monospace; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
-.blitz-mission-status { margin-left: auto; color: var(--atlas-selected); font: 900 8px/1 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-mission-label { overflow: hidden; color: rgb(255 255 255 / .95); font: 900 11px/1.1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-mission-status { margin-left: auto; color: var(--atlas-selected); font: 900 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
 .is-complete .blitz-mission-status { color: var(--atlas-verified); }
 .is-failed .blitz-mission-status { color: var(--atlas-warn); }
 .blitz-mission-verb { margin: 4px 0 5px; overflow: hidden; color: rgb(255 255 255 / .76); font: 600 10px/1.1 system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
-.blitz-mission-progress { display: block; color: rgb(255 255 255 / .68); font: 800 8px/1 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-mission-progress { display: block; color: rgb(255 255 255 / .68); font: 800 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
 .blitz-mission-meter { display: block; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 3px; background: rgb(255 255 255 / .2); }
 .blitz-mission-meter-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--atlas-selected); transition: width .12s linear; }
 .is-complete .blitz-mission-meter-fill { background: var(--atlas-verified); }
@@ -302,10 +302,10 @@
 .blitz-pause-copy { max-width: 34ch; margin: 0; color: rgb(255 255 255 / .82); font: 600 14px/1.35 system-ui, sans-serif; }
 .blitz-pause-overlay .blitz-start, .blitz-pause-overlay .blitz-again { width: min(280px, 100%); margin-top: 4px; }
 .blitz-difficulty { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 14px 0 0; padding: 0; border: 0; }
-.blitz-difficulty legend { grid-column: 1 / -1; margin-bottom: 1px; color: var(--atlas-label-dim); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .17em; }
-.blitz-difficulty-option { min-height: 44px; padding: 7px 8px; border: 1px solid rgb(var(--atlas-ink-rgb) / .2) !important; border-radius: 11px; background: var(--atlas-raised); color: var(--atlas-label); font: 800 9px/1.2 ui-monospace, monospace; }
+.blitz-difficulty legend { grid-column: 1 / -1; margin-bottom: 1px; color: var(--atlas-label-dim); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .17em; }
+.blitz-difficulty-option { min-height: 44px; padding: 7px 8px; border: 1px solid rgb(var(--atlas-ink-rgb) / .2) !important; border-radius: 11px; background: var(--atlas-raised); color: var(--atlas-label); font: 800 11px/1.2 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 .blitz-difficulty-option.is-selected { border-color: var(--atlas-selected) !important; background: rgb(var(--atlas-selected-rgb) / .12); color: var(--atlas-selected); }
-.blitz-result-time { margin: 8px 0 0; color: var(--atlas-label); font: 900 10px/1.2 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-result-time { margin: 8px 0 0; color: var(--atlas-label); font: 900 12px/1.2 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
 .blitz-breakdown { grid-template-columns: repeat(2, 1fr); }
 .blitz-breakdown .blitz-stat { min-height: 48px; display: grid; align-content: center; border: 1px solid rgb(var(--atlas-ink-rgb) / .1); border-radius: 8px; background: rgb(var(--atlas-raised-rgb) / .55); }
 .blitz-breakdown .blitz-stat strong { font-variant-numeric: tabular-nums; }
@@ -322,9 +322,9 @@ button:disabled { cursor: not-allowed; opacity: .62; }
    the wallet, because both are things a rider can go and check. */
 .blitz-pool-standings { display: grid; gap: 5px; margin: 8px 0 0; padding: 0; list-style: none; }
 .blitz-pool-place { display: grid; grid-template-columns: 2.4rem 1fr auto; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 9px; background: rgb(255 255 255 / .05); }
-.blitz-pool-place b { color: #ffd166; font: 800 12px/1 ui-monospace, monospace; }
-.blitz-pool-place span { overflow: hidden; color: #9fb0d8; font: 700 12px/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.blitz-pool-place strong { color: #e8ecf8; font: 800 12px/1 ui-monospace, monospace; }
+.blitz-pool-place b { color: #ffd166; font: 800 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-pool-place span { overflow: hidden; color: #9fb0d8; font: 700 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.blitz-pool-place strong { color: #e8ecf8; font: 800 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 
 /*
  * Rider receipts. See presentRewards() in blitz-app.ts.
@@ -336,14 +336,14 @@ button:disabled { cursor: not-allowed; opacity: .62; }
  */
 .blitz-rewards { display: grid; gap: 6px; margin-top: 12px; padding: 14px 16px; border: 2px solid rgb(255 255 255 / .1); border-radius: 14px; background: rgb(12 16 34 / .6); }
 .blitz-rewards[hidden] { display: none; }
-.blitz-rewards-label { color: #9fb0d8; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-rewards-label { color: #9fb0d8; font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; }
 .blitz-rewards-list { display: grid; gap: 5px; margin: 4px 0 0; padding: 0; list-style: none; }
 .blitz-reward { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 6px 10px; padding: 8px 10px; border-left: 3px solid #9fb0d8; border-radius: 9px; background: rgb(255 255 255 / .05); }
-.blitz-reward-day { color: #9fb0d8; font: 700 12px/1 ui-monospace, monospace; }
-.blitz-reward-amount { color: #e8ecf8; font: 800 13px/1 ui-monospace, monospace; }
-.blitz-reward-state { color: #9fb0d8; font: 800 10px/1.2 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-reward-day { color: #9fb0d8; font: 700 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-reward-amount { color: #e8ecf8; font: 800 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-reward-state { color: #9fb0d8; font: 800 12px/1.2 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
 /* The reason and the hash each take the full row: they are longer than a cell. */
-.blitz-reward-note, .blitz-reward-hash { grid-column: 1 / -1; color: #9fb0d8; font: 600 11px/1.3 ui-monospace, monospace; word-break: break-all; }
+.blitz-reward-note, .blitz-reward-hash { grid-column: 1 / -1; color: #9fb0d8; font: 600 13px/1.3 RushPlate, 'Saira Condensed', ui-monospace, monospace; word-break: break-all; }
 .blitz-reward-owed { border-left-color: #ffd166; }
 .blitz-reward-sending { border-left-color: #6fd3ff; }
 .blitz-reward-paid { border-left-color: #6fe3a1; }
@@ -376,7 +376,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
  * reads the tally without translating two words back into two objects.
  */
 .blitz-supplies, .blitz-ladder { display: grid; gap: 6px; margin-top: 12px; padding: 14px 16px; border: 2px solid rgb(255 255 255 / .12); border-radius: 14px; background: rgb(12 16 34 / .66); }
-.blitz-supplies-label, .blitz-ladder-label { color: #9fb0d8; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .18em; }
+.blitz-supplies-label, .blitz-ladder-label { color: #9fb0d8; font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; }
 .blitz-supply-row { display: flex; gap: 10px; margin-top: 4px; }
 .blitz-supply { flex: 1; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 0 9px; align-items: center; padding: 9px 11px; border-radius: 10px; background: rgb(255 255 255 / .05); }
 .blitz-supply-glyph { grid-row: 1 / 3; width: 18px; height: 26px; }
@@ -384,8 +384,8 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-supply-glyph-nitro { border-radius: 5px 5px 6px 6px; background: linear-gradient(#5fe3ff 0 22%, #1d4f63 22% 100%); clip-path: polygon(38% 0, 62% 0, 62% 14%, 100% 34%, 100% 100%, 0 100%, 0 34%, 38% 14%); }
 /* A gear: a disc with a hole, teeth implied by the notched border. */
 .blitz-supply-glyph-gearbox { width: 24px; height: 24px; align-self: center; grid-row: 1 / 3; border: 5px solid #ffc247; border-radius: 50%; outline: 3px dashed #ffc247; outline-offset: -1px; }
-.blitz-supply-value { color: #e8ecf8; font: 800 16px/1 ui-monospace, monospace; }
-.blitz-supply-label { color: #9fb0d8; font: 800 9px/1 ui-monospace, monospace; letter-spacing: .14em; }
+.blitz-supply-value { color: #e8ecf8; font: 800 18px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
+.blitz-supply-label { color: #9fb0d8; font: 800 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .14em; }
 .blitz-ladder-unlock { margin: 0; max-width: 46ch; color: #e8ecf8; font: 600 13px/1.4 system-ui, sans-serif; }
 .blitz-ladder-meter { height: 7px; margin-top: 4px; overflow: hidden; border-radius: 5px; background: rgb(255 255 255 / .08); }
 .blitz-ladder-fill { display: block; height: 100%; background: linear-gradient(90deg, #ffd166, #6fe3a1); }
@@ -432,7 +432,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-logo-wordmark-drop { fill: var(--rush-keyline); }
 .blitz-rush-mark { width: 100%; }
 .blitz-rush-mark svg { display: block; width: 100%; height: auto; overflow: visible; }
-.blitz-powered { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--rush-muted); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
+.blitz-powered { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--rush-muted); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; }
 .blitz-powered .blitz-nimiq-lockup { width: auto; height: 17px; }
 
 .blitz-intro.blitz-fullscreen-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 430px); grid-template-rows: 1fr auto; align-items: end; gap: 22px clamp(28px, 7vw, 110px); padding: clamp(24px, 5vw, 76px); overflow: auto; }
@@ -443,7 +443,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-intro-masthead .blitz-tagline { max-width: 27ch; margin-top: 24px; color: var(--rush-ink); font-size: clamp(17px, 2vw, 22px); line-height: 1.18; }
 .blitz-intro-masthead .blitz-daily-meta { margin-top: 18px; color: var(--rush-lime); }
 .blitz-intro-command { position: relative; grid-column: 2; grid-row: 1; align-self: end; padding: clamp(18px, 3vw, 28px); border-left: 2px solid var(--rush-lime); background: var(--rush-panel); clip-path: polygon(0 0, 96% 0, 100% 9%, 100% 100%, 0 100%); }
-.blitz-intro-command::before { content: 'DROP 01 / LAGOS'; display: block; margin-bottom: 16px; color: var(--rush-teal); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .2em; }
+.blitz-intro-command::before { content: 'DROP 01 / LAGOS'; display: block; margin-bottom: 16px; color: var(--rush-teal); font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .2em; }
 .blitz-intro-command .blitz-intro-stats { margin-top: 0; }
 .blitz-intro-command .blitz-stat { border: 0; border-top: 1px solid var(--rush-line); border-radius: 0; background: transparent; }
 .blitz-intro-command .blitz-stat strong { color: var(--rush-ink); font-size: 19px; }
@@ -1037,7 +1037,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
   border-radius: 7px;
   background: var(--rush-keyline);
   color: var(--rush-paper);
-  font: 900 10px/1 ui-monospace, monospace;
+  font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .16em;
 }
 .blitz-mode-free { margin-top: 20px; }
@@ -1050,7 +1050,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
   background: rgb(240 179 93 / .22) !important;
 }
 .blitz-intro-command .blitz-ranked-launch .blitz-mode-label { background: var(--rush-keyline); }
-.blitz-intro-command .blitz-ranked-launch .blitz-daily-meta { margin: 0 0 12px; color: #6d604a; font: 800 10px/1.3 ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-intro-command .blitz-ranked-launch .blitz-daily-meta { margin: 0 0 12px; color: #6d604a; font: 800 12px/1.3 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
 .blitz-intro-command .blitz-ranked-launch .blitz-username,
 .blitz-intro-command .blitz-ranked-launch .blitz-ranked-button,
 .blitz-intro-command .blitz-ranked-launch .blitz-rank-status { width: 100%; margin-right: 0; margin-left: 0; }
@@ -1091,7 +1091,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-gap-name {
   overflow: hidden;
   color: var(--rush-paper);
-  font: 800 11px/1 ui-monospace, monospace;
+  font: 800 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .06em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1181,18 +1181,18 @@ button:disabled { cursor: not-allowed; opacity: .62; }
  * rider deciding whether to ride needs the size of the prize, not its
  * arithmetic, and nobody should read the same four sentences every day.
  */
-.blitz-trail-meta { margin: 0 0 16px; color: #6d604a; font: 800 10px/1.4 ui-monospace, monospace; letter-spacing: .13em; }
+.blitz-trail-meta { margin: 0 0 16px; color: #6d604a; font: 800 12px/1.4 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .13em; }
 .blitz-connect { width: 100%; }
 .blitz-intro-command .blitz-quiet { margin: 10px 0 0; color: #6d604a; font: 600 12px/1.4 system-ui, sans-serif; }
 .blitz-free-run { width: 100%; margin-top: 10px; }
 .blitz-mode-free { display: grid; margin-top: 18px; padding-top: 16px; border-top: 3px solid rgb(20 19 29 / .18); }
 .blitz-intro-command .blitz-difficulty { display: flex; gap: 8px; margin: 0; padding: 0; border: 0; }
-.blitz-intro-command .blitz-difficulty legend { padding: 0; color: #6d604a; font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-intro-command .blitz-difficulty legend { padding: 0; color: #6d604a; font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .16em; }
 .blitz-rules-link {
   display: inline-block;
   margin-top: 14px;
   color: #6d604a;
-  font: 800 10px/1 ui-monospace, monospace;
+  font: 800 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .14em;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -1254,11 +1254,11 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-seat.is-taken { border-color: var(--rush-keyline); background: rgb(20 19 29 / .08); }
 /* Your own seat is the one you look for first. */
 .blitz-seat.is-you { background: var(--rush-lime); }
-.blitz-seat-number { color: #6d604a; font: 900 12px/1 ui-monospace, monospace; }
+.blitz-seat-number { color: #6d604a; font: 900 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 .blitz-seat.is-taken .blitz-seat-number { color: var(--rush-keyline); }
-.blitz-seat-rider { color: var(--rush-keyline); font: 700 13px/1 ui-monospace, monospace; }
+.blitz-seat-rider { color: var(--rush-keyline); font: 700 14px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; }
 .blitz-seat:not(.is-taken) .blitz-seat-rider { color: #8a7d66; }
-.blitz-seat-you { margin-left: auto; color: var(--rush-keyline); font: 900 9px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.blitz-seat-you { margin-left: auto; color: var(--rush-keyline); font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .16em; }
 
 .blitz-share-link, .blitz-open-lobby { width: 100%; margin-top: 8px; }
 /*
@@ -1353,7 +1353,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
   border-radius: 7px;
   background: rgb(20 19 29 / .06);
   color: #4b4436;
-  font: 900 9px/1 ui-monospace, monospace;
+  font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .16em;
 }
 
@@ -1381,7 +1381,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .blitz-intro-command .blitz-difficulty-option {
   min-height: 46px;
   border-radius: 10px;
-  font: 900 11px/1 ui-monospace, monospace;
+  font: 900 13px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -1551,7 +1551,7 @@ button + .blitz-quiet { margin-top: 11px; }
   min-width: 0;
   overflow: hidden;
   color: var(--rush-keyline);
-  font: 800 15px/1 ui-monospace, monospace;
+  font: 800 17px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1562,7 +1562,7 @@ button + .blitz-quiet { margin-top: 11px; }
   border-radius: 10px;
   background: transparent;
   color: #4b4436;
-  font: 900 9px/1 ui-monospace, monospace;
+  font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .14em;
   text-transform: uppercase;
 }
@@ -1625,7 +1625,7 @@ button + .blitz-quiet { margin-top: 11px; }
 }
 .blitz-place-field {
   color: #6d604a;
-  font: 900 9px/1 ui-monospace, monospace;
+  font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .14em;
 }
 /* Leading is worth seeing without reading. */
@@ -1668,7 +1668,7 @@ button + .blitz-quiet { margin-top: 11px; }
 }
 .blitz-first-down-note {
   color: #4b4436;
-  font: 900 8px/1 ui-monospace, monospace;
+  font: 900 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .14em;
   text-transform: uppercase;
 }
@@ -1715,12 +1715,270 @@ button + .blitz-quiet { margin-top: 11px; }
 .blitz-anchor-note {
   margin: 10px 0 0;
   color: #4b4436;
-  font: 800 10px/1.4 ui-monospace, monospace;
+  font: 800 12px/1.4 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .08em;
 }
 .blitz-anchor-link {
   color: var(--rush-keyline);
-  font: 800 10px/1.4 ui-monospace, monospace;
+  font: 800 12px/1.4 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/*
+ * The way back.
+ *
+ * Quieter than Ride again, because most riders want another run and the ones
+ * who want the menu know they do. Sized to sit beside it rather than under it,
+ * so the result actions stay one row on a phone.
+ */
+.blitz-result-actions .blitz-result-home {
+  width: auto;
+  min-width: 96px;
+  margin-top: 0;
+  padding: 0 18px;
+  font: 400 clamp(15px, 1.8vw, 18px)/1 AtlasDisplay, Impact, sans-serif;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.blitz-result-actions .blitz-rematch { flex: 1 1 auto; }
+
+/* An unverified ranked run sits at the head of the panel, and says so. */
+.blitz-intro-command > .blitz-pending-run {
+  margin: 0 0 14px;
+  border: 3px solid var(--rush-keyline) !important;
+  border-radius: var(--rush-radius-tight);
+  background: rgb(244 119 98 / .16) !important;
+  box-shadow: none;
+}
+
+/* ==========================================================================
+ * THE RACE PLATE
+ *
+ * WHY THIS SECTION EXISTS
+ *
+ * Every label in this app was set in ui-monospace - the system monospace, the
+ * font a terminal picks when nobody has chosen one. Eighty-one declarations of
+ * it, all tracked out wide at eight to twelve pixels. That is the reason the
+ * screen read as generic: not the colour, not the layout, but a typeface that
+ * was never selected, only defaulted to, doing every piece of text that was
+ * not a headline.
+ *
+ * So the app now has a second real face. Saira Condensed, self-hosted beside
+ * Luckiest Guy, carries every label, value and unit. It was picked for contrast
+ * rather than harmony: Luckiest Guy is fat, round and hand-drawn, and a squared
+ * condensed grotesque is the opposite of that in every axis, which is what
+ * makes a pairing read as deliberate. It is also the correct language for the
+ * subject. Condensed gothic caps are what is actually printed on a downhill
+ * number board, a start-gate clock and a split-time sheet.
+ *
+ * Condensed faces read smaller than a monospace at the same pixel size, so the
+ * substitution scaled every size up - 20% under thirteen pixels, 10% above -
+ * to keep the presence each label had.
+ * ========================================================================== */
+
+@font-face {
+  font-family: RushPlate;
+  src: url('/fonts/saira-condensed-500-latin.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: RushPlate;
+  src: url('/fonts/saira-condensed-700-latin.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: RushPlate;
+  src: url('/fonts/saira-condensed-900-latin.woff2') format('woff2');
+  font-weight: 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Accented characters, so a rider called Ayodele or Bjorn keeps one typeface. */
+@font-face {
+  font-family: RushPlate;
+  src: url('/fonts/saira-condensed-500-latin-ext.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: RushPlate;
+  src: url('/fonts/saira-condensed-700-latin-ext.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: RushPlate;
+  src: url('/fonts/saira-condensed-900-latin-ext.woff2') format('woff2');
+  font-weight: 900;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Numerals are read against each other on this screen - a split against a
+ * split, a score against a score - so they are tabular everywhere, and never
+ * shift width as a clock counts down. */
+.blitz-ui { font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+ * THE START GATE
+ *
+ * Three things were wrong with the lobby, and none of them was the colour.
+ *
+ * 1. THE TITLE WAS CUT. Set at line-height .7 with a hard 7x8 shadow, the
+ *    glyphs needed 71px inside a 60px box and the shadow another 8 below that,
+ *    so the panel - laid out against the box, which is all layout can see -
+ *    began three pixels inside the ink. A hard offset shadow paints outside the
+ *    box and reserves no space for itself, which is exactly why it looks like a
+ *    printed thing, and exactly why it has to be given room by hand.
+ *
+ * 2. THERE WAS NO HIERARCHY. Three full-width buttons, stacked, identical in
+ *    size. Today's challenge is the reason the app exists; free run and racing
+ *    friends are what you do when you have already ridden it. So the two
+ *    secondaries now share one row at half width, which says that in the layout
+ *    instead of hoping the colour says it, and gives sixty pixels of hill back.
+ *
+ * 3. EVERY SHAPE WAS THE SAME. Nine rounded rectangles down the screen, one
+ *    radius, one keyline, one shadow. Repetition of a single shape is what
+ *    makes a screen read as assembled rather than designed. The race brief is
+ *    now an ink plate with squared corners - the one deliberately different
+ *    shape on the screen, and the language the subject actually uses: a number
+ *    board, a start clock, a split sheet are all dark plates with condensed
+ *    caps punched into them.
+ * ========================================================================== */
+
+/* 1. Room for the ink -------------------------------------------------------
+ * Eleven pixels of glyph past the box, eight more for the shadow, and a little
+ * air so the panel does not sit right on it. */
+.blitz-intro-masthead .blitz-title {
+  padding-bottom: 22px;
+  text-shadow: 6px 7px 0 var(--rush-keyline);
+}
+
+/* 2. The race brief, as a plate --------------------------------------------- */
+.blitz-intro-command .blitz-trail-meta {
+  margin: 0 0 15px;
+  padding: 9px 11px;
+  /* Squared, against a screen of 14 and 22px radii. The one shape that differs
+   * is the one that gets looked at. */
+  border-radius: 3px;
+  background: var(--rush-keyline);
+  color: var(--rush-paper);
+  font-weight: 900;
+  /* Tracked just enough to read as punched signage, and no further. At .11em
+   * the brief measured 303px inside a 281px plate and wrapped, orphaning a
+   * separator onto the second line. Sized to hold one line down to a 375px
+   * phone, where the plate is narrower still. */
+  font-size: 11px;
+  letter-spacing: .05em;
+}
+
+/* 3. One primary, two seconds ----------------------------------------------- */
+.blitz-intro-command .blitz-mode-free {
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.blitz-intro-command .blitz-mode-free > .blitz-difficulty,
+.blitz-intro-command .blitz-mode-free > .blitz-rank-status { grid-column: 1 / -1; }
+.blitz-intro-command .blitz-mode-free > .blitz-free-run { grid-column: 1; }
+.blitz-intro-command .blitz-mode-free > .blitz-open-lobby { grid-column: 2; }
+.blitz-intro-command .blitz-mode-free > .blitz-free-run,
+.blitz-intro-command .blitz-mode-free > .blitz-open-lobby {
+  width: auto;
+  min-height: 48px;
+  /* Grid owns the spacing now; the stacked margins would double the gap. */
+  margin-top: 0;
+  padding: 10px 8px;
+  /* Half a column is not enough for the lobby label at the full-width size. */
+  font-size: clamp(14px, 3.6vw, 17px);
+}
+
+/* The rider's own name should be the loudest thing in its row. Change is a
+ * thing you do once; it was reading as the primary action of that line. */
+.blitz-intro-command .blitz-name-change {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 12px;
+  /* A muted ink, not opacity. Dimming text with opacity is how the zero-value
+   * ledger rows ended up at 1.73:1 earlier in this project: the colour still
+   * reads as chosen in the source while the pixels quietly fail. */
+  color: #6d604a;
+}
+
+/*
+ * The saved-run notice heads itself in --atlas-verified, a mint green picked
+ * against a dark panel. This notice is tinted coral now, because it is a
+ * warning rather than a confirmation, and mint on coral measures 1.47:1 -
+ * present in the DOM and unreadable on the glass. A deep rust belongs to the
+ * coral it sits on and measures 6.1:1, which is the point of a heading.
+ */
+.blitz-intro-command > .blitz-pending-run strong { color: #8f2e1c; }
+
+/*
+ * THE GATE BUTTON WAS NEVER THE COLOUR IT SAYS IT IS
+ *
+ * .blitz-gate-start asks for ink, and has since it was written. It never got
+ * it. `.blitz-ui button` is a class plus a type - (0,1,1) - and a lone class is
+ * (0,1,0), so the generic rule outranks the specific one and the button has
+ * been painting near-white on lime this whole time: 1.3:1, against the 4.5:1
+ * that size needs. It reads on a screenshot because the letters are large and
+ * the eye fills them in, which is exactly why it survived every look.
+ *
+ * Ink on lime measures 13:1, and it is also what every other coloured control
+ * in the app already does - ink on teal for the ranked button, ink on lime for
+ * boost. The gate was the odd one out by accident, not by choice.
+ *
+ * The trap is general: any single-class rule in this file that sets a colour on
+ * a button loses to `.blitz-ui button`. Qualify with .blitz-ui to outrank it.
+ */
+.blitz-ui .blitz-gate-start { color: var(--rush-keyline); }
+
+/* ==========================================================================
+ * THE DOOR COMES BEFORE THE PAPERWORK
+ *
+ * A run ends, and the rider wants one of two things: go again, or leave. Both
+ * were at the far end of a screen that also carries a logo, a score, three
+ * contract cards, an eight-chip score breakdown, a supplies list and a ladder -
+ * about nine hundred pixels of reading before either door. Measured on a 390px
+ * phone, every action on the result screen sat below the fold, and hit-testing
+ * the centre of each one returned nothing at all, because nothing was there.
+ *
+ * So on a phone the actions move up to sit directly under the score, and the
+ * breakdown follows them. The order is now: what you got, what you can do, and
+ * then why you got it - which is the order those questions are actually asked
+ * in. The screen is a flex column at this width, so this is ordering alone; no
+ * element moves in the document, and the wide layout, which places these by
+ * grid line and has room for all of it at once, is untouched.
+ * ========================================================================== */
+
+@media (max-width: 720px) {
+  /* A catch-all first, so a section added later lands after the breakdown
+   * rather than silently ahead of the doors. */
+  .blitz-result.blitz-fullscreen-page > * { order: 3; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-primary { order: 0; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-actions { order: 1; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-ledger { order: 2; }
+
+  /* Ride again leads; the door out sits beside it rather than under it. */
+  .blitz-result-actions .blitz-rematch { flex: 1 1 60%; }
+  .blitz-result-actions .blitz-result-home { flex: 0 0 auto; }
 }
