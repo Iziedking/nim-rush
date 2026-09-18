@@ -79,11 +79,32 @@ export class BlitzInputController {
     window.addEventListener('pointermove', update);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    /*
+     * And a last resort, on touch: when no finger is left on the glass, the
+     * steering is not being held, whatever the pointer bookkeeping believes.
+     *
+     * The pointerup handler can only release a pointer id it recognises, so a
+     * release that arrives without one - which happens on real hardware when a
+     * gesture is taken over, and in automation - left the steer frozen at its
+     * last value and the bike turning on its own for the rest of the run. A
+     * run that keeps steering after the rider let go is the clearest possible
+     * version of "the game is playing itself".
+     */
+    const allFingersUp = (event: TouchEvent) => {
+      if (event.touches.length > 0 || this.steeringPointer === null) return;
+      this.steeringPointer = null;
+      this.steer = 0;
+      thumb.style.transform = 'translateX(0)';
+    };
+    window.addEventListener('touchend', allFingersUp);
+    window.addEventListener('touchcancel', allFingersUp);
     this.bindingCleanups.push(
       () => zone.removeEventListener('pointerdown', down),
       () => window.removeEventListener('pointermove', update),
       () => window.removeEventListener('pointerup', up),
       () => window.removeEventListener('pointercancel', up),
+      () => window.removeEventListener('touchend', allFingersUp),
+      () => window.removeEventListener('touchcancel', allFingersUp),
     );
   }
 
