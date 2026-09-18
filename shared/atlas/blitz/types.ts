@@ -1,3 +1,4 @@
+import type { BlitzPickupKind } from './cities';
 export type BlitzCityId = 'lagos' | 'london' | 'dubai';
 export type BlitzChoice = 'left' | 'right';
 export type BlitzDifficulty = 'rookie' | 'pro';
@@ -14,7 +15,7 @@ export type BlitzPhysicsEvent =
   | { readonly type: 'surface-change'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
   | { readonly type: 'boost-start'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
   | { readonly type: 'boost-end'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface }
-  | { readonly type: 'pickup'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface; readonly pickup: 'nitro' | 'gearbox' };
+  | { readonly type: 'pickup'; readonly tick: number; readonly intensity: number; readonly surface: BlitzSurface; readonly pickup: BlitzPickupKind };
 
 export interface BlitzInput {
   readonly steer: number;
@@ -97,6 +98,8 @@ export interface BlitzActiveMission {
 export interface BlitzScoreBreakdown {
   readonly finishTime: number;
   readonly racingLine: number;
+  /** What the NIM trail paid, kept apart so a rider can see it. */
+  readonly nimTrail: number;
   readonly control: number;
   readonly airtime: number;
   readonly missions: number;
@@ -167,6 +170,10 @@ export interface BlitzRunState {
   readonly downedRivals: readonly string[];
   readonly nitroTaken: number;
   readonly gearboxTaken: number;
+  /** NIM tokens lifted off the trail. Points, and the line made visible. */
+  readonly tokensTaken: number;
+  /** Points the trail has paid so far. */
+  readonly nimScore: number;
   readonly distanceScore: number;
   readonly lineScore: number;
   readonly controlScore: number;

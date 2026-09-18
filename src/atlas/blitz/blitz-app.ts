@@ -518,6 +518,21 @@ export class BlitzApp {
     this.boostNode = node('i', 'blitz-boost-fill');
     boostTrack.append(this.boostNode);
     boost.append(boostTrack);
+    /*
+     * The trail, counted as it is taken.
+     *
+     * Nitro and gearboxes are spent, so their meters are about what is left.
+     * The NIM count is the opposite: it only ever goes up, and it is the one
+     * number on the HUD a rider can improve by choosing a better line. Without
+     * it, collecting sixty tokens and collecting six look the same until the
+     * run is over.
+     */
+    const nimWrap = node('div', 'blitz-nim-wrap');
+    nimWrap.append(node('span', '', 'NIM'));
+    this.nimNode = node('strong', 'blitz-nim-count', '0');
+    this.nimNode.setAttribute('aria-label', 'NIM tokens collected');
+    nimWrap.append(this.nimNode);
+    boost.append(nimWrap);
     const gearWrap = node('div', 'blitz-gear-wrap');
     gearWrap.append(node('span', '', 'GEARBOX'));
     this.gearHost = node('div', 'blitz-gear-pips');
@@ -764,6 +779,7 @@ export class BlitzApp {
    */
   private finishHoldUntil: number | null = null;
   private finishSpeedMps = 0;
+  private nimNode: HTMLElement | null = null;
   private boostKey: HTMLElement | null = null;
   private driftKey: HTMLElement | null = null;
   private missionShownId: string | null = null;
@@ -1007,6 +1023,15 @@ export class BlitzApp {
     const score = state.scoreBreakdown;
     breakdown.append(
       stat(`+${score.finishTime.toLocaleString()}`, 'FINISH TIME'),
+      /*
+       * The trail, counted and priced.
+       *
+       * It was being added into the racing-line term, which meant a rider could
+       * take sixty NIM tokens down a hill and find no line on the result screen
+       * that said so. A thing you spend a run collecting has to be a thing the
+       * run reports back.
+       */
+      stat(`+${score.nimTrail.toLocaleString()}`, `NIM TRAIL (${state.tokensTaken} TAKEN)`),
       stat(`+${score.racingLine.toLocaleString()}`, 'RACING LINE'),
       stat(`+${score.control.toLocaleString()}`, 'BRAKING'),
       stat(`+${score.airtime.toLocaleString()}`, 'AIRTIME AND LANDING'),
@@ -1682,6 +1707,17 @@ export class BlitzApp {
    * boost latch is also put out here rather than by the rider, because running
    * the tank dry is the one way to stop boosting that is not a tap.
    */
+  private updateNimCount(state: BlitzRunState): void {
+    if (this.nimNode && this.nimNode.textContent !== String(state.tokensTaken)) {
+      this.nimNode.textContent = String(state.tokensTaken);
+      // A short pulse on the tick it changes: enough to catch the eye without
+      // asking a rider to look away from the trail.
+      this.nimNode.classList.remove('is-banked');
+      void this.nimNode.offsetWidth;
+      this.nimNode.classList.add('is-banked');
+    }
+  }
+
   private updateSpendKeys(state: BlitzRunState): void {
     if (this.boostKey) {
       const usable = state.boostEnergy >= BOOST_ENGAGE_ENERGY;
@@ -1693,6 +1729,7 @@ export class BlitzApp {
 
   private updateSupplyHud(state: BlitzRunState): void {
     this.updateSpendKeys(state);
+    this.updateNimCount(state);
     if (this.gearHost && this.gearHost.childElementCount !== state.driftCapacity) {
       this.gearHost.replaceChildren();
       for (let index = 0; index < state.driftCapacity; index += 1) this.gearHost.append(node('i', 'blitz-gear-pip'));

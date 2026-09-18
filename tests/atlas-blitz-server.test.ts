@@ -35,10 +35,10 @@ describe('Beacon Blitz verified competition service', () => {
     const ticket = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' });
     expect(ticket).toMatchObject({ id: 'ticket-a', cityId: 'lagos', seasonId: 'season-1', username: 'Sface' });
     expect(ticket).toMatchObject({
-      challengeId: 'season-1:lagos:1970-01-01:rush-downhill-v10-rookie',
+      challengeId: 'season-1:lagos:1970-01-01:rush-nimtrail-v11-rookie',
       challengeDate: '1970-01-01',
-      rulesetVersion: 'rush-downhill-v10-rookie',
-      seed: 'season-1:lagos:1970-01-01:rush-downhill-v10-rookie',
+      rulesetVersion: 'rush-nimtrail-v11-rookie',
+      seed: 'season-1:lagos:1970-01-01:rush-nimtrail-v11-rookie',
     });
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletB, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' })).rejects.toThrow(/wallet binding/i);
   });

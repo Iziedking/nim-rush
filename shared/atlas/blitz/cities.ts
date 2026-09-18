@@ -35,7 +35,7 @@ export interface BlitzPickup {
   readonly kind: BlitzPickupKind;
 }
 
-export type BlitzPickupKind = 'nitro' | 'gearbox';
+export type BlitzPickupKind = 'nitro' | 'gearbox' | 'token';
 
 /**
  * Where a run is judged on its racing line.
@@ -272,6 +272,71 @@ export const BLITZ_CITIES: readonly BlitzCityDefinition[] = [
  * replay verifier and the renderer alike. If these three ever disagree, a
  * rider is being scored against a course they were not shown.
  */
+/**
+ * The NIM trail: a line of tokens down the hill, worth points to take.
+ *
+ * It does three jobs, and the third is the one that matters. It fills a road
+ * that was mostly empty between obstacles. It gives a rider something to earn
+ * on every metre rather than only at three gates. And because the trail runs
+ * along the line the course is scored on - pulled to the middle of the
+ * corridor wherever a route gate stands - following it *is* the answer to
+ * "how do I complete this contract". A rider who chases the tokens is holding
+ * the racing line without being told to.
+ *
+ * Generated rather than hand-placed, but generated from the city alone: the
+ * server re-simulates every ranked run, so a trail that differed between two
+ * machines would refuse honest runs. No randomness, no clock, no seed.
+ */
+export function blitzTokenTrail(city: BlitzCityDefinition): readonly BlitzPickup[] {
+  const cached = tokenTrails.get(city.id);
+  if (cached) return cached;
+  const trail: BlitzPickup[] = [];
+  const spacing = TOKEN_SPACING_METERS / city.lengthMeters;
+  let index = 0;
+  for (let at = 0.07; at <= 0.955; at += spacing) {
+    /*
+     * A lane that wanders the way a rider does, and straightens for the gates.
+     *
+     * The weave is a plain sine so it is identical everywhere it is computed.
+     * Near a scored gate the trail is pulled back to the middle, because that
+     * is where the corridor is and the whole point is that the tokens show it.
+     */
+    const weave = Math.sin(at * 17.3) * city.roadWidth * 0.26;
+    const nearestGate = BLITZ_LINE_GATES.reduce((best, gate) => Math.abs(gate - at) < Math.abs(best - at) ? gate : best, BLITZ_LINE_GATES[0]!);
+    const pullToLine = Math.max(0, 1 - Math.abs(nearestGate - at) / 0.055);
+    trail.push({
+      id: `${city.id}-nim-${index}`,
+      distance01: Number(at.toFixed(5)),
+      lane: Number((weave * (1 - pullToLine)).toFixed(3)),
+      kind: 'token',
+    });
+    index += 1;
+  }
+  tokenTrails.set(city.id, trail);
+  return trail;
+}
+
+/*
+ * Close enough together to read as a line rather than as scattered items.
+ *
+ * At 26 metres a rider saw one token at a time and the road still looked
+ * empty; the point of the trail is that you can see where it goes. Sixteen is
+ * about half a second at cruising speed, which is a line receding up the hill,
+ * and each token is two meshes so the draw-call budget survives it.
+ */
+const TOKEN_SPACING_METERS = 16;
+const tokenTrails = new Map<BlitzCityId, readonly BlitzPickup[]>();
+
+/** Supplies and the NIM trail together, which is what a run collects from. */
+export function blitzCollectables(city: BlitzCityDefinition): readonly BlitzPickup[] {
+  const cached = collectables.get(city.id);
+  if (cached) return cached;
+  const all = [...city.pickups, ...blitzTokenTrail(city)].sort((a, b) => a.distance01 - b.distance01);
+  collectables.set(city.id, all);
+  return all;
+}
+const collectables = new Map<BlitzCityId, readonly BlitzPickup[]>();
+
 export function blitzEnabledObstacles(city: BlitzCityDefinition, difficulty: BlitzDifficulty): readonly BlitzObstacle[] {
   const tier = blitzRules(difficulty).obstacleTier;
   return tier === 'all' ? city.obstacles : city.obstacles.filter((obstacle) => (obstacle.tier ?? 'core') === 'core');

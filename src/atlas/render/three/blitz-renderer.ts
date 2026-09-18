@@ -33,7 +33,7 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles, type BlitzCityDefinition, type BlitzPickup } from '../../../../shared/atlas/blitz/cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzCollectables, blitzEnabledObstacles, type BlitzCityDefinition, type BlitzPickup, type BlitzPickupKind } from '../../../../shared/atlas/blitz/cities';
 import { blitzRules } from '../../../../shared/atlas/blitz/rules';
 import { blitzRivalAt, type BlitzRivalPath } from '../../../../shared/atlas/blitz/rivals';
 import { sampleBlitzRoute } from '../../../../shared/atlas/blitz/core';
@@ -209,13 +209,14 @@ export class BlitzRenderer {
      * they thought they had.
      */
     this.pickupNodes = new Map();
-    for (const pickup of city.pickups) {
+    for (const pickup of blitzCollectables(city)) {
       const node = createPickup(city, pickup);
       const pose = sampleBlitzRoute(city.id, city.lengthMeters * pickup.distance01, pickup.lane);
       node.position.set(pose.x, pose.y, pose.z);
       node.rotation.y = pose.headingRadians;
       // Kept on the node so culling is a subtraction rather than a lookup.
       node.userData.distance = city.lengthMeters * pickup.distance01;
+      node.userData.kind = pickup.kind;
       node.visible = false;
       this.cityRoot!.add(node);
       this.pickupNodes.set(pickup.id, node);
@@ -371,7 +372,17 @@ export class BlitzRenderer {
        * gone for good; far ahead they are not worth submitting yet.
        */
       const ahead = (node.userData.distance as number) - state.distanceMeters;
-      const shown = !state.collectedPickupIds.includes(id) && ahead > -6 && ahead < 140;
+      /*
+       * The trail is drawn closer in than the supplies.
+       *
+       * A hundred tokens at sixteen metres apart put nine of them inside the
+       * supply window, and measured on a Pixel that took the frame from 68 draw
+       * calls to 142 against a budget of 110. Ninety metres is still four
+       * seconds of road at cruising speed - far enough to read where the line
+       * goes, which is all the trail has to do.
+       */
+      const range = node.userData.kind === 'token' ? 90 : 140;
+      const shown = !state.collectedPickupIds.includes(id) && ahead > -6 && ahead < range;
       if (node.visible !== shown) node.visible = shown;
       if (!shown || this.reducedMotion) continue;
       const body = node.children[0]!;
@@ -1274,29 +1285,37 @@ function createRelayGate(city: BlitzCityDefinition, index: number, corridorHalfW
  * uploads of the same vertices, and eighteen materials the renderer has to
  * switch between. Built once, lazily, and shared.
  */
-const PICKUP_PARTS: Record<'nitro' | 'gearbox', ReturnType<typeof buildPickupParts>> = {
+const PICKUP_PARTS: Record<BlitzPickupKind, ReturnType<typeof buildPickupParts>> = {
   get nitro() { return (nitroParts ??= buildPickupParts('nitro')); },
   get gearbox() { return (gearboxParts ??= buildPickupParts('gearbox')); },
+  get token() { return (tokenParts ??= buildPickupParts('token')); },
 };
 let nitroParts: ReturnType<typeof buildPickupParts> | null = null;
 let gearboxParts: ReturnType<typeof buildPickupParts> | null = null;
+let tokenParts: ReturnType<typeof buildPickupParts> | null = null;
 
-function buildPickupParts(kind: 'nitro' | 'gearbox') {
-  const glow = kind === 'nitro' ? 0x5fe3ff : 0xffc247;
+function buildPickupParts(kind: BlitzPickupKind) {
+  /* Nimiq's own yellow, on Nimiq's own six-sided mark. */
+  const glow = kind === 'nitro' ? 0x5fe3ff : kind === 'token' ? 0xfdc41f : 0xffc247;
   return {
+    // Six sides, standing on edge and facing the rider: the Nimiq mark, not a coin.
     primary: kind === 'nitro'
       ? new CylinderGeometry(0.12, 0.21, 0.68, 10)
-      : new CylinderGeometry(0.28, 0.28, 0.12, 14).rotateX(Math.PI / 2),
+      : kind === 'token'
+        ? new CylinderGeometry(0.3, 0.3, 0.07, 6).rotateX(Math.PI / 2)
+        : new CylinderGeometry(0.28, 0.28, 0.12, 14).rotateX(Math.PI / 2),
     accent: kind === 'nitro'
       ? new CylinderGeometry(0.085, 0.085, 0.09, 7)
-      : new TorusGeometry(0.31, 0.075, 4, 8),
+      : kind === 'token'
+        ? new CylinderGeometry(0.17, 0.17, 0.09, 6).rotateX(Math.PI / 2)
+        : new TorusGeometry(0.31, 0.075, 4, 8),
     trim: kind === 'nitro' ? new TorusGeometry(0.195, 0.038, 5, 12) : new TorusGeometry(0.11, 0.042, 5, 10),
     shell: new MeshStandardMaterial({
-      color: kind === 'nitro' ? 0x1d4f63 : 0x4a4436,
-      roughness: kind === 'nitro' ? 0.34 : 0.42,
-      metalness: kind === 'nitro' ? 0.5 : 0.72,
+      color: kind === 'nitro' ? 0x1d4f63 : kind === 'token' ? 0xfdc41f : 0x4a4436,
+      roughness: kind === 'nitro' ? 0.34 : kind === 'token' ? 0.3 : 0.42,
+      metalness: kind === 'nitro' ? 0.5 : kind === 'token' ? 0.55 : 0.72,
       emissive: new Color(glow),
-      emissiveIntensity: kind === 'nitro' ? 0.32 : 0.22,
+      emissiveIntensity: kind === 'nitro' ? 0.32 : kind === 'token' ? 0.5 : 0.22,
     }),
     lit: new MeshBasicMaterial({ color: glow }),
     halo: new RingGeometry(0.34, 0.5, 14),
@@ -1326,6 +1345,17 @@ function createPickup(city: BlitzCityDefinition, pickup: BlitzPickup): Group {
     band.rotation.x = Math.PI / 2;
     band.position.y = -0.04;
     body.add(tank, cap, band);
+  } else if (pickup.kind === 'token') {
+    /*
+     * One mesh, deliberately.
+     *
+     * There are a hundred of these down a hill against eighteen supplies, so
+     * the trail is the one thing that can spend the draw-call budget on its
+     * own - it took the frame from 114 calls to 142 before this was trimmed. A
+     * six-sided face in Nimiq yellow is the mark; an inner core and a road halo
+     * are detail nobody reads at the size and speed this is seen.
+     */
+    body.add(new Mesh(parts.primary, parts.shell));
   } else {
     /*
      * A gear, flat on. The teeth are an eight-sided ring rather than eight
@@ -1338,11 +1368,20 @@ function createPickup(city: BlitzCityDefinition, pickup: BlitzPickup): Group {
     body.add(disc, teeth, hub);
   }
 
-  // The road marking. A rider reading the surface still sees which lane.
-  const halo = new Mesh(parts.halo, parts.haloMaterial);
-  halo.rotation.x = -Math.PI / 2;
-  halo.position.y = 0.035;
-  root.add(halo);
+  /*
+   * The road marking, on supplies only.
+   *
+   * A supply is a thing a rider goes looking for, so it gets a halo telling
+   * them which lane it is in. The trail is a line they follow, legible from its
+   * own shape - and there are a hundred of them, so a third mesh each is the
+   * difference between a draw-call budget and a slideshow.
+   */
+  if (pickup.kind !== 'token') {
+    const halo = new Mesh(parts.halo, parts.haloMaterial);
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = 0.035;
+    root.add(halo);
+  }
   void city;
   return root;
 }

@@ -2005,7 +2005,9 @@ button + .blitz-quiet { margin-top: 11px; }
 .blitz-mission-card.is-failed .blitz-mission-detail { color: var(--rush-coral); }
 .blitz-mission-distance {
   display: block;
-  margin-top: 5px;
+  /* Its own line, clear of the meter and inside the card. It was sitting on
+   * the rounded bottom edge and losing its descenders to the border. */
+  margin: 6px 0 2px;
   color: var(--rush-sun);
   font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
   letter-spacing: .12em;
@@ -2264,3 +2266,31 @@ button + .blitz-quiet { margin-top: 11px; }
 .blitz-board-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .blitz-board-actions .blitz-board-back { flex: 1 1 140px; min-width: 140px; margin-top: 0; }
 .blitz-board-actions .blitz-powered { flex: 0 0 auto; margin-left: auto; }
+
+/*
+ * THE RUNNING NIM COUNT
+ *
+ * Nitro and gearboxes are spent, so their meters say what is left. This one
+ * only goes up, and it is the single number on the HUD a rider improves by
+ * choosing a better line - which is the whole argument for the trail being
+ * there. It pulses on the tick it changes and is otherwise quiet.
+ */
+.blitz-nim-wrap { display: grid; gap: 2px; margin-top: 8px; justify-items: end; }
+.blitz-nim-wrap > span {
+  color: #fdc41f;
+  font: 900 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .16em;
+}
+.blitz-nim-count {
+  color: var(--rush-ink);
+  font: 400 21px/1 AtlasDisplay, Impact, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 2px 3px 0 rgb(4 13 14 / .6);
+}
+.blitz-nim-count.is-banked { animation: blitz-nim-pop 260ms cubic-bezier(.2, .9, .3, 1); }
+@keyframes blitz-nim-pop {
+  from { transform: scale(1); color: var(--rush-ink); }
+  38% { transform: scale(1.34); color: #fdc41f; }
+  to { transform: scale(1); color: var(--rush-ink); }
+}
+@media (prefers-reduced-motion: reduce) { .blitz-nim-count.is-banked { animation: none; } }

@@ -1,4 +1,4 @@
-import { BLITZ_LINE_GATES, blitzCity, blitzEnabledObstacles } from './cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzCollectables, blitzEnabledObstacles } from './cities';
 import { BLITZ_BASE_LOADOUT, type BlitzLoadout } from './rider';
 import { blitzRivalAt, blitzRivalContact, type BlitzRivalPath } from './rivals';
 import { blitzMissionWindow, selectBlitzMissions } from './missions';
@@ -71,6 +71,14 @@ const BOOST_DRIFT_REGEN = 0.45;
 export const BOOST_ENGAGE_ENERGY = 9;
 /** What one bottle is worth: about a second of boost. */
 export const BLITZ_NITRO_BOTTLE = 18;
+/*
+ * What one NIM token off the trail is worth.
+ *
+ * About seventy of them down a course, so a rider who takes the line cleanly
+ * earns roughly four thousand - a real share of a run without being able to
+ * carry one on its own.
+ */
+export const BLITZ_TOKEN_POINTS = 60;
 
 /**
  * Start a run.
@@ -137,6 +145,8 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
     collectedPickupIds: [],
     nitroTaken: 0,
     gearboxTaken: 0,
+    tokensTaken: 0,
+    nimScore: 0,
     rivalContacts: 0,
     overtakes: 0,
     takedowns: 0,
@@ -301,6 +311,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   const collectedPickupIds = [...state.collectedPickupIds];
   let nitroTaken = state.nitroTaken;
   let gearboxTaken = state.gearboxTaken;
+  let tokensTaken = state.tokensTaken;
+  let nimScore = state.nimScore;
   let missions = state.missions.map((mission) => ({ ...mission }));
   let heightMeters = state.heightMeters;
   let verticalVelocityMps = state.verticalVelocityMps;
@@ -469,14 +481,19 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    * fuel as well as points. Airborne riders still collect - taking a bottle
    * off a jump is one of the better things in the game.
    */
-  for (const pickup of city.pickups) {
+  for (const pickup of blitzCollectables(city)) {
     if (collectedPickupIds.includes(pickup.id)) continue;
     const at = pickup.distance01 * city.lengthMeters;
     // The tick the bike crosses it, and only that tick.
     if (state.distanceMeters > at || distanceMeters < at) continue;
     if (Math.abs(laneOffset - pickup.lane) > state.pickupReach) continue;
     collectedPickupIds.push(pickup.id);
-    if (pickup.kind === 'nitro') {
+    if (pickup.kind === 'token') {
+      // Points, straight into the racing-line term, because following the
+      // trail is holding the line.
+      tokensTaken += 1;
+      nimScore += BLITZ_TOKEN_POINTS;
+    } else if (pickup.kind === 'nitro') {
       boostEnergy = Math.min(state.boostCapacity, boostEnergy + BLITZ_NITRO_BOTTLE);
       nitroTaken += 1;
     } else {
@@ -531,6 +548,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     collectedPickupIds,
     nitroTaken,
     gearboxTaken,
+    tokensTaken,
+    nimScore,
     rivalContacts,
     takedowns,
     downedRivals: [...downedRivals],
@@ -556,13 +575,14 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   });
 }
 
-type BlitzScoreSource = Pick<BlitzRunState, 'distanceScore' | 'lineScore' | 'controlScore' | 'airtimeScore' | 'missionScore' | 'driftScore' | 'timeBonus' | 'collisionPenalty' | 'missedGatePenalty' | 'offRoadPenalty'>;
+type BlitzScoreSource = Pick<BlitzRunState, 'distanceScore' | 'lineScore' | 'nimScore' | 'controlScore' | 'airtimeScore' | 'missionScore' | 'driftScore' | 'timeBonus' | 'collisionPenalty' | 'missedGatePenalty' | 'offRoadPenalty'>;
 
 export function getBlitzScoreBreakdown(state: BlitzScoreSource): BlitzScoreBreakdown {
-  const total = Math.max(0, state.distanceScore + state.lineScore + state.controlScore + state.airtimeScore + state.missionScore + state.driftScore + state.timeBonus - state.collisionPenalty - state.missedGatePenalty - state.offRoadPenalty);
+  const total = Math.max(0, state.distanceScore + state.lineScore + state.nimScore + state.controlScore + state.airtimeScore + state.missionScore + state.driftScore + state.timeBonus - state.collisionPenalty - state.missedGatePenalty - state.offRoadPenalty);
   return {
     finishTime: state.timeBonus,
     racingLine: state.distanceScore + state.lineScore,
+    nimTrail: state.nimScore,
     control: state.controlScore,
     airtime: state.airtimeScore,
     missions: state.missionScore,
