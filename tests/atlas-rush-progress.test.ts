@@ -132,3 +132,48 @@ describe('badges', () => {
     expect(none).toEqual([]);
   });
 });
+
+/*
+ * Renaming, which a rider asked for on the first public morning: "Why can't I
+ * add some letters to my user name?" The lobby offered a Change button and the
+ * server refused the next ticket.
+ */
+describe('rider names', () => {
+  const service = () => createAtlasBlitzService({ identity, now: () => Date.parse('2026-09-19T10:00:00.000Z'), randomId: () => `id-${Math.random().toString(36).slice(2)}` });
+  const issue = (blitz: ReturnType<typeof createAtlasBlitzService>, username: string) =>
+    blitz.issueTicket({ actorId: 'actor-a', walletAddress: wallet, username, cityId: 'lagos', seasonId: 'cycle-2' });
+
+  it('lets a rider add letters to their name, and go back to the old one', async () => {
+    const blitz = service();
+    await issue(blitz, 'Elwino');
+    const renamed = await issue(blitz, 'Elwino_X');
+    expect(renamed.username).toBe('Elwino_X');
+    const back = await issue(blitz, 'Elwino');
+    expect(back.username).toBe('Elwino');
+  });
+
+  it('keeps a name a rider has used reserved to them, so nobody inherits it', async () => {
+    const blitz = createAtlasBlitzService({
+      identity: { getBinding: (actorId: string, seasonId: string) => (seasonId === 'cycle-2'
+        ? { actorId, seasonId, address: actorId === 'actor-a' ? wallet : 'NQ99 OTHER WALLET', network: 'testalbatross' as const, publicKey: 'aa', boundAt: 1 }
+        : null) },
+      now: () => Date.parse('2026-09-19T10:00:00.000Z'),
+      randomId: () => `id-${Math.random().toString(36).slice(2)}`,
+    });
+    await blitz.issueTicket({ actorId: 'actor-a', walletAddress: wallet, username: 'Elwino', cityId: 'lagos', seasonId: 'cycle-2' });
+    await blitz.issueTicket({ actorId: 'actor-a', walletAddress: wallet, username: 'Elwino_X', cityId: 'lagos', seasonId: 'cycle-2' });
+    // The retired name still belongs to the wallet that rode under it.
+    await expect(blitz.issueTicket({ actorId: 'actor-b', walletAddress: 'NQ99 OTHER WALLET', username: 'Elwino', cityId: 'lagos', seasonId: 'cycle-2' }))
+      .rejects.toThrow(/belongs to another wallet/i);
+  });
+
+  it('relabels the rows already on the board, so one rider is one name', async () => {
+    const clock = { now: Date.parse('2026-09-19T10:00:00.000Z') };
+    let id = 0;
+    const blitz = createAtlasBlitzService({ identity, now: () => clock.now, randomId: () => `id-${++id}` });
+    await rankedRun(blitz, clock, 'run-named');
+    expect((await blitz.leaderboard('cycle-2', 'lagos'))[0]).toMatchObject({ username: 'Rider' });
+    await blitz.issueTicket({ actorId: 'actor-a', walletAddress: wallet, username: 'Rider_Two', cityId: 'lagos', seasonId: 'cycle-2' });
+    expect((await blitz.leaderboard('cycle-2', 'lagos'))[0]).toMatchObject({ username: 'Rider_Two', walletAddress: wallet });
+  });
+});

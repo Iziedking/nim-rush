@@ -234,8 +234,27 @@ export class BlitzInputController {
     return this.brake;
   }
 
+  /*
+   * The one place a gesture becomes a lane.
+   *
+   * `this.steer` is what the thumb did: right of where the finger landed is
+   * positive, which is also what the thumb on the stick draws. The simulation
+   * does not steer in screen space, it steers in LANE space, and a lane is
+   * measured from the centre line along (cos h, -sin h) - which is the rider's
+   * LEFT. Positive steer therefore moved the bike to the left of the screen,
+   * and two riders reported it on the first morning the game was public:
+   * "sliding to the right takes me left and vice versa".
+   *
+   * Negating here, at the boundary, is the whole fix. The simulation keeps its
+   * lane convention, so no rule changes, no ruleset bump, and every run already
+   * on today's board still replays to the score it was given. The renderer is
+   * handed this same value, so the bike leans and the fork turns exactly as
+   * they did relative to the screen.
+   */
   sample(): BlitzInput {
-    return { steer: this.steer, drift: this.drift, boost: this.boost, brake: this.brake, tuck: this.tuck };
+    // `|| 0` because negating zero gives -0, and a centred stick must report
+    // the same zero every frame rather than one that depends on a sign bit.
+    return { steer: -this.steer || 0, drift: this.drift, boost: this.boost, brake: this.brake, tuck: this.tuck };
   }
 
   reset(): void {

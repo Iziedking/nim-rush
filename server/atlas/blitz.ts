@@ -258,7 +258,24 @@ export function createAtlasBlitzService(options: {
         const live = [...tickets.values()].find((candidate) => candidate.walletAddress === input.walletAddress
           && candidate.challengeId === challenge.challengeId && candidate.cityId === input.cityId
           && !candidate.usedByRunId && candidate.expiresAt > issuedAt);
-        if (live) return structuredClone(live);
+        if (live) {
+          /*
+           * A rider who renamed while holding this ticket gets the new name on
+           * it. Submit refuses a run whose username does not match its ticket,
+           * so without this a rename mid-day would cost a rider the whole two
+           * minutes they had just ridden.
+           *
+           * The name only. `rivals` is the pack this ticket's physics is pinned
+           * to and the client may already be riding against it; swapping it
+           * here would make the server re-ride a different hill and refuse an
+           * honest run.
+           */
+          if (live.username === username) return structuredClone(live);
+          const renamed: StoredTicket = { ...live, username };
+          tickets.set(renamed.id, structuredClone(renamed));
+          await persist();
+          return structuredClone(renamed);
+        }
         const ticket: BlitzTicket = {
           id: randomId(), actorId: input.actorId, walletAddress: input.walletAddress, username,
           cityId: input.cityId, seasonId: input.seasonId, challengeId: challenge.challengeId,
@@ -604,6 +621,25 @@ export function createAtlasBlitzService(options: {
     }
   }
 
+  /*
+   * A rider's name, and what happens when they want a different one.
+   *
+   * A wallet used to be stuck with the first name it ever rode under: the
+   * lobby offered a Change button and the next ticket was refused with "this
+   * wallet already has a leaderboard username for the season". A rider asked
+   * on the first public morning why they could not add letters to their name,
+   * which is a fair question - the name is a label, the wallet is the
+   * identity, and the board is keyed on the wallet.
+   *
+   * So a rename is allowed, with one rule: every name a wallet has ridden
+   * under stays reserved TO THAT WALLET. Releasing a retired name would let
+   * somebody else pick it up and inherit the reputation attached to it, which
+   * is the one thing a board that cannot be lied to must not allow. The rider
+   * can also move back to a name they used before, because they still own it.
+   *
+   * Rows already on the board are relabelled, so the board shows one rider
+   * under one name rather than yesterday under the old one.
+   */
   function bindUsername(seasonId: string, walletAddress: string, display: string): void {
     const normalized = display.toLowerCase();
     const nameKey = `${seasonId}:${normalized}`;
@@ -611,9 +647,40 @@ export function createAtlasBlitzService(options: {
     const owner = usernameWallet.get(nameKey);
     if (owner && owner.walletAddress !== walletAddress) throw new AtlasBlitzError('identity', 'That leaderboard username already belongs to another wallet.');
     const currentName = walletUsername.get(walletKey);
-    if (currentName && currentName !== normalized) throw new AtlasBlitzError('identity', 'This wallet already has a leaderboard username for the season.');
     usernameWallet.set(nameKey, { walletAddress, display });
     walletUsername.set(walletKey, normalized);
+    if (currentName && currentName !== normalized) relabelRider(seasonId, walletAddress, display);
+  }
+
+  /** Put the new name on every row and every ghost this wallet already owns. */
+  function relabelRider(seasonId: string, walletAddress: string, display: string): void {
+    for (const [key, entry] of posted) {
+      if (entry.best.seasonId !== seasonId || entry.best.walletAddress !== walletAddress) continue;
+      posted.set(key, { ...entry, best: { ...entry.best, username: display } });
+    }
+    const owned = new Set<string>();
+    for (const [runId, held] of runs) {
+      if (held.row.seasonId !== seasonId || held.row.walletAddress !== walletAddress) continue;
+      owned.add(runId);
+      runs.set(runId, { ...held, row: { ...held.row, username: display } });
+    }
+    /*
+     * The pack keeps one line per rider and tells them apart by name, so a
+     * rider who renamed would otherwise ride against a ghost of themselves
+     * under the old name - a rider on the hill who does not exist. Their own
+     * lines are relabelled and then collapsed back to the best one.
+     */
+    for (const [challengeId, entries] of rivalPaths) {
+      if (!entries.some((entry) => owned.has(entry.path.runId))) continue;
+      const relabelled = entries.map((entry) => (owned.has(entry.path.runId)
+        ? { ...entry, path: { ...entry.path, username: display } }
+        : entry));
+      const best = new Map<string, { path: BlitzRivalPath; score: number }>();
+      for (const entry of relabelled.sort((left, right) => right.score - left.score)) {
+        if (!best.has(entry.path.username)) best.set(entry.path.username, entry);
+      }
+      rivalPaths.set(challengeId, [...best.values()]);
+    }
   }
 
   async function rankedRow(row: StoredRow): Promise<BlitzLeaderboardRow> {
