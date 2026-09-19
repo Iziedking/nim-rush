@@ -1,5 +1,5 @@
 import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, BOOST_ENGAGE_ENERGY, blitzComboMultiplier, createBlitzRun, sampleBlitzRoute, stepBlitzRun } from '../../../shared/atlas/blitz/core';
-import { blitzRuleFeatures } from '../../../shared/atlas/blitz/ruleset';
+import { BLITZ_LATEST_RULESET_VERSION, blitzRuleFeatures } from '../../../shared/atlas/blitz/ruleset';
 import { BLITZ_SECTORS } from '../../../shared/atlas/blitz/sectors';
 import { BLITZ_BADGES, blitzRunBadges } from '../../../shared/atlas/blitz/badges';
 import { BLITZ_CITIES, blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
@@ -452,12 +452,30 @@ export class BlitzApp {
    * It is practice for the thing that counts, and a lobby gets the identical
    * course, corner for corner.
    */
+  /*
+   * What a free run rides.
+   *
+   * Today's descent, so practice is practice for the run that counts - but
+   * always under the NEWEST rules rather than the day's. The two are the same
+   * on every day except one: the day a rules change is scheduled, when free
+   * play is already riding what ranked gets at the reset. That is the point of
+   * it. A fix to how the bike rides should be in a rider's hands the day it
+   * ships, and ranked cannot move mid-day without throwing away the board and
+   * the payouts that are keyed to it.
+   */
+  private freeRunSeed(cityId: BlitzCityId): string {
+    const challenge = getBlitzDailyChallenge({ now: Date.now(), cityId, seasonId: BLITZ_SEASON });
+    return challenge.rulesetVersion === BLITZ_LATEST_RULESET_VERSION
+      ? challenge.seed
+      : `${BLITZ_SEASON}:${cityId}:${challenge.date}:${BLITZ_LATEST_RULESET_VERSION}`;
+  }
+
   private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null, options: { readonly seed?: string } = {}): Promise<void> {
     this.setAudioScene('paused');
     this.audio.unlock();
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
-    const seed = rankedTicket?.seed ?? options.seed ?? getBlitzDailyChallenge({ now: Date.now(), cityId, seasonId: BLITZ_SEASON }).seed;
+    const seed = rankedTicket?.seed ?? options.seed ?? this.freeRunSeed(cityId);
     // Ranked keeps one visible, equal loadout and the shared Rookie ruleset
     // until the server ticket contract carries Pro as an explicit version.
     /*

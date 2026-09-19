@@ -54,6 +54,28 @@ const LINE_GATE_FRACTIONS = BLITZ_LINE_GATES;
  */
 const POSTURE_SPEED = { tucked: 1.16, neutral: 0.86 } as const;
 /*
+ * And what it is under the V13 rules, where a descent has to be ridden.
+ *
+ * Measured on the shipped game: a rider who never touched a control reached
+ * the bottom of Lagos in 97 seconds, and a rider who steered the whole way but
+ * never tucked scored within 5% of one who rode properly. Posture was in the
+ * game but it was not worth anything, so the hill did the work.
+ *
+ * Sitting up now coasts at a speed that runs out of clock, and the tuck is
+ * what turns the hill into speed. The numbers are tuned, not guessed: see the
+ * targets in tests/atlas-rush-skill.test.ts.
+ */
+const POSTURE_SPEED_RIDDEN = { tucked: 1.32, neutral: 0.5 } as const;
+/*
+ * How much of the gradient a rider who is sitting up gets to keep.
+ *
+ * A bike does roll downhill on its own - that is what a downhill is - so
+ * gravity is never switched off. But the rider who is folded onto the bars is
+ * the one who converts the hill into speed, which is why a real descent is
+ * ridden tucked and sat up only to turn.
+ */
+const GRADE_UPRIGHT_SHARE = 0.35;
+/*
  * And the cost. Tucked, the bike goes where it was already going; sat up with
  * the brakes on, it turns. Braking into a corner and tucking out of it is
  * faster than holding one position through both, which is the whole skill.
@@ -207,6 +229,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   const city = blitzCity(state.cityId);
   const rules = blitzRules(state.difficulty);
   const features = blitzRuleFeatures(state.seed);
+  const postureSpeed = features.skillSpeed ? POSTURE_SPEED_RIDDEN : POSTURE_SPEED;
   const sector = features.sectors ? blitzSectorIndex(state.distanceMeters / city.lengthMeters) : 0;
   const pace = BLITZ_SECTORS[sector]!.pace;
   const elapsedTicks = state.elapsedTicks + 1;
@@ -302,10 +325,11 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    * whether they can still hold the line at that speed - which is the decision
    * a downhill is made of.
    */
-  const gradeSpeed = clamp(-roadHere.slope, -0.24, 0.24) * GRADE_SPEED_MPS;
+  const gradeSpeed = clamp(-roadHere.slope, -0.24, 0.24) * GRADE_SPEED_MPS
+    * (features.skillSpeed && !tuckActive ? GRADE_UPRIGHT_SHARE : 1);
   const targetSpeed = brakeActive ? 0 : offRoad
     ? city.baseSpeedMps * grassProfile.resistance / (1 + shoulderDepth * 0.18)
-    : Math.max(4, city.baseSpeedMps * pace * surfaceProfile.resistance * (tuckActive ? POSTURE_SPEED.tucked : POSTURE_SPEED.neutral)
+    : Math.max(4, city.baseSpeedMps * pace * surfaceProfile.resistance * (tuckActive ? postureSpeed.tucked : postureSpeed.neutral)
       + gradeSpeed + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0));
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
   if (offRoad && !brakeActive && !state.airborne) {

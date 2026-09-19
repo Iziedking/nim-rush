@@ -2059,17 +2059,13 @@ button + .blitz-quiet { margin-top: 11px; }
  * the trail where the old one used to end. */
 /* Above the spend keys, not behind them: the rack used to clear the old flat
  * button block, and the round keys now stand where its labels were. */
-.blitz-run .blitz-boost-wrap {
-  bottom: max(206px, calc(env(safe-area-inset-bottom) + 192px));
-  width: 94px;
-}
+.blitz-run .blitz-boost-wrap { width: 94px; }
 
 @media (max-height: 670px) {
   .blitz-run .blitz-controls { grid-template-columns: 100px 1fr; }
   .blitz-run .blitz-steer-zone { width: 100px; height: 100px; }
   .blitz-run .blitz-steer-rail { width: 68px; }
   .blitz-run .blitz-actions .blitz-control { height: 46px; }
-  .blitz-run .blitz-boost-wrap { bottom: max(184px, calc(env(safe-area-inset-bottom) + 172px)); }
 }
 
 /*
@@ -2445,16 +2441,30 @@ button + .blitz-quiet { margin-top: 11px; }
  *      continuously.
  * ---------------------------------------------------------------------------
  */
+/*
+ * The control cluster's own measurements, in one place.
+ *
+ * The supply rack is positioned against the bottom of the screen rather than
+ * laid out with the controls, so it has to be told how tall they are. It was
+ * told 206px while the pads and the spend row came to 246, and the DRIFT key
+ * sat on top of the GEARBOX pips - reported by the owner as "the nitro and
+ * drift cover some write ups". Both read these now, so they cannot disagree.
+ */
+.blitz-run {
+  --rush-pad: 150px;
+  --rush-spend: 72px;
+  --rush-floor: max(14px, env(safe-area-inset-bottom));
+}
 .blitz-run .blitz-controls {
-  grid-template-columns: 150px 1fr;
+  grid-template-columns: var(--rush-pad) 1fr;
   grid-template-areas: 'steer spend' 'steer posture';
   /* The spend row keeps its height whether or not there is anything in it. */
-  grid-template-rows: 84px auto;
+  grid-template-rows: calc(var(--rush-spend) + 12px) auto;
   gap: 10px;
   align-items: end;
 }
-.blitz-run .blitz-steer-zone { width: 150px; height: 150px; }
-.blitz-run .blitz-steer-rail { width: 104px; }
+.blitz-run .blitz-steer-zone { width: var(--rush-pad); height: var(--rush-pad); }
+.blitz-run .blitz-steer-rail { width: calc(var(--rush-pad) * .7); }
 .blitz-run .blitz-posture { grid-area: posture; }
 
 .blitz-ui .blitz-posture {
@@ -2463,8 +2473,8 @@ button + .blitz-quiet { margin-top: 11px; }
   display: grid;
   /* The same split as TUCK_SHARE in blitz-input.ts: they must agree. */
   grid-template-rows: 52fr 48fr;
-  width: 150px;
-  height: 150px;
+  width: var(--rush-pad);
+  height: var(--rush-pad);
   padding: 0;
   overflow: hidden;
   border: 3px solid var(--rush-keyline, #14131d);
@@ -2562,8 +2572,10 @@ button + .blitz-quiet { margin-top: 11px; }
 .blitz-speed.is-gaining { color: var(--rush-teal, #74d5ca); }
 .blitz-speed.is-losing { color: var(--rush-coral, #f47762); }
 
-@media (max-width: 380px) {
-  .blitz-run .blitz-controls { grid-template-columns: 132px 1fr; grid-template-rows: 76px auto; }
-  .blitz-run .blitz-steer-zone { width: 132px; height: 132px; }
-  .blitz-ui .blitz-posture { width: 132px; height: 132px; }
+@media (max-width: 380px) { .blitz-run { --rush-pad: 132px; --rush-spend: 64px; } }
+@media (max-height: 670px) { .blitz-run { --rush-pad: 118px; --rush-spend: 60px; } }
+
+/* Clear of the controls by construction: pads, the spend row, and a gap. */
+.blitz-run .blitz-boost-wrap {
+  bottom: calc(var(--rush-floor) + var(--rush-pad) + var(--rush-spend) + 30px);
 }

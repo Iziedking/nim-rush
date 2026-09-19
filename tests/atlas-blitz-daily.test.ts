@@ -71,7 +71,8 @@ describe('NIM RUSH ruleset schedule', () => {
     expect(blitzRulesetVersionFor('2026-09-18')).toBe('rush-nimtrail-v11-rookie');
     expect(blitzRulesetVersionFor('2026-09-15')).toBe('rush-nimtrail-v11-rookie');
     expect(blitzRulesetVersionFor('2026-09-19')).toBe('rush-sectors-v12-rookie');
-    expect(BLITZ_LATEST_RULESET_VERSION).toBe('rush-sectors-v12-rookie');
+    expect(blitzRulesetVersionFor('2026-09-20')).toBe('rush-posture-v13-rookie');
+    expect(BLITZ_LATEST_RULESET_VERSION).toBe('rush-posture-v13-rookie');
   });
 
   it('rebuilds a past day exactly, so a close run the next morning finds its board', () => {
@@ -86,7 +87,9 @@ describe('NIM RUSH ruleset schedule', () => {
 
   it('reads the rules from the seed, and leaves old and unversioned seeds alone', () => {
     expect(blitzRuleFeatures('cycle-2:lagos:2026-09-18:rush-nimtrail-v11-rookie').trailCombo).toBe(false);
-    expect(blitzRuleFeatures('cycle-2:lagos:2026-09-19:rush-sectors-v12-rookie')).toEqual({ trailCombo: true, sectors: true, dailyLayout: true });
+    expect(blitzRuleFeatures('cycle-2:lagos:2026-09-19:rush-sectors-v12-rookie')).toEqual({ trailCombo: true, sectors: true, dailyLayout: true, skillSpeed: false });
+    // The day coasting stopped being a way down the hill.
+    expect(blitzRuleFeatures('cycle-2:lagos:2026-09-20:rush-posture-v13-rookie').skillSpeed).toBe(true);
     expect(blitzRuleFeatures('seed').sectors).toBe(false);
     expect(blitzRuleFeatures('preview').dailyLayout).toBe(false);
   });
@@ -94,6 +97,7 @@ describe('NIM RUSH ruleset schedule', () => {
   it('accepts only versions that were actually scheduled', () => {
     expect(isKnownBlitzRulesetVersion('rush-nimtrail-v11-rookie')).toBe(true);
     expect(isKnownBlitzRulesetVersion('rush-sectors-v12-rookie')).toBe(true);
+    expect(isKnownBlitzRulesetVersion('rush-posture-v13-rookie')).toBe(true);
     expect(isKnownBlitzRulesetVersion('rush-anything-v99-rookie')).toBe(false);
   });
 });

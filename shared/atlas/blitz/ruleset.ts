@@ -19,6 +19,7 @@
  * been played, and its board and its payouts with it.
  */
 const SCHEDULE: readonly { readonly from: string; readonly version: string }[] = [
+  { from: '2026-09-20', version: 'rush-posture-v13-rookie' },
   { from: '2026-09-19', version: 'rush-sectors-v12-rookie' },
   { from: '0000-01-01', version: 'rush-nimtrail-v11-rookie' },
 ];
@@ -39,6 +40,8 @@ export function isKnownBlitzRulesetVersion(version: string): boolean {
 
 /** The first version with sectors, the trail combo and daily variation. */
 const V6_GENERATION = 12;
+/** The first version where coasting is not a way down the hill. */
+const SKILL_SPEED_GENERATION = 13;
 
 export interface BlitzRuleFeatures {
   /** Unbroken coin streaks multiply what each coin pays. */
@@ -47,10 +50,20 @@ export interface BlitzRuleFeatures {
   readonly sectors: boolean;
   /** The day's seed mirrors obstacles, so no two days share a layout. */
   readonly dailyLayout: boolean;
+  /**
+   * Speed is ridden for, not given.
+   *
+   * A rider who never touched the controls reached the bottom of Lagos in 97
+   * seconds, and a rider who steered but never tucked scored within 5% of one
+   * who rode properly. Under this, coasting stalls and the hill pays its speed
+   * out to a rider who is tucked into it.
+   */
+  readonly skillSpeed: boolean;
 }
 
-const LEGACY: BlitzRuleFeatures = { trailCombo: false, sectors: false, dailyLayout: false };
-const V6: BlitzRuleFeatures = { trailCombo: true, sectors: true, dailyLayout: true };
+const LEGACY: BlitzRuleFeatures = { trailCombo: false, sectors: false, dailyLayout: false, skillSpeed: false };
+const V6: BlitzRuleFeatures = { trailCombo: true, sectors: true, dailyLayout: true, skillSpeed: false };
+const V13: BlitzRuleFeatures = { trailCombo: true, sectors: true, dailyLayout: true, skillSpeed: true };
 
 /**
  * The rules a seed is simulated under.
@@ -61,5 +74,8 @@ const V6: BlitzRuleFeatures = { trailCombo: true, sectors: true, dailyLayout: tr
  */
 export function blitzRuleFeatures(seed: string): BlitzRuleFeatures {
   const generation = /rush-[a-z]+-v(\d+)-/.exec(seed);
-  return generation && Number(generation[1]) >= V6_GENERATION ? V6 : LEGACY;
+  if (!generation) return LEGACY;
+  const version = Number(generation[1]);
+  if (version >= SKILL_SPEED_GENERATION) return V13;
+  return version >= V6_GENERATION ? V6 : LEGACY;
 }

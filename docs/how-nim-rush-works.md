@@ -59,8 +59,15 @@ Four controls, each with a cost:
 | **Drift** | a hard direction change, and nitro back | one gearbox |
 | **Boost** | 8.5 m/s on top | nitro |
 
-Doing nothing coasts, and coasting is 14% below the speed the course was built
-around. A rider who never tucks will finish, but close to the limit.
+From 20 September 2026, **coasting does not get you down the hill**. Sitting
+up rolls at half the course speed, and the gradient only pays out properly to a
+rider who is folded onto the bars: a run nobody touches runs out of clock
+around four fifths of the way down, every time, on every city. Steering all the
+way but never tucking finishes, and scores about a third of what riding it
+properly does.
+
+Before that date a hands-off run reached the bottom of Lagos in 97 seconds and
+scored zero, which is the bug this fixes: the hill was doing the work.
 
 Braking into a corner and tucking out of it is faster than holding one position
 through both. That is the whole skill.

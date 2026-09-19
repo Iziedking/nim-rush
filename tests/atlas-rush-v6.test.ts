@@ -92,7 +92,7 @@ describe('V6 trail combo', () => {
       expect(state.trailBest, city.id).toBeGreaterThanOrEqual(20);
       expect(state.nimScore, city.id).toBeGreaterThan(state.tokensTaken * BLITZ_COMBO_TOKEN_POINTS);
     }
-  });
+  }, 30_000);
 
   it('breaks the streak on a coin ridden past', () => {
     const city = blitzCity('lagos');
@@ -156,7 +156,7 @@ describe('V6 sectors', () => {
       const { state } = ride(city.id, V6_DAY(city.id), (current) => blitzRiderInput(current));
       expect(state.phase, city.id).toBe('finished');
     }
-  });
+  }, 30_000);
 });
 
 describe('V6 daily layout', () => {

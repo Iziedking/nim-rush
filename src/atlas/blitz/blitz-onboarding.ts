@@ -212,7 +212,7 @@ export const BLITZ_ONBOARDING_BEATS: readonly BlitzOnboardingBeat[] = [
     id: 'controls',
     kicker: 'THE RIDE',
     title: 'Nothing here is free.',
-    body: 'Left pad steers. Right pad is your posture: hold the top to TUCK, which buys speed and costs you steering, and slide down to BRAKE, which buys grip and costs speed. Brake into the corner, tuck out of it. BOOST and DRIFT light up when you have something to spend, and a tap spends it. Do none of it and the bike coasts - and coasting scores almost nothing.',
+    body: 'Left pad steers. Right pad is your posture: hold the top to TUCK, which buys speed and costs you steering, and slide down to BRAKE, which buys grip and costs speed. Brake into the corner, tuck out of it. BOOST and DRIFT light up when you have something to spend, and a tap spends it. Sitting up coasts at half pace, so a rider who never tucks runs out of clock before the bottom.',
     art: CONTROLS_ART,
   },
   {
