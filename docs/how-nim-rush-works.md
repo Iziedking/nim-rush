@@ -39,7 +39,18 @@ coins.
 
 ## Riding position
 
-The bike does not hold its own speed. Four controls, each with a cost:
+The bike does not hold its own speed.
+
+**Two pads, one per thumb.** The left one steers. The right one is your
+posture: hold the top to tuck, slide your thumb down to brake, let go to sit
+up. Brake into the corner, tuck out of it - without lifting your thumb. Nitro
+and gear keys light up in their slots above it when you have something to
+spend, and a tap spends it; they never move the pad underneath them.
+
+On a keyboard: arrows or A/D steer, up or W tucks, down or S brakes, space
+boosts, shift drifts.
+
+Four controls, each with a cost:
 
 | Control | Gives | Costs |
 | --- | --- | --- |

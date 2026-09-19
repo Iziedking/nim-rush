@@ -76,8 +76,17 @@ describe('Beacon Blitz public arcade experience', () => {
     expect(input).toContain("'Space'");
     expect(app).toContain('blitz-steer-zone');
     expect(app).toContain('blitz-drift');
-    expect(app).toContain('blitz-brake');
     expect(app).toContain('blitz-boost');
+    // One pad per thumb: steering on the left, posture on the right, with
+    // brake and tuck as the two ends of the one control rather than two
+    // buttons a thumb has to hop between mid-corner.
+    expect(app).toContain('blitz-posture-tuck');
+    expect(app).toContain('blitz-posture-brake');
+    expect(app).toContain('bindPosture');
+    // A spend key is ghosted in its slot, never removed from the layout: it
+    // used to collapse the row and move the controls under the rider's thumb.
+    expect(app).toContain("classList.toggle('is-ready'");
+    expect(app).not.toMatch(/boostKey.hidden|driftKey.hidden/);
     expect(app).toContain('blitz-mission-hud');
     expect(app).toContain('Physical mission contracts');
     expect(app).toContain('blitz-pause-overlay');

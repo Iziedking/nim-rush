@@ -124,6 +124,95 @@ export class BlitzInputController {
     );
   }
 
+  /**
+   * Posture, as one control instead of two buttons.
+   *
+   * Tuck and brake are the two ends of a single axis - down on the bars for
+   * speed, up on the brakes for grip - and the rhythm of a descent is moving
+   * between them: brake into the corner, tuck out of it. As two separate
+   * targets that rhythm was two taps on two 52px buttons, with a thumb
+   * crossing the gap between them mid-corner.
+   *
+   * Here the thumb lands anywhere on the pad and never has to leave: the top
+   * of the pad is tuck, the bottom is brake, and sliding between them switches
+   * without lifting. Releasing sits the rider up in neutral.
+   *
+   * Tuck gets the larger share because it is held for most of a run, and
+   * because a thumb resting on a pad rests high on it.
+   */
+  bindPosture(zone: HTMLElement, onChange: (posture: 'tuck' | 'brake' | 'neutral') => void): void {
+    const TUCK_SHARE = 0.55;
+    let posturePointer: number | null = null;
+    let top = 0;
+    let height = 1;
+    let held: 'tuck' | 'brake' | 'neutral' = 'neutral';
+    const apply = (posture: 'tuck' | 'brake' | 'neutral') => {
+      this.tuck = posture === 'tuck';
+      this.brake = posture === 'brake';
+      zone.classList.toggle('is-tucking', posture === 'tuck');
+      zone.classList.toggle('is-braking', posture === 'brake');
+      /*
+       * A tick under the thumb on the way in and on the crossing, because a
+       * control a rider cannot feel is a control they have to look at - and
+       * looking down is how a corner is missed. Guarded: iOS has no vibrate,
+       * and a browser may refuse it outside a gesture.
+       */
+      if (posture !== held && posture !== 'neutral') {
+        try { navigator.vibrate?.(8); } catch { /* haptics are a nicety */ }
+      }
+      held = posture;
+      onChange(posture);
+    };
+    const read = (event: PointerEvent) => {
+      // Clamped rather than cancelled: a thumb that wanders off the top of the
+      // pad still means tuck, which is what the rider is asking for.
+      const within = Math.min(1, Math.max(0, (event.clientY - top) / height));
+      apply(within < TUCK_SHARE ? 'tuck' : 'brake');
+    };
+    const down = (event: PointerEvent) => {
+      // iOS first: otherwise long-press selection starts on a held control.
+      event.preventDefault();
+      if (posturePointer !== null) return;
+      posturePointer = event.pointerId;
+      const rect = zone.getBoundingClientRect();
+      top = rect.top;
+      height = Math.max(1, rect.height);
+      // State before capture, because WebKit throws out of setPointerCapture
+      // and the hold would never reach the simulation. See bindHold below.
+      read(event);
+      try { zone.setPointerCapture?.(event.pointerId); } catch { /* window nets cover it */ }
+    };
+    const move = (event: PointerEvent) => {
+      if (event.pointerId !== posturePointer) return;
+      read(event);
+    };
+    const up = (event?: PointerEvent) => {
+      if (event && posturePointer !== null && event.pointerId !== posturePointer) return;
+      posturePointer = null;
+      apply('neutral');
+    };
+    // Every finger gone means neutral, whatever the pointer bookkeeping says.
+    const allFingersUp = (event: TouchEvent) => {
+      if (event.touches.length > 0 || posturePointer === null) return;
+      posturePointer = null;
+      apply('neutral');
+    };
+    zone.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('touchend', allFingersUp);
+    window.addEventListener('touchcancel', allFingersUp);
+    this.bindingCleanups.push(
+      () => zone.removeEventListener('pointerdown', down),
+      () => window.removeEventListener('pointermove', move),
+      () => window.removeEventListener('pointerup', up),
+      () => window.removeEventListener('pointercancel', up),
+      () => window.removeEventListener('touchend', allFingersUp),
+      () => window.removeEventListener('touchcancel', allFingersUp),
+    );
+  }
+
   bindHold(button: HTMLElement, action: 'drift' | 'boost' | 'brake' | 'tuck'): void {
     const set = (active: boolean) => {
       if (action === 'drift') this.drift = active;

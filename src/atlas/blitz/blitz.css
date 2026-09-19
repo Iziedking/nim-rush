@@ -2430,3 +2430,139 @@ button + .blitz-quiet { margin-top: 11px; }
   white-space: nowrap;
 }
 .blitz-ui .blitz-streak.is-at-risk { background: #fdc41f; }
+
+/*
+ * ---------------------------------------------------------------------------
+ * The control layout: one pad per thumb.
+ *
+ * What was wrong with the old one, in the order a rider felt it:
+ *   1. The spend keys lived in a grid row above the buttons, so taking or
+ *      spending a bottle changed that row's height and MOVED TUCK AND BRAKE
+ *      under the thumb holding them, mid-run.
+ *   2. Tuck and brake were two 52px targets - under the 60px comfortable
+ *      minimum - for what is one axis: brake in, tuck out.
+ *   3. The steer pad was 118px in the corner, for the one thing a rider does
+ *      continuously.
+ * ---------------------------------------------------------------------------
+ */
+.blitz-run .blitz-controls {
+  grid-template-columns: 150px 1fr;
+  grid-template-areas: 'steer spend' 'steer posture';
+  /* The spend row keeps its height whether or not there is anything in it. */
+  grid-template-rows: 84px auto;
+  gap: 10px;
+  align-items: end;
+}
+.blitz-run .blitz-steer-zone { width: 150px; height: 150px; }
+.blitz-run .blitz-steer-rail { width: 104px; }
+.blitz-run .blitz-posture { grid-area: posture; }
+
+.blitz-ui .blitz-posture {
+  position: relative;
+  justify-self: end;
+  display: grid;
+  grid-template-rows: 55fr 45fr;
+  width: 150px;
+  height: 150px;
+  padding: 0;
+  overflow: hidden;
+  border: 3px solid var(--rush-keyline, #14131d);
+  border-radius: 26px;
+  background: rgb(8 20 21 / .52);
+  box-shadow: var(--rush-drop-tight, 4px 5px 0 #14131d);
+  /* Held, dragged and slid across: the browser must not scroll or select. */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.blitz-posture-half {
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  transition: background 90ms linear;
+}
+.blitz-posture-tuck { border-bottom: 2px solid rgb(245 234 212 / .22); }
+.blitz-posture-name {
+  color: var(--rush-ink, #f5ead4);
+  font: 900 16px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .16em;
+}
+.blitz-posture-brake .blitz-posture-name { font-size: 12px; letter-spacing: .12em; }
+.blitz-posture-brake .blitz-key-glyph { margin: 0 auto; }
+
+/* What the thumb is doing now. */
+.blitz-posture.is-tucking .blitz-posture-tuck { background: var(--rush-teal, #74d5ca); }
+.blitz-posture.is-tucking .blitz-posture-tuck .blitz-posture-name { color: var(--rush-keyline, #14131d); }
+.blitz-posture.is-braking .blitz-posture-brake { background: var(--rush-coral, #f47762); }
+.blitz-posture.is-braking .blitz-posture-brake .blitz-posture-name { color: var(--rush-keyline, #14131d); }
+
+/*
+ * What the hill is asking for next. A thin travelling edge rather than a
+ * flashing fill: it has to be readable at the edge of vision while the rider
+ * is looking up the road, and it must never look like the control is pressed.
+ */
+.blitz-posture-coach {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--rush-paper, #f7ecd6);
+  color: var(--rush-keyline, #14131d);
+  font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .14em;
+  opacity: 0;
+  pointer-events: none;
+}
+.blitz-posture.is-asking-brake .blitz-posture-coach,
+.blitz-posture.is-asking-tuck .blitz-posture-coach { animation: blitz-coach 1600ms ease-out; }
+.blitz-posture.is-asking-brake .blitz-posture-brake { box-shadow: inset 0 0 0 3px var(--rush-coral, #f47762); }
+.blitz-posture.is-asking-tuck .blitz-posture-tuck { box-shadow: inset 0 0 0 3px var(--rush-teal, #74d5ca); }
+@keyframes blitz-coach {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.9); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blitz-posture.is-asking-brake .blitz-posture-coach,
+  .blitz-posture.is-asking-tuck .blitz-posture-coach { animation: none; opacity: 1; }
+}
+
+/*
+ * A spend key is a socket that fills. Empty, it is a dashed ring with nothing
+ * in it - no dimmed label to fail a contrast check, and no doubt about whether
+ * it can be pressed. Full, the key fades into the same socket, which is why
+ * nothing below it ever moves.
+ */
+.blitz-run .blitz-spend { align-items: end; min-height: 76px; margin-bottom: 0; }
+.blitz-run .blitz-spend-key {
+  border: 2px dashed rgb(245 234 212 / .3);
+  background: rgb(8 20 21 / .3) !important;
+  box-shadow: none;
+  opacity: .55;
+  pointer-events: none;
+  animation: none;
+  transition: opacity 140ms linear, transform 140ms cubic-bezier(.2, .9, .3, 1);
+}
+.blitz-run .blitz-spend-key > * { opacity: 0; transition: opacity 140ms linear; }
+.blitz-run .blitz-spend-key.is-ready {
+  border: 3px solid var(--rush-keyline, #14131d);
+  background: rgb(247 236 214 / .92) !important;
+  box-shadow: var(--rush-drop-tight, 4px 5px 0 #14131d);
+  opacity: 1;
+  pointer-events: auto;
+}
+.blitz-run .blitz-spend-key.is-ready > * { opacity: 1; }
+.blitz-run .blitz-spend-key.is-ready.is-held { transform: translateY(2px); }
+
+/* Speed, as a consequence. Rising while tucked, falling on the brakes. */
+.blitz-speed.is-gaining { color: var(--rush-teal, #74d5ca); }
+.blitz-speed.is-losing { color: var(--rush-coral, #f47762); }
+
+@media (max-width: 380px) {
+  .blitz-run .blitz-controls { grid-template-columns: 132px 1fr; grid-template-rows: 76px auto; }
+  .blitz-run .blitz-steer-zone { width: 132px; height: 132px; }
+  .blitz-ui .blitz-posture { width: 132px; height: 132px; }
+}

@@ -1,4 +1,4 @@
-import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, BOOST_ENGAGE_ENERGY, blitzComboMultiplier, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
+import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, BOOST_ENGAGE_ENERGY, blitzComboMultiplier, createBlitzRun, sampleBlitzRoute, stepBlitzRun } from '../../../shared/atlas/blitz/core';
 import { blitzRuleFeatures } from '../../../shared/atlas/blitz/ruleset';
 import { BLITZ_SECTORS } from '../../../shared/atlas/blitz/sectors';
 import { BLITZ_BADGES, blitzRunBadges } from '../../../shared/atlas/blitz/badges';
@@ -647,28 +647,41 @@ export class BlitzApp {
     steerRail.append(thumb);
     steerZone.append(node('span', '', 'STEER'), steerRail);
     /*
-     * Two things you hold, and two that show up when you have them.
+     * One pad per thumb.
      *
-     * Four equal keys in a block took the bottom fifth of the screen and sat
-     * over the part of the trail a rider is reading, and two of them spent
-     * most of a run doing nothing: BOOST is dead with an empty tank and DRIFT
-     * is dead with no gearbox, but both were on screen the whole time anyway.
+     * Tuck and brake were two 52px buttons, and the rhythm of a descent -
+     * brake into the corner, tuck out of it - meant a thumb hopping between
+     * them mid-corner. They are the two ends of one axis, so they are now one
+     * pad: hold the top to tuck, slide down to brake, let go to sit up. The
+     * thumb never leaves the control it is already on.
      *
-     * So TUCK stays big, because the bike coasts without it and it is held for
-     * most of the descent, and BRAKE shrinks to an icon beside it. BOOST and
-     * DRIFT are no longer held at all - they appear only when there is
-     * something to spend, and a tap spends it. Boost latches until the tank is
-     * empty or it is tapped out; drift fires the one slide a gearbox buys and
-     * lets go by itself, because the simulation ends the window on its own.
+     * The pad also says what the hill is about to ask for, which is the other
+     * half of why the bike felt like it was riding itself: a rider could not
+     * see their own decisions coming.
      */
-    const actions = node('div', 'blitz-actions');
-    const brake = button('', 'blitz-control blitz-brake', () => undefined);
-    brake.setAttribute('aria-label', 'Brake');
-    brake.append(node('i', 'blitz-key-glyph blitz-key-glyph-brake'));
-    const tuck = button('TUCK', 'blitz-control blitz-tuck', () => undefined);
-    actions.append(brake, tuck);
+    const posture = node('div', 'blitz-control blitz-posture');
+    posture.setAttribute('role', 'group');
+    posture.setAttribute('aria-label', 'Posture: hold the top to tuck, the bottom to brake');
+    const postureTuck = node('div', 'blitz-posture-half blitz-posture-tuck');
+    postureTuck.append(node('span', 'blitz-posture-name', 'TUCK'));
+    const postureBrake = node('div', 'blitz-posture-half blitz-posture-brake');
+    postureBrake.append(node('i', 'blitz-key-glyph blitz-key-glyph-brake'), node('span', 'blitz-posture-name', 'BRAKE'));
+    const postureCoach = node('span', 'blitz-posture-coach');
+    postureCoach.setAttribute('role', 'status');
+    posture.append(postureTuck, postureBrake, postureCoach);
+    this.postureNode = posture;
+    this.postureCoachNode = postureCoach;
 
-    // The spend rack: shown only while there is something in it to spend.
+    /*
+     * The spend rack, in slots that are always there.
+     *
+     * BOOST is dead with an empty tank and DRIFT is dead with no gearbox, so
+     * each key only lights when there is something to spend. They used to be
+     * removed from the layout entirely, which collapsed the row and moved the
+     * pad underneath them UNDER THE RIDER'S THUMB, mid-run, every time a
+     * bottle was taken or spent. The slots now hold their space and the keys
+     * fade in and out of them, so nothing below ever moves.
+     */
     const spend = node('div', 'blitz-spend');
     const boostButton = button('', 'blitz-control blitz-boost blitz-spend-key', () => undefined);
     boostButton.setAttribute('aria-label', 'Boost');
@@ -678,12 +691,15 @@ export class BlitzApp {
     drift.append(node('i', 'blitz-key-glyph blitz-key-glyph-gear'), node('span', 'blitz-spend-label', 'DRIFT'));
     spend.append(boostButton, drift);
 
-    controls.append(steerZone, spend, actions);
+    controls.append(steerZone, spend, posture);
     this.boostKey = boostButton;
     this.driftKey = drift;
     this.input.bindSteering(steerZone, thumb);
-    this.input.bindHold(brake, 'brake');
-    this.input.bindHold(tuck, 'tuck');
+    this.input.bindPosture(posture, (held) => {
+      // What the rider is doing wins over what the hill is asking for: a
+      // prompt that argues with the thumb already on the pad is noise.
+      if (held !== 'neutral') this.setCoach(null);
+    });
     this.input.bindLatch(boostButton, 'boost');
     // A gearbox buys 1.5s of slide; the pulse outlasts it slightly so the
     // window is never cut short by the button letting go first.
@@ -778,7 +794,18 @@ export class BlitzApp {
     const remaining = Math.max(0, BLITZ_LIMIT_SECONDS - state.elapsedMs / 1_000);
     if (this.timerNode) this.timerNode.textContent = remaining.toFixed(1);
     if (this.scoreNode) this.scoreNode.textContent = Math.round(state.score).toString().padStart(6, '0');
-    if (this.speedNode) this.speedNode.textContent = Math.round(state.speedMps * 3.6).toString().padStart(3, '0');
+    if (this.speedNode) {
+      this.speedNode.textContent = Math.round(state.speedMps * 3.6).toString().padStart(3, '0');
+      /*
+       * Rising or falling, in colour. The number alone changes too slowly to
+       * read as a consequence of the thumb on the pad, which is most of why
+       * posture felt like it did nothing.
+       */
+      const change = state.speedMps - this.previousSpeedMps;
+      this.previousSpeedMps = state.speedMps;
+      this.speedNode.classList.toggle('is-gaining', change > 0.04);
+      this.speedNode.classList.toggle('is-losing', change < -0.04);
+    }
     if (this.progressNode) this.progressNode.style.width = `${Math.min(100, state.distanceMeters / city.lengthMeters * 100)}%`;
     /*
      * A fraction of the tank this rider actually carries. Reading the raw
@@ -823,6 +850,11 @@ export class BlitzApp {
   private finishHoldUntil: number | null = null;
   private finishSpeedMps = 0;
   private nimNode: HTMLElement | null = null;
+  private postureNode: HTMLElement | null = null;
+  private postureCoachNode: HTMLElement | null = null;
+  private coachAsk: 'tuck' | 'brake' | null = null;
+  private coachAskedAt = 0;
+  private previousSpeedMps = 0;
   private comboNode: HTMLElement | null = null;
   private sectorNode: HTMLElement | null = null;
   private shownSector = -1;
@@ -1901,19 +1933,73 @@ export class BlitzApp {
     }
   }
 
+  /*
+   * What the hill is about to ask for.
+   *
+   * The complaint this answers is "the game seems to be playing itself". Part
+   * of that was steering that went the wrong way, and part of it is that a
+   * rider could not see their own decisions arriving: a corner reads as
+   * scenery until it is throwing you wide.
+   *
+   * The ask is computed from the same two numbers the simulation uses for
+   * corner push - the bend of the road ahead and the square of the speed ratio
+   * - so it can never advise something the physics disagrees with. Measured
+   * over a full run on all three cities, 0.030 sits around the 85th percentile
+   * on the two twisty courses and is rarely reached on the straight one, which
+   * is what a prompt tied to the road should do.
+   */
+  private updateCoach(state: BlitzRunState): void {
+    const pad = this.postureNode;
+    if (!pad) return;
+    // A rider already on the pad is not told what to do.
+    if (state.phase !== 'running' || pad.classList.contains('is-tucking') || pad.classList.contains('is-braking')) {
+      this.setCoach(null);
+      return;
+    }
+    const city = blitzCity(state.cityId);
+    const lookahead = Math.max(18, state.speedMps * 1.1);
+    const ahead = sampleBlitzRoute(state.cityId, Math.min(city.lengthMeters, state.distanceMeters + lookahead));
+    const load = Math.abs(ahead.bend) * (state.speedMps / city.baseSpeedMps) ** 2;
+    this.setCoach(load >= 0.03 ? 'brake' : load <= 0.01 ? 'tuck' : this.coachAsk);
+  }
+
+  /** One prompt at a time, and never faster than a rider can read it. */
+  private setCoach(ask: 'tuck' | 'brake' | null): void {
+    if (ask === this.coachAsk) return;
+    const now = performance.now();
+    if (ask !== null && now - this.coachAskedAt < 800) return;
+    this.coachAsk = ask;
+    this.coachAskedAt = now;
+    if (this.postureCoachNode) this.postureCoachNode.textContent = ask === 'brake' ? 'BRAKE' : ask === 'tuck' ? 'TUCK' : '';
+    this.postureNode?.classList.toggle('is-asking-brake', ask === 'brake');
+    this.postureNode?.classList.toggle('is-asking-tuck', ask === 'tuck');
+  }
+
+  /*
+   * A key is lit when it can be spent and ghosted when it cannot - but it
+   * keeps its slot either way. Removing it collapsed the row and moved the
+   * posture pad under the rider's thumb mid-run, every time a bottle was
+   * taken or spent.
+   */
   private updateSpendKeys(state: BlitzRunState): void {
     if (this.boostKey) {
       const usable = state.boostEnergy >= BOOST_ENGAGE_ENERGY;
-      this.boostKey.hidden = !usable;
+      this.boostKey.classList.toggle('is-ready', usable);
+      this.boostKey.setAttribute('aria-disabled', String(!usable));
       if (!usable) this.input.setLatch('boost', false, this.boostKey);
     }
-    if (this.driftKey) this.driftKey.hidden = state.driftCharges <= 0;
+    if (this.driftKey) {
+      const usable = state.driftCharges > 0;
+      this.driftKey.classList.toggle('is-ready', usable);
+      this.driftKey.setAttribute('aria-disabled', String(!usable));
+    }
   }
 
   private updateSupplyHud(state: BlitzRunState): void {
     this.updateSpendKeys(state);
     this.updateNimCount(state);
     this.updateArcHud(state);
+    this.updateCoach(state);
     if (this.gearHost && this.gearHost.childElementCount !== state.driftCapacity) {
       this.gearHost.replaceChildren();
       for (let index = 0; index < state.driftCapacity; index += 1) this.gearHost.append(node('i', 'blitz-gear-pip'));

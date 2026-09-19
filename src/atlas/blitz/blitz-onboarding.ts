@@ -136,6 +136,8 @@ const CONTROLS_ART = `
     <rect width="92" height="110" rx="16" fill="${ROAD}" stroke="${INK}" stroke-width="2" opacity=".9"/>
     <path d="M24 78 L44 55 L24 32" fill="none" stroke="${GOLD}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M44 78 L64 55 L44 32" fill="none" stroke="${GOLD}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>
+    <!-- One pad, split: the top of it tucks, the bottom brakes. -->
+    <path d="M6 60 L86 60" stroke="${INK}" stroke-width="2" stroke-linecap="round" opacity=".45"/>
     <path d="M18 96 L74 96" stroke="${GOLD}" stroke-width="5" stroke-linecap="round"/>
     <path d="M28 96 L74 96" stroke="${INK}" stroke-width="2" stroke-linecap="round" opacity=".35"/>
   </g>
@@ -143,7 +145,7 @@ const CONTROLS_ART = `
        a sentence. The labels say which card is which. -->
   <g fill="${DIM}" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" font-weight="700" letter-spacing="2" text-anchor="middle">
     <text x="58" y="158">STEER</text>
-    <text x="160" y="158">TUCK</text>
+    <text x="160" y="158">POSTURE</text>
     <text x="262" y="158">BOOST</text>
   </g>
 </svg>`;
@@ -210,7 +212,7 @@ export const BLITZ_ONBOARDING_BEATS: readonly BlitzOnboardingBeat[] = [
     id: 'controls',
     kicker: 'THE RIDE',
     title: 'Nothing here is free.',
-    body: 'TUCK buys speed and costs you steering. BRAKE buys grip and costs speed. BOOST spends nitro. DRIFT spends a gearbox and buys a sharper line. Do none of it and the bike coasts - and coasting scores almost nothing.',
+    body: 'Left pad steers. Right pad is your posture: hold the top to TUCK, which buys speed and costs you steering, and slide down to BRAKE, which buys grip and costs speed. Brake into the corner, tuck out of it. BOOST and DRIFT light up when you have something to spend, and a tap spends it. Do none of it and the bike coasts - and coasting scores almost nothing.',
     art: CONTROLS_ART,
   },
   {
