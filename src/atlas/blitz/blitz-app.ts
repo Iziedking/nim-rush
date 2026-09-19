@@ -681,7 +681,7 @@ export class BlitzApp {
     posture.setAttribute('role', 'group');
     posture.setAttribute('aria-label', 'Posture: hold the top to tuck, the bottom to brake');
     const postureTuck = node('div', 'blitz-posture-half blitz-posture-tuck');
-    postureTuck.append(node('span', 'blitz-posture-name', 'TUCK'));
+    postureTuck.append(node('span', 'blitz-posture-name', 'TUCK'), node('small', 'blitz-posture-hint', 'HOLD TO RIDE'));
     const postureBrake = node('div', 'blitz-posture-half blitz-posture-brake');
     postureBrake.append(node('i', 'blitz-key-glyph blitz-key-glyph-brake'), node('span', 'blitz-posture-name', 'BRAKE'));
     const postureCoach = node('span', 'blitz-posture-coach');
@@ -702,8 +702,8 @@ export class BlitzApp {
      */
     const spend = node('div', 'blitz-spend');
     const boostButton = button('', 'blitz-control blitz-boost blitz-spend-key', () => undefined);
-    boostButton.setAttribute('aria-label', 'Boost');
-    boostButton.append(node('i', 'blitz-key-glyph blitz-key-glyph-bottle'), node('span', 'blitz-spend-label', 'BOOST'));
+    boostButton.setAttribute('aria-label', 'Nitro');
+    boostButton.append(node('i', 'blitz-key-glyph blitz-key-glyph-bottle'), node('span', 'blitz-spend-label', 'NITRO'));
     const drift = button('', 'blitz-control blitz-drift blitz-spend-key', () => undefined);
     drift.setAttribute('aria-label', 'Drift');
     drift.append(node('i', 'blitz-key-glyph blitz-key-glyph-gear'), node('span', 'blitz-spend-label', 'DRIFT'));

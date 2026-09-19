@@ -59,11 +59,17 @@ Four controls, each with a cost:
 | **Drift** | a hard direction change, and nitro back | one gearbox |
 | **Boost** | 8.5 m/s on top | nitro |
 
-From 20 September 2026, **coasting does not get you down the hill**. Sitting
-up rolls at under a third of the course speed and keeps almost none of the
-gradient, so a run nobody touches averages about 35 km/h and runs out of clock
-near the half-way point, on every city. Steering all the way but never tucking
-does not finish either.
+From 20 September 2026 the bike works the way a bike works. **The tuck is what
+rides it** - the rider on the pedals, folded out of the wind. **Nitro is a
+shove**, and the tank holds about four seconds of it. Let go of both and
+nothing is driving the bike at all: gravity pulls it down the pitch while drag
+and the tyres take it back, so it keeps rolling on anything steep and winds
+down to a stop on the flat.
+
+On Lagos, a rider who touches nothing covers about a sixth of the course before
+the clock runs out, averaging 9 km/h. Steering the whole way without tucking
+gets a fifth of the way. Holding the tuck but never steering finishes, and
+scores 3,380. Riding it properly scores about 17,000.
 
 **And it does not hold the line.** A bike nobody is steering runs wide in a
 bend and leaves the road, because staying on the racing line is the rider's

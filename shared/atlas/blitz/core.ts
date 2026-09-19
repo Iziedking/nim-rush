@@ -101,6 +101,31 @@ const UNSTEERED_DRIFT = 30;
  * instead, which is still absurd enough to be fun.
  */
 const TERMINAL_MPS = 45;
+/*
+ * Coasting, as a bike actually coasts.
+ *
+ * Holding the tuck is what rides the bike - it is the rider on the pedals and
+ * folded out of the wind - and nitro is a burst on top of it. Let go of both
+ * and nothing is driving the bike at all: gravity pulls it down the pitch,
+ * drag and the tyres take it back. On anything steep it keeps rolling, on the
+ * flat it winds down and stops, which is what a bike does.
+ *
+ * ROLLING is the deceleration on the flat in m/s^2, and DRAG multiplies the
+ * square of speed - so the faster it rolls, the harder the air pushes back,
+ * and every pitch has its own speed the bike settles at.
+ */
+const GRAVITY_MPS2 = 9.81;
+const COAST_ROLLING = 0.35;
+const COAST_DRAG = 0.0063;
+/*
+ * What a bottle of nitro is worth when the rider is not tucked.
+ *
+ * Nitro is a shove, not a posture, so it has to work whatever the rider is
+ * doing - sitting up out of a corner is exactly when it is worth spending.
+ * As an acceleration rather than a target speed, it fights the same drag
+ * everything else does: on its own it settles the bike around 80 km/h.
+ */
+const BOOST_THRUST_MPS2 = 3.5;
 const UNSTEERED_UNTIL = 0.18;
 /*
  * And the cost. Tucked, the bike goes where it was already going; sat up with
@@ -361,7 +386,22 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     : Math.max(4, city.baseSpeedMps * pace * surfaceProfile.resistance * (tuckActive ? postureSpeed.tucked : postureSpeed.neutral)
       + gradeSpeed + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0));
   if (features.skillSpeed) targetSpeed = Math.min(targetSpeed, TERMINAL_MPS);
-  let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
+  /*
+   * Two ways the speed can move. Under power - tucked, or shoved along by
+   * nitro - the bike works toward the speed that posture is worth. With
+   * nobody driving it, it is left to the hill and the air.
+   */
+  const coasting = features.skillSpeed && !tuckActive && !brakeActive && !offRoad && !state.airborne;
+  let speedMps;
+  if (coasting) {
+    const pitch = clamp(-roadHere.slope, -0.5, 0.5) * GRAVITY_MPS2;
+    const rolling = COAST_ROLLING / Math.max(0.35, surfaceProfile.resistance);
+    const drag = COAST_DRAG * state.speedMps * state.speedMps;
+    const thrust = boostActive ? BOOST_THRUST_MPS2 : 0;
+    speedMps = Math.max(0, state.speedMps + (pitch + thrust - rolling - drag) / BLITZ_TICK_RATE);
+  } else {
+    speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
+  }
   if (offRoad && !brakeActive && !state.airborne) {
     const here = sampleCourse(city.id, state.distanceMeters);
     const ahead = sampleCourse(city.id, state.distanceMeters + 1);

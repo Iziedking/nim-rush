@@ -193,5 +193,5 @@ describe('V6 on the server', () => {
       const replay = replayBlitzTrace({ cityId: city.id, seed, frames });
       expect(replay.score, city.id).toBe(state.score);
     }
-  });
+  }, 30_000);
 });

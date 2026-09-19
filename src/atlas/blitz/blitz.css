@@ -2579,3 +2579,17 @@ button + .blitz-quiet { margin-top: 11px; }
 .blitz-run .blitz-boost-wrap {
   bottom: calc(var(--rush-floor) + var(--rush-pad) + var(--rush-spend) + 30px);
 }
+
+/*
+ * "I cannot differentiate tuck and boost." They do different jobs now - the
+ * tuck is what rides the bike, nitro is a shove you spend - so the pad says
+ * what holding it is for.
+ */
+.blitz-posture-hint {
+  display: block;
+  margin-top: 3px;
+  color: rgb(245 234 212 / .66);
+  font: 700 8px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .14em;
+}
+.blitz-posture.is-tucking .blitz-posture-hint { color: rgb(20 19 29 / .62); }
