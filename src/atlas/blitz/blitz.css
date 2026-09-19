@@ -2461,7 +2461,8 @@ button + .blitz-quiet { margin-top: 11px; }
   position: relative;
   justify-self: end;
   display: grid;
-  grid-template-rows: 55fr 45fr;
+  /* The same split as TUCK_SHARE in blitz-input.ts: they must agree. */
+  grid-template-rows: 52fr 48fr;
   width: 150px;
   height: 150px;
   padding: 0;

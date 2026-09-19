@@ -141,7 +141,16 @@ export class BlitzInputController {
    * because a thumb resting on a pad rests high on it.
    */
   bindPosture(zone: HTMLElement, onChange: (posture: 'tuck' | 'brake' | 'neutral') => void): void {
-    const TUCK_SHARE = 0.55;
+    /*
+     * Where the pad splits. Measured on a Pixel 7 Pro, 0.55 left the brake
+     * half 9.3mm tall - the floor for a touch target, for the control a rider
+     * reaches for in a hurry. At 0.52 both halves clear 10mm and tuck still
+     * has the larger share, which is right because it is the one held.
+     *
+     * The CSS grid in blitz.css splits on the same number. They have to agree,
+     * or the pad would light one half and act on the other.
+     */
+    const TUCK_SHARE = 0.52;
     let posturePointer: number | null = null;
     let top = 0;
     let height = 1;
