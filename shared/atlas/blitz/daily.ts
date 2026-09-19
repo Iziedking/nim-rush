@@ -1,4 +1,5 @@
 import type { BlitzCityId } from './types';
+import { blitzRulesetVersionFor } from './ruleset';
 
 /**
  * Versioned identity for the shared daily board. The server is authoritative
@@ -15,13 +16,20 @@ import type { BlitzCityId } from './types';
  */
 export const BLITZ_SEASON_ID = 'cycle-2';
 
-export const BLITZ_DAILY_RULESET_VERSION = 'rush-nimtrail-v11-rookie';
+/**
+ * The version today is ridden under. Read from the dated schedule in
+ * ruleset.ts rather than held here, because a past day must keep the version it
+ * was actually played on or the close cannot find its board.
+ */
+export function blitzDailyRulesetVersion(now: number): string {
+  return blitzRulesetVersionFor(utcDateKey(now));
+}
 export const BLITZ_DAY_MS = 86_400_000;
 
 export interface BlitzDailyChallenge {
   readonly challengeId: string;
   readonly date: string;
-  readonly rulesetVersion: typeof BLITZ_DAILY_RULESET_VERSION;
+  readonly rulesetVersion: string;
   readonly cityId: BlitzCityId;
   readonly seed: string;
   readonly startsAt: number;
@@ -37,11 +45,12 @@ export function getBlitzDailyChallenge(input: { now: number; cityId: BlitzCityId
   if (!/^[a-z0-9-]{1,80}$/.test(input.seasonId)) throw new Error('Daily challenge season is invalid.');
   const date = utcDateKey(input.now);
   const startsAt = Date.parse(`${date}T00:00:00.000Z`);
-  const challengeId = `${input.seasonId}:${input.cityId}:${date}:${BLITZ_DAILY_RULESET_VERSION}`;
+  const rulesetVersion = blitzRulesetVersionFor(date);
+  const challengeId = `${input.seasonId}:${input.cityId}:${date}:${rulesetVersion}`;
   return {
     challengeId,
     date,
-    rulesetVersion: BLITZ_DAILY_RULESET_VERSION,
+    rulesetVersion,
     cityId: input.cityId,
     seed: challengeId,
     startsAt,

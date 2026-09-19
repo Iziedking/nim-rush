@@ -1,5 +1,5 @@
 import { BufferGeometry, Color, CylinderGeometry, DataTexture, DoubleSide, Float32BufferAttribute, Group, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, Mesh, MeshStandardMaterial, Object3D, RepeatWrapping, RGBAFormat, SphereGeometry, SRGBColorSpace } from 'three';
-import { blitzCity, blitzEnabledObstacles } from '../../../../shared/atlas/blitz/cities';
+import { blitzCity, blitzLiveObstacles } from '../../../../shared/atlas/blitz/cities';
 import { courseTerrainHeight, obstacleShape, roadsideRocks, sampleCourse } from '../../../../shared/atlas/blitz/course';
 import type { BlitzCityId, BlitzDifficulty } from '../../../../shared/atlas/blitz/types';
 
@@ -21,7 +21,7 @@ function texture(seed: number): DataTexture {
   return map;
 }
 
-export function createRushCourse(id: BlitzCityId, difficulty: BlitzDifficulty = 'rookie'): Group {
+export function createRushCourse(id: BlitzCityId, difficulty: BlitzDifficulty = 'rookie', seed = 'preview'): Group {
   const city = blitzCity(id), root = new Group();
   root.name = 'nim-rush-ridge-course';
   const map = texture(438729);
@@ -85,7 +85,7 @@ export function createRushCourse(id: BlitzCityId, difficulty: BlitzDifficulty = 
   }
   // Only what the simulation makes solid on this difficulty. A drawn obstacle
   // a rider can ride through teaches them to distrust the ones that are real.
-  for (const obstacle of blitzEnabledObstacles(city, difficulty)) {
+  for (const obstacle of blitzLiveObstacles(city, difficulty, seed)) {
     const shape = obstacleShape(obstacle.id), p = sampleCourse(id, obstacle.distance01 * city.lengthMeters, obstacle.lane);
     let hazard: Mesh;
     if (obstacle.id.includes('log')) {

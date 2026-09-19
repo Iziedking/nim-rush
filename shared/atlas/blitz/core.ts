@@ -1,4 +1,7 @@
-import { BLITZ_LINE_GATES, blitzCity, blitzCollectables, blitzEnabledObstacles } from './cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzLiveObstacles } from './cities';
+import { blitzRunCollectables } from './trail';
+import { blitzRuleFeatures } from './ruleset';
+import { BLITZ_SECTORS, blitzSectorIndex } from './sectors';
 import { BLITZ_BASE_LOADOUT, type BlitzLoadout } from './rider';
 import { blitzRivalAt, blitzRivalContact, type BlitzRivalPath } from './rivals';
 import { blitzMissionWindow, selectBlitzMissions } from './missions';
@@ -79,6 +82,24 @@ export const BLITZ_NITRO_BOTTLE = 18;
  * carry one on its own.
  */
 export const BLITZ_TOKEN_POINTS = 60;
+/*
+ * Under the V6 rules a coin is worth less on its own and more in a run of
+ * them. A clean trail - about seventy coins, most of them at x2 - comes to
+ * roughly five thousand; picking coins up here and there, about fifteen
+ * hundred. The trail stops paying for being near it and starts paying for
+ * holding it.
+ */
+export const BLITZ_COMBO_TOKEN_POINTS = 40;
+/** Coins in a row for each step up: x1.5 at ten, x2 at twenty. */
+export const BLITZ_COMBO_STEPS: readonly { readonly streak: number; readonly multiplier: number }[] = [
+  { streak: 20, multiplier: 2 },
+  { streak: 10, multiplier: 1.5 },
+];
+
+/** What a coin pays at a given streak, counting that coin. */
+export function blitzComboMultiplier(streak: number): number {
+  return BLITZ_COMBO_STEPS.find((step) => streak >= step.streak)?.multiplier ?? 1;
+}
 
 /**
  * Start a run.
@@ -147,6 +168,9 @@ export function createBlitzRun(input: { cityId: BlitzCityId; seed: string; diffi
     gearboxTaken: 0,
     tokensTaken: 0,
     nimScore: 0,
+    trailStreak: 0,
+    trailBest: 0,
+    sector: 0,
     rivalContacts: 0,
     overtakes: 0,
     takedowns: 0,
@@ -182,6 +206,9 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
 
   const city = blitzCity(state.cityId);
   const rules = blitzRules(state.difficulty);
+  const features = blitzRuleFeatures(state.seed);
+  const sector = features.sectors ? blitzSectorIndex(state.distanceMeters / city.lengthMeters) : 0;
+  const pace = BLITZ_SECTORS[sector]!.pace;
   const elapsedTicks = state.elapsedTicks + 1;
   const elapsedMs = Math.round(elapsedTicks * 1_000 / BLITZ_TICK_RATE);
   /*
@@ -278,7 +305,7 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   const gradeSpeed = clamp(-roadHere.slope, -0.24, 0.24) * GRADE_SPEED_MPS;
   const targetSpeed = brakeActive ? 0 : offRoad
     ? city.baseSpeedMps * grassProfile.resistance / (1 + shoulderDepth * 0.18)
-    : Math.max(4, city.baseSpeedMps * surfaceProfile.resistance * (tuckActive ? POSTURE_SPEED.tucked : POSTURE_SPEED.neutral)
+    : Math.max(4, city.baseSpeedMps * pace * surfaceProfile.resistance * (tuckActive ? POSTURE_SPEED.tucked : POSTURE_SPEED.neutral)
       + gradeSpeed + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0));
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
   if (offRoad && !brakeActive && !state.airborne) {
@@ -313,6 +340,8 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
   let gearboxTaken = state.gearboxTaken;
   let tokensTaken = state.tokensTaken;
   let nimScore = state.nimScore;
+  let trailStreak = state.trailStreak;
+  let trailBest = state.trailBest;
   let missions = state.missions.map((mission) => ({ ...mission }));
   let heightMeters = state.heightMeters;
   let verticalVelocityMps = state.verticalVelocityMps;
@@ -354,9 +383,12 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     lastImpactTick = elapsedTicks;
   }
 
-  const enabledObstacleIds = new Set(blitzEnabledObstacles(city, rules.difficulty).map((obstacle) => obstacle.id));
-  for (const obstacle of nearbyCourseColliders(city.id, state.distanceMeters)) {
-    if (!obstacle.roadside && !enabledObstacleIds.has(obstacle.id)) continue;
+  const liveObstacles = new Map(blitzLiveObstacles(city, rules.difficulty, state.seed).map((obstacle) => [obstacle.id, obstacle] as const));
+  for (const collider of nearbyCourseColliders(city.id, state.distanceMeters)) {
+    const live = collider.roadside ? undefined : liveObstacles.get(collider.id);
+    if (!collider.roadside && !live) continue;
+    // Where today's layout put it, which may be the other side of the road.
+    const obstacle = live ? { ...collider, lane: live.lane } : collider;
     const nearFace = obstacle.distance - obstacle.halfLength - 1.1;
     const farFace = obstacle.distance + obstacle.halfLength + 1.1;
     if (state.distanceMeters > farFace || distanceMeters < nearFace) continue;
@@ -481,18 +513,27 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    * fuel as well as points. Airborne riders still collect - taking a bottle
    * off a jump is one of the better things in the game.
    */
-  for (const pickup of blitzCollectables(city)) {
+  // Any contact breaks the trail: a streak is a line held, and a rider who hit
+  // something did not hold it.
+  if (collisions > state.collisions || rivalContacts > state.rivalContacts) trailStreak = 0;
+  for (const pickup of blitzRunCollectables(city, rules.difficulty, state.seed)) {
     if (collectedPickupIds.includes(pickup.id)) continue;
     const at = pickup.distance01 * city.lengthMeters;
     // The tick the bike crosses it, and only that tick.
     if (state.distanceMeters > at || distanceMeters < at) continue;
-    if (Math.abs(laneOffset - pickup.lane) > state.pickupReach) continue;
+    if (Math.abs(laneOffset - pickup.lane) > state.pickupReach) {
+      // Ridden past. Supplies can be left; a coin left breaks the streak.
+      if (pickup.kind === 'token') trailStreak = 0;
+      continue;
+    }
     collectedPickupIds.push(pickup.id);
     if (pickup.kind === 'token') {
       // Points, straight into the racing-line term, because following the
       // trail is holding the line.
       tokensTaken += 1;
-      nimScore += BLITZ_TOKEN_POINTS;
+      trailStreak += 1;
+      trailBest = Math.max(trailBest, trailStreak);
+      nimScore += features.trailCombo ? Math.round(BLITZ_COMBO_TOKEN_POINTS * blitzComboMultiplier(trailStreak)) : BLITZ_TOKEN_POINTS;
     } else if (pickup.kind === 'nitro') {
       boostEnergy = Math.min(state.boostCapacity, boostEnergy + BLITZ_NITRO_BOTTLE);
       nitroTaken += 1;
@@ -508,7 +549,9 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     const gateDistance = city.lengthMeters * fraction;
     if (processedFeatureIds.includes(gateId) || state.distanceMeters >= gateDistance || distanceMeters < gateDistance) continue;
     processedFeatureIds.push(gateId);
-    if (!airborne && Math.abs(laneOffset) <= city.roadWidth * rules.lineTolerance && collisions === state.collisions) lineScore += 900;
+    // Narrower the further down the hill, under the V6 rules.
+    const gateTolerance = rules.lineTolerance * (features.sectors ? BLITZ_SECTORS[blitzSectorIndex(fraction)]!.gateTolerance : 1);
+    if (!airborne && Math.abs(laneOffset) <= city.roadWidth * gateTolerance && collisions === state.collisions) lineScore += 900;
     else missedGatePenalty += 300;
   }
   if (!airborne) heightMeters = courseGroundLift(city.id, distanceMeters, laneOffset);
@@ -550,6 +593,9 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
     gearboxTaken,
     tokensTaken,
     nimScore,
+    trailStreak,
+    trailBest,
+    sector: features.sectors ? blitzSectorIndex(distanceMeters / city.lengthMeters) : 0,
     rivalContacts,
     takedowns,
     downedRivals: [...downedRivals],

@@ -1,4 +1,7 @@
-import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, BOOST_ENGAGE_ENERGY, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
+import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE, BOOST_ENGAGE_ENERGY, blitzComboMultiplier, createBlitzRun, stepBlitzRun } from '../../../shared/atlas/blitz/core';
+import { blitzRuleFeatures } from '../../../shared/atlas/blitz/ruleset';
+import { BLITZ_SECTORS } from '../../../shared/atlas/blitz/sectors';
+import { BLITZ_BADGES, blitzRunBadges } from '../../../shared/atlas/blitz/badges';
 import { BLITZ_CITIES, blitzCity, nextBlitzCity } from '../../../shared/atlas/blitz/cities';
 import { blitzLoadoutFor, blitzNextRiderLevel, blitzRiderLevel } from '../../../shared/atlas/blitz/rider';
 import { blitzRules } from '../../../shared/atlas/blitz/rules';
@@ -352,7 +355,12 @@ export class BlitzApp {
         nameLabel.hidden = false;
         username.focus();
       });
-      settled.append(settledName, rename);
+      // The rider's record, beside their name. Hidden until the server answers,
+      // and for a rider with no verified day yet.
+      const streak = node('span', 'blitz-streak');
+      streak.hidden = true;
+      settled.append(settledName, streak, rename);
+      void this.presentProgress(streak);
       const nameIsSettled = /^[A-Za-z0-9_]{3,18}$/.test(username.value);
       settled.hidden = !nameIsSettled;
       username.hidden = nameIsSettled;
@@ -436,19 +444,20 @@ export class BlitzApp {
   /*
    * `options.seed` is how a private lobby becomes a race.
    *
-   * A free run seeds itself from the current minute, which is fine when the
-   * point is practice and wrong the moment two people are supposed to be
-   * racing: friends who tapped Ride a minute apart were not slow and fast on
-   * one hill, they were riding two different hills and comparing numbers that
-   * had nothing to do with each other. A lobby passes the day's challenge seed
-   * so every seat gets the identical course, corner for corner.
+   * A free run used to seed itself from the current minute. Friends who tapped
+   * Ride a minute apart were riding two different hills, and under the V6
+   * rules - where the day moves the obstacles - a minute seed would also have
+   * been a layout nobody races on. A free run now rides today's descent for its
+   * city: same rocks, same coins, same contracts as the ranked run, unranked.
+   * It is practice for the thing that counts, and a lobby gets the identical
+   * course, corner for corner.
    */
   private async startRun(cityId: BlitzCityId, rankedTicket: BlitzTicket | null = null, options: { readonly seed?: string } = {}): Promise<void> {
     this.setAudioScene('paused');
     this.audio.unlock();
     this.cityId = cityId;
     this.rankedTicket = rankedTicket;
-    const seed = rankedTicket?.seed ?? options.seed ?? `${cityId}-${new Date().toISOString().slice(0, 10)}-${Math.floor(Date.now() / 60_000)}`;
+    const seed = rankedTicket?.seed ?? options.seed ?? getBlitzDailyChallenge({ now: Date.now(), cityId, seasonId: BLITZ_SEASON }).seed;
     // Ranked keeps one visible, equal loadout and the shared Rookie ruleset
     // until the server ticket contract carries Pro as an explicit version.
     /*
@@ -478,7 +487,7 @@ export class BlitzApp {
     // The scene has to be built for the ruleset this run is judged under, or
     // a rider swerves around obstacles that are not there and rides through
     // ones that are.
-    await this.renderer.loadCity(cityId, this.state.difficulty);
+    await this.renderer.loadCity(cityId, this.state.difficulty, this.state.seed);
     this.renderer.setRivals(this.rivals);
     this.setAudioScene(this.paused ? 'paused' : 'riding');
     this.renderRun();
@@ -513,6 +522,15 @@ export class BlitzApp {
     this.pauseButton = button(this.rankedTicket ? 'LIVE' : 'II', 'blitz-pause', this.togglePause);
     this.pauseButton.setAttribute('aria-label', this.rankedTicket ? 'Ranked run cannot be paused' : 'Pause Beacon Blitz');
     top.append(cityName, this.timerNode, this.scoreNode, this.pauseButton);
+    /*
+     * Which part of the descent this is. The course hardens at each third, so
+     * the rider is told as they cross into it, once, and then left alone.
+     */
+    this.sectorNode = node('div', 'blitz-sector-banner');
+    this.sectorNode.hidden = true;
+    this.sectorNode.setAttribute('role', 'status');
+    this.shownSector = -1;
+    top.append(this.sectorNode);
 
     const speedBox = node('div', 'blitz-speed-box');
     this.speedNode = node('strong', 'blitz-speed', '000');
@@ -548,6 +566,15 @@ export class BlitzApp {
     this.nimNode = node('strong', 'blitz-nim-count', '0');
     this.nimNode.setAttribute('aria-label', 'NIM tokens collected');
     nimWrap.append(this.nimNode);
+    /*
+     * The streak, under the count. A coin in a run of them is worth more, and
+     * a rider chasing x2 needs to see how close they are without looking away
+     * from the trail - so it is short, and it glows once the multiplier is on.
+     */
+    this.comboNode = node('span', 'blitz-nim-combo');
+    this.comboNode.hidden = true;
+    this.comboNode.setAttribute('aria-live', 'off');
+    nimWrap.append(this.comboNode);
     boost.append(nimWrap);
     const gearWrap = node('div', 'blitz-gear-wrap');
     gearWrap.append(node('span', '', 'GEARBOX'));
@@ -796,6 +823,9 @@ export class BlitzApp {
   private finishHoldUntil: number | null = null;
   private finishSpeedMps = 0;
   private nimNode: HTMLElement | null = null;
+  private comboNode: HTMLElement | null = null;
+  private sectorNode: HTMLElement | null = null;
+  private shownSector = -1;
   private boostKey: HTMLElement | null = null;
   private driftKey: HTMLElement | null = null;
   private missionShownId: string | null = null;
@@ -1049,7 +1079,7 @@ export class BlitzApp {
     resultHero.append(node('p', 'blitz-result-best', state.score === 0
       ? 'NO SCORE. THE CONTACTS TOOK IT ALL.'
       : best === state.score ? 'NEW PERSONAL BEST' : `PERSONAL BEST ${best.toLocaleString()}`));
-    primary.append(resultHero, this.resultContracts(state));
+    primary.append(resultHero, this.resultContracts(state), this.resultBadges(state));
     screen.append(primary);
     const ledger = node('section', 'blitz-result-ledger');
     const breakdown = node('div', 'blitz-breakdown');
@@ -1196,6 +1226,29 @@ export class BlitzApp {
     otherCourses.append(node('summary', 'blitz-competition-summary', 'OTHER CIRCUITS'), reveal);
     screen.append(otherCourses);
     this.ui.append(screen);
+  }
+
+  /*
+   * Every badge, earned ones lit. The unearned ones stay on the card with what
+   * they ask for, because a badge you can see and do not have is the reason to
+   * take the next run.
+   */
+  private resultBadges(state: BlitzRunState): HTMLElement {
+    const earned = new Set(blitzRunBadges(state));
+    const host = node('section', 'blitz-badges');
+    host.setAttribute('aria-label', 'Badges this run');
+    const heading = node('div', 'blitz-contracts-heading');
+    heading.append(node('span', '', 'BADGES'), node('strong', 'blitz-contracts-count', `${earned.size}/${BLITZ_BADGES.length}`));
+    const list = node('ul', 'blitz-badge-list');
+    for (const badge of BLITZ_BADGES) {
+      const got = earned.has(badge.id);
+      const item = node('li', got ? 'blitz-badge is-earned' : 'blitz-badge');
+      item.setAttribute('aria-label', `${badge.label}: ${got ? 'earned' : badge.ask}`);
+      item.append(node('strong', 'blitz-badge-name', badge.label), node('span', 'blitz-badge-ask', got ? 'EARNED' : badge.ask));
+      list.append(item);
+    }
+    host.append(heading, list);
+    return host;
   }
 
   private resultContracts(state: BlitzRunState): HTMLElement {
@@ -1522,6 +1575,29 @@ export class BlitzApp {
    * It never says "paid" on anything short of chain evidence, and never hides a
    * problem as "owed" - a stuck transfer says so and keeps its reason.
    */
+  /*
+   * The day streak, from the server's verified rows. When today is not ridden
+   * yet the streak is still alive, and saying so is the whole point: it is the
+   * moment the number is worth something.
+   */
+  private async presentProgress(host: HTMLElement): Promise<void> {
+    const walletAddress = this.rememberedWallet();
+    if (!walletAddress) return;
+    try {
+      const progress = await this.api.getBlitzProgress(BLITZ_SEASON, walletAddress);
+      if (progress.daysRidden === 0) return;
+      const days = `${progress.daysRidden} DAY${progress.daysRidden === 1 ? '' : 'S'} RIDDEN`;
+      host.textContent = progress.dayStreak > 0
+        ? `${progress.dayStreak}-DAY STREAK${progress.riddenToday ? '' : ' · RIDE TODAY TO KEEP IT'}`
+        : days;
+      host.title = `${days} · best ${progress.bestScore.toLocaleString()}`;
+      host.classList.toggle('is-at-risk', progress.dayStreak > 0 && !progress.riddenToday);
+      host.hidden = false;
+    } catch {
+      // A record that cannot be read is left off, not shown as zero.
+    }
+  }
+
   private async presentRewards(host: HTMLElement): Promise<void> {
     const walletAddress = this.rememberedWallet();
     // Nothing to ask about. A rider who has never ranked has no receipts, and
@@ -1800,6 +1876,31 @@ export class BlitzApp {
     }
   }
 
+  /** The streak and the sector, on V6 runs only. */
+  private updateArcHud(state: BlitzRunState): void {
+    const features = blitzRuleFeatures(state.seed);
+    if (this.comboNode) {
+      const show = features.trailCombo && state.trailStreak > 0;
+      this.comboNode.hidden = !show;
+      if (show) {
+        const multiplier = blitzComboMultiplier(state.trailStreak);
+        const text = `x${multiplier} · ${state.trailStreak} IN A ROW`;
+        if (this.comboNode.textContent !== text) this.comboNode.textContent = text;
+        this.comboNode.classList.toggle('is-hot', multiplier > 1);
+      }
+    }
+    if (this.sectorNode && features.sectors && state.phase === 'running' && state.sector !== this.shownSector) {
+      this.shownSector = state.sector;
+      const sector = BLITZ_SECTORS[state.sector]!;
+      this.sectorNode.textContent = `SECTOR ${state.sector + 1} · ${sector.label}`;
+      this.sectorNode.hidden = false;
+      // Restart the fade, so each sector gets its own moment.
+      this.sectorNode.classList.remove('is-showing');
+      void this.sectorNode.offsetWidth;
+      this.sectorNode.classList.add('is-showing');
+    }
+  }
+
   private updateSpendKeys(state: BlitzRunState): void {
     if (this.boostKey) {
       const usable = state.boostEnergy >= BOOST_ENGAGE_ENERGY;
@@ -1812,6 +1913,7 @@ export class BlitzApp {
   private updateSupplyHud(state: BlitzRunState): void {
     this.updateSpendKeys(state);
     this.updateNimCount(state);
+    this.updateArcHud(state);
     if (this.gearHost && this.gearHost.childElementCount !== state.driftCapacity) {
       this.gearHost.replaceChildren();
       for (let index = 0; index < state.driftCapacity; index += 1) this.gearHost.append(node('i', 'blitz-gear-pip'));

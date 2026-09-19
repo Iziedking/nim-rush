@@ -1,5 +1,7 @@
 import type { BlitzCityId, BlitzDifficulty, BlitzSurface } from './types';
 import { blitzRules } from './rules';
+import { blitzRuleFeatures } from './ruleset';
+import { BLITZ_SECTORS } from './sectors';
 
 export interface BlitzObstacle {
   readonly id: string;
@@ -340,6 +342,59 @@ const collectables = new Map<BlitzCityId, readonly BlitzPickup[]>();
 export function blitzEnabledObstacles(city: BlitzCityDefinition, difficulty: BlitzDifficulty): readonly BlitzObstacle[] {
   const tier = blitzRules(difficulty).obstacleTier;
   return tier === 'all' ? city.obstacles : city.obstacles.filter((obstacle) => (obstacle.tier ?? 'core') === 'core');
+}
+
+/**
+ * What is solid on this run, and where.
+ *
+ * The simulation and the renderer both read this one list, so a rock that is
+ * drawn is a rock that can be hit. Under the V6 rules (see ruleset.ts):
+ *
+ * - Sectors: past the Warm-up, the pro-tier obstacles are live for every
+ *   rider. The Pinch and the Gauntlet are harder because more of the road is.
+ * - Daily layout: the day's seed mirrors each obstacle to the other side of the
+ *   road or leaves it. Same seed, same layout, on every machine, so the server
+ *   re-riding a run meets the rocks the rider met - but no two days share one,
+ *   so a line cannot be learned once and ridden forever.
+ *
+ * Any other seed gets exactly what blitzEnabledObstacles always gave it.
+ */
+export function blitzLiveObstacles(city: BlitzCityDefinition, difficulty: BlitzDifficulty, seed: string): readonly BlitzObstacle[] {
+  const features = blitzRuleFeatures(seed);
+  if (!features.sectors && !features.dailyLayout) return blitzEnabledObstacles(city, difficulty);
+  const key = `${city.id}|${difficulty}|${seed}`;
+  const cached = liveObstacles.get(key);
+  if (cached) return cached;
+  const allTiers = blitzRules(difficulty).obstacleTier === 'all';
+  const pinch = BLITZ_SECTORS[1]!.start01;
+  let live = city.obstacles.filter((obstacle) => allTiers
+    || (obstacle.tier ?? 'core') === 'core'
+    || (features.sectors && obstacle.distance01 >= pinch));
+  if (features.dailyLayout) live = live.map((obstacle) => mirroredToday(seed, obstacle.id) ? { ...obstacle, lane: -obstacle.lane } : obstacle);
+  // Bounded: a long session sees a handful of seeds, and a free run makes a
+  // new one every minute.
+  if (liveObstacles.size > 32) liveObstacles.clear();
+  liveObstacles.set(key, live);
+  return live;
+}
+const liveObstacles = new Map<string, readonly BlitzObstacle[]>();
+
+/**
+ * A coin flip every machine agrees on: FNV-1a over seed and obstacle, then a
+ * final mix. The mix is not decoration. FNV's lowest bit is only the parity of
+ * the characters' own lowest bits, so without it the date barely moved the
+ * flip and a whole week came out as two layouts.
+ */
+function mirroredToday(seed: string, obstacleId: string): boolean {
+  let hash = 2166136261;
+  const text = `${seed}#${obstacleId}`;
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
+  return (hash >>> 31) === 1;
 }
 
 export function blitzCity(id: BlitzCityId): BlitzCityDefinition {

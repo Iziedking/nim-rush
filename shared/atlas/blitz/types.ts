@@ -174,6 +174,15 @@ export interface BlitzRunState {
   readonly tokensTaken: number;
   /** Points the trail has paid so far. */
   readonly nimScore: number;
+  /**
+   * Coins taken in a row. A missed coin or any contact puts it back to zero,
+   * and under the V6 rules it multiplies what each coin pays.
+   */
+  readonly trailStreak: number;
+  /** The longest streak this run. */
+  readonly trailBest: number;
+  /** 0 Warm-up, 1 the Pinch, 2 the Gauntlet. Always 0 without the V6 rules. */
+  readonly sector: number;
   readonly distanceScore: number;
   readonly lineScore: number;
   readonly controlScore: number;

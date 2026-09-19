@@ -199,6 +199,23 @@ export function mountAtlasRoutes(options: {
    * nothing" and "you typed it wrong" must not look the same to somebody
    * waiting for money.
    */
+  /*
+   * A wallet's day streak and record. Read-only and public for the same reason
+   * the rewards below are: the address already sits beside a rank on the
+   * board, and this is counted from that board's own verified rows.
+   */
+  options.app.get('/atlas/api/blitz/progress', options.limit(60, 20), async (request, response) => {
+    if (!options.api.blitz) { response.status(503).json({ ok: false, error: 'Beacon Blitz progress is unavailable.' }); return; }
+    const seasonId = typeof request.query.seasonId === 'string' ? request.query.seasonId : '';
+    let walletAddress: string;
+    try { walletAddress = requiredNimiqAddress(request.query.walletAddress); }
+    catch { response.status(400).json({ ok: false, error: 'Beacon Blitz progress query is invalid.' }); return; }
+    if (!/^[a-z0-9-]{1,80}$/.test(seasonId)) { response.status(400).json({ ok: false, error: 'Beacon Blitz progress query is invalid.' }); return; }
+    try {
+      response.setHeader('cache-control', 'no-store');
+      response.json({ ok: true, data: await options.api.blitz.progress(seasonId, walletAddress) });
+    } catch (error) { response.status(400).json({ ok: false, error: safeError(error) }); }
+  });
   options.app.get('/atlas/api/blitz/rewards', options.limit(60, 20), async (request, response) => {
     if (!options.api.blitzRewards) { response.status(503).json({ ok: false, error: 'Beacon Blitz rewards are unavailable.' }); return; }
     let walletAddress: string;

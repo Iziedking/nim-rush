@@ -13,6 +13,30 @@ On the daily challenge each wallet gets **three attempts**, and the best of them
 is the score that stands for the day. Learning the day's course is part of the
 day; grinding it is not, which is why there is a number and the number is small.
 
+A free run rides today's descent too: same obstacles, same coins, same
+contracts, unranked. It is practice for the run that counts.
+
+### Three sectors
+
+From 19 September 2026 the descent hardens as it goes:
+
+| Sector | Where | What changes |
+| --- | --- | --- |
+| **Warm-up** | first third | the course as it always was |
+| **The Pinch** | middle third | 4% faster, extra obstacles, gates 10% narrower |
+| **The Gauntlet** | last third | 8% faster, extra obstacles, gates 20% narrower |
+
+Corner push grows with the square of speed, so faster is harder, not just
+quicker. The HUD tells you as you cross into each sector.
+
+### A different hill every day
+
+Each day's seed mirrors some obstacles to the other side of the road. The same
+day is the same layout for everyone, on every attempt, but no two days are
+alike, so a line cannot be learned once and ridden forever. The NIM trail is
+laid around the day's obstacles, so there is always a clean line through the
+coins.
+
 ## Riding position
 
 The bike does not hold its own speed. Four controls, each with a cost:
@@ -49,6 +73,7 @@ Distance pays one point a metre, so getting to the bottom is a floor of about
 | Earns | Worth |
 | --- | --- |
 | Each second you finish under the limit | 150 |
+| Each NIM coin off the trail | 40, x1.5 from 10 in a row, x2 from 20 in a row |
 | Holding the line through a route gate | 900 |
 | Clearing a contract | 700 to 1,400 |
 | Putting a rival down | 1,500 |
@@ -58,6 +83,12 @@ Distance pays one point a metre, so getting to the bottom is a floor of about
 Missing a gate costs 300, and a near miss pays 150 — enough to notice, never
 enough to aim for.
 
+**The NIM trail is a combo.** Coins taken in an unbroken run pay more: x1.5
+from the tenth in a row, x2 from the twentieth. Riding past a coin or touching
+anything resets the streak to zero. You can hear it: each coin in a streak
+rings a step higher. A clean trail is worth about 5,000, and coins picked up
+here and there about 1,500. (Before 19 September a coin paid a flat 60.)
+
 Contacts escalate: 300 for the first, 250 more for each after it. One contact
 is a mistake and stays cheap. Eight is not eight mistakes, it is a way of
 riding, and it costs 9,400. A contact also drains 15 nitro and cuts your speed
@@ -66,6 +97,26 @@ to a third, so it is paid for twice over.
 Distance used to pay ten a metre, which meant 19,000 of a run's score came from
 arriving at the bottom however you got there. A rider who held a control and
 weaved scored 6,599; the same input now scores 130.
+
+## Badges and streaks
+
+Every finished run can earn badges, shown on the result screen with what each
+one asks for:
+
+| Badge | Asks for |
+| --- | --- |
+| **Full trail** | nine coins in ten |
+| **Untouched** | a finish without touching anything |
+| **Clean line** | all three gates clean |
+| **Combo 20** | twenty coins in a row |
+| **Contractor** | all three contracts |
+
+Your **day streak** counts the consecutive days you have posted a verified
+ranked run, and sits beside your name in the lobby. It stays alive until the day
+is over: if you rode yesterday and not yet today, it says so.
+
+None of this can be bought. Badges are read from the run the server re-rode,
+and the streak from the server's own verified rows.
 
 ## Contracts
 

@@ -2338,3 +2338,95 @@ button + .blitz-quiet { margin-top: 11px; }
 }
 .blitz-rules-table th { color: #6d604a; font-weight: 900; letter-spacing: .1em; }
 .blitz-rules-table td { color: var(--rush-keyline); }
+
+/*
+ * V6: the trail streak and the sector banner.
+ *
+ * The streak sits under the NIM count in the same yellow, and glows once it is
+ * paying more than the base - the moment a rider has something to lose.
+ */
+.blitz-nim-combo {
+  color: rgb(253 196 31 / .78);
+  font: 900 10px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+.blitz-nim-combo.is-hot {
+  color: #14131d;
+  background: #fdc41f;
+  padding: 2px 6px;
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgb(253 196 31 / .55);
+}
+/*
+ * Across the top of the road, under the HUD, for two seconds. Pointer events
+ * off: it must never sit between a thumb and a control.
+ */
+.blitz-sector-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 96px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border: 3px solid var(--rush-keyline, #14131d);
+  border-radius: 999px;
+  background: var(--rush-paper, #f7ecd6);
+  color: var(--rush-keyline, #14131d);
+  box-shadow: 4px 5px 0 var(--rush-keyline, #14131d);
+  font: 900 15px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .14em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4;
+}
+.blitz-sector-banner.is-showing { animation: blitz-sector-in 2200ms ease-out forwards; }
+@keyframes blitz-sector-in {
+  0% { opacity: 0; transform: translate(-50%, -10px) scale(.94); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blitz-sector-banner.is-showing { animation-duration: 1800ms; animation-timing-function: steps(1, end); }
+}
+
+/*
+ * Badges on the result. Same grammar as the contracts above them: a count in
+ * the heading, one tile per badge. Earned tiles take the Nimiq yellow; the rest
+ * stay dim and say what they ask for, so the card reads as a to-do list.
+ */
+.blitz-badges { margin-top: 14px; }
+.blitz-badge-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.blitz-badge {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 calc(33% - 6px);
+  padding: 8px 9px;
+  border: 1px solid var(--rush-line, rgb(245 234 212 / .2));
+  background: rgb(8 20 21 / .5);
+  opacity: .62;
+}
+.blitz-badge.is-earned {
+  opacity: 1;
+  border-color: #fdc41f;
+  background: rgb(253 196 31 / .14);
+  box-shadow: inset 0 0 0 1px rgb(253 196 31 / .35);
+}
+.blitz-badge-name { color: var(--rush-ink, #f5ead4); font: 900 12px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace; letter-spacing: .1em; }
+.blitz-badge.is-earned .blitz-badge-name { color: #fdc41f; }
+.blitz-badge-ask { color: var(--rush-muted, #b8c1b2); font: 600 10px/1.25 system-ui, sans-serif; }
+
+/* The day streak, beside the rider's name. Yellow while today still needs riding. */
+.blitz-ui .blitz-streak {
+  padding: 3px 8px;
+  border: 1px solid var(--rush-keyline, #14131d);
+  border-radius: 999px;
+  background: var(--rush-paper, #f7ecd6);
+  color: var(--rush-keyline, #14131d);
+  font: 900 11px/1 RushPlate, 'Saira Condensed', ui-monospace, monospace;
+  letter-spacing: .1em;
+  white-space: nowrap;
+}
+.blitz-ui .blitz-streak.is-at-risk { background: #fdc41f; }

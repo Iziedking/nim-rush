@@ -33,7 +33,8 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { BLITZ_LINE_GATES, blitzCity, blitzCollectables, blitzEnabledObstacles, type BlitzCityDefinition, type BlitzPickup, type BlitzPickupKind } from '../../../../shared/atlas/blitz/cities';
+import { BLITZ_LINE_GATES, blitzCity, blitzLiveObstacles, type BlitzCityDefinition, type BlitzPickup, type BlitzPickupKind } from '../../../../shared/atlas/blitz/cities';
+import { blitzRunCollectables } from '../../../../shared/atlas/blitz/trail';
 import { blitzRules } from '../../../../shared/atlas/blitz/rules';
 import { blitzRivalAt, type BlitzRivalPath } from '../../../../shared/atlas/blitz/rivals';
 import { sampleBlitzRoute } from '../../../../shared/atlas/blitz/core';
@@ -91,6 +92,8 @@ export class BlitzRenderer {
    * reusing a rookie scene for a pro run would draw the wrong course.
    */
   private activeDifficulty: BlitzDifficulty = 'rookie';
+  /** Where this city's obstacles stand, so a new day's layout rebuilds it. */
+  private activeLayout = '';
   /*
    * Every supply still lying on the road, by id.
    *
@@ -154,8 +157,15 @@ export class BlitzRenderer {
     this.scene.add(sun, sun.target);
   }
 
-  async loadCity(cityId: BlitzCityId, difficulty: BlitzDifficulty = 'rookie'): Promise<void> {
-    if (this.activeCity === cityId && this.activeDifficulty === difficulty && this.cityRoot) return;
+  async loadCity(cityId: BlitzCityId, difficulty: BlitzDifficulty = 'rookie', seed = 'preview'): Promise<void> {
+    /*
+     * Keyed on the layout, not the seed. Under the V6 rules the day moves the
+     * obstacles and the coins with them, and a city left over from yesterday
+     * would draw rocks the rider now rides through. Old-rule seeds all share
+     * one layout, so they never pay for a rebuild.
+     */
+    const layout = `${difficulty}|${blitzLiveObstacles(blitzCity(cityId), difficulty, seed).map((obstacle) => obstacle.lane).join(',')}`;
+    if (this.activeCity === cityId && this.activeDifficulty === difficulty && this.activeLayout === layout && this.cityRoot) return;
     if (this.cityRoot) {
       this.cityRoot.removeFromParent();
       /*
@@ -171,7 +181,7 @@ export class BlitzRenderer {
     const city = blitzCity(cityId);
     this.scene.background = new Color(city.sky);
     this.scene.fog = new Fog(city.fog, 65, 225);
-    this.cityRoot = createCity(city, difficulty);
+    this.cityRoot = createCity(city, difficulty, seed);
     this.scene.add(this.cityRoot);
     this.crowd = cityId === 'lagos' ? null : createCityCrowd(city);
     if (this.crowd) {
@@ -209,7 +219,7 @@ export class BlitzRenderer {
      * they thought they had.
      */
     this.pickupNodes = new Map();
-    for (const pickup of blitzCollectables(city)) {
+    for (const pickup of blitzRunCollectables(city, difficulty, seed)) {
       const node = createPickup(city, pickup);
       const pose = sampleBlitzRoute(city.id, city.lengthMeters * pickup.distance01, pickup.lane);
       node.position.set(pose.x, pose.y, pose.z);
@@ -234,6 +244,7 @@ export class BlitzRenderer {
 
     this.activeCity = cityId;
     this.activeDifficulty = difficulty;
+    this.activeLayout = layout;
     this.cameraReady = false;
     this.previousDistance = 0;
   }
@@ -416,8 +427,8 @@ export class BlitzRenderer {
   }
 }
 
-function createCity(city: BlitzCityDefinition, difficulty: BlitzDifficulty): Group {
-  if (city.id === 'lagos') return createRushCourse(city.id, difficulty);
+function createCity(city: BlitzCityDefinition, difficulty: BlitzDifficulty, seed: string): Group {
+  if (city.id === 'lagos') return createRushCourse(city.id, difficulty, seed);
   const root = new Group();
   root.name = `atlas-blitz-city-${city.id}`;
     const ground = new Mesh(new PlaneGeometry(1200, 1200), new MeshStandardMaterial({ color: city.fog, roughness: 1 }));
@@ -437,7 +448,7 @@ function createCity(city: BlitzCityDefinition, difficulty: BlitzDifficulty): Gro
   createBeacon(root, city);
   // Only what is solid. Drawing an obstacle the simulation ignores teaches a
   // rider to swerve around nothing, and to mistrust the ones that are real.
-  for (const obstacle of blitzEnabledObstacles(city, difficulty)) {
+  for (const obstacle of blitzLiveObstacles(city, difficulty, seed)) {
     const pose = sampleBlitzRoute(city.id, city.lengthMeters * obstacle.distance01, obstacle.lane);
     const traffic = createTrafficVehicle(city, obstacle.id);
     traffic.position.set(pose.x, pose.y + 0.26, pose.z);

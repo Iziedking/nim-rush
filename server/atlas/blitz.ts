@@ -10,7 +10,9 @@ import { hashBlitzTrace, replayBlitzTraceWithPath, validateBlitzTrace } from '..
 import { blitzRivalPathFrom, type BlitzRivalPath } from '../../shared/atlas/blitz/rivals';
 import { BLITZ_LIMIT_SECONDS, BLITZ_TICK_RATE } from '../../shared/atlas/blitz/core';
 import { BLITZ_CITIES } from '../../shared/atlas/blitz/cities';
-import { getBlitzDailyChallenge, BLITZ_DAILY_RULESET_VERSION } from '../../shared/atlas/blitz/daily';
+import { getBlitzDailyChallenge } from '../../shared/atlas/blitz/daily';
+import { blitzRiderProgress, type BlitzRiderProgress } from '../../shared/atlas/blitz/progress';
+import { blitzRulesetVersionFor, isKnownBlitzRulesetVersion } from '../../shared/atlas/blitz/ruleset';
 
 type StoredRow = Omit<BlitzLeaderboardRow, 'rank'>;
 type StoredTicket = BlitzTicket & { usedByRunId?: string };
@@ -67,6 +69,8 @@ export interface AtlasBlitzService {
   issueTicket(input: { actorId: string; walletAddress: string; username: string; cityId: BlitzCityId; seasonId: string }): Promise<BlitzTicket>;
   submit(input: BlitzSubmissionInput): Promise<BlitzSubmitResult>;
   leaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
+  /** A wallet's day streak and record, counted from verified rows only. Read-only. */
+  progress(seasonId: string, walletAddress: string): Promise<BlitzRiderProgress>;
   /**
    * What today's board would owe if it closed now. Read-only: it moves nothing
    * and marks nothing paid.
@@ -285,7 +289,12 @@ export function createAtlasBlitzService(options: {
       const result = await enqueue(async () => {
         const ticket = tickets.get(input.ticketId);
         if (!ticket) throw new AtlasBlitzError('ticket', 'Beacon Blitz ticket is missing.');
-        if (ticket.rulesetVersion !== BLITZ_DAILY_RULESET_VERSION) throw new AtlasBlitzError('ticket', 'This course has changed. Reload and start a new ranked run.');
+        /*
+         * Against the version of the ticket's own day, not whatever is newest.
+         * A run started before midnight and sent after it was ridden under its
+         * day's rules, and its seed replays it under exactly those.
+         */
+        if (!ticket.challengeDate || ticket.rulesetVersion !== blitzRulesetVersionFor(ticket.challengeDate)) throw new AtlasBlitzError('ticket', 'This course has changed. Reload and start a new ranked run.');
         const mismatch = ticket.actorId !== input.actorId || ticket.walletAddress !== input.walletAddress || ticket.username !== input.username || ticket.cityId !== input.cityId || ticket.seasonId !== input.seasonId || (input.challengeId !== undefined && ticket.challengeId !== input.challengeId) || (input.challengeDate !== undefined && ticket.challengeDate !== input.challengeDate) || (input.rulesetVersion !== undefined && ticket.rulesetVersion !== input.rulesetVersion) || ticket.seed !== input.seed;
         if (mismatch) throw new AtlasBlitzError('ticket', 'Beacon Blitz submission does not match its ticket.');
         const binding = options.identity.getBinding(input.actorId, input.seasonId);
@@ -392,6 +401,16 @@ export function createAtlasBlitzService(options: {
         runs.set(runId, { ...held, row });
         await persist();
         return { ...structuredClone(row), rank: 0 };
+      });
+    },
+
+    async progress(seasonId, walletAddress) {
+      return enqueue(async () => {
+        assertSeason(seasonId);
+        // Every day this wallet has a verified best on, in any city. The rows
+        // exist only for runs the server re-rode, so nothing here was claimed.
+        const rows = [...posted.values()].map((entry) => entry.best).filter((row) => row.seasonId === seasonId && row.walletAddress === walletAddress);
+        return blitzRiderProgress({ dates: rows.map((row) => row.challengeDate), scores: rows.map((row) => row.score), today: new Date(now()).toISOString().slice(0, 10) });
       });
     },
 
@@ -683,7 +702,7 @@ function assertSubmission(input: BlitzSubmissionInput): void {
   assertCity(input.cityId);
   if (input.challengeId !== undefined && !/^[a-z0-9:_-]{1,160}$/.test(input.challengeId)) throw new AtlasBlitzError('invalid', 'Beacon Blitz challenge id is invalid.');
   if (input.challengeDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(input.challengeDate)) throw new AtlasBlitzError('invalid', 'Beacon Blitz challenge date is invalid.');
-  if (input.rulesetVersion !== undefined && input.rulesetVersion !== BLITZ_DAILY_RULESET_VERSION) throw new AtlasBlitzError('invalid', 'Beacon Blitz ruleset is unsupported.');
+  if (input.rulesetVersion !== undefined && !isKnownBlitzRulesetVersion(input.rulesetVersion)) throw new AtlasBlitzError('invalid', 'Beacon Blitz ruleset is unsupported.');
 }
 
 function upgradeTicket(ticket: StoredTicket): StoredTicket {

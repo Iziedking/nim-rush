@@ -6,6 +6,7 @@ import { authenticatedRequest, type ApiFetch, type ApiResult } from '../net/api'
 import { createAtlasCoreRunSubmission, type AtlasCoreRunRequest } from './competitive-run';
 import type { BlitzLeaderboardRow, BlitzSubmissionInput, BlitzSubmitResult, BlitzTicket } from '../../shared/atlas/blitz/competition';
 import type { BlitzCityId } from '../../shared/atlas/blitz/types';
+import { isBlitzRiderProgress, type BlitzRiderProgress } from '../../shared/atlas/blitz/progress';
 
 export type { AtlasCompetitiveTicket } from '../../shared/atlas/types';
 
@@ -150,6 +151,7 @@ export interface AtlasApiClient {
   getBlitzLeaderboard(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzLeaderboardRow[]>;
   getBlitzPrizes(seasonId: string, cityId: BlitzCityId, challengeId?: string): Promise<BlitzPrizeTableSummary>;
   getBlitzRewards(walletAddress: string): Promise<BlitzRewardSummary[]>;
+  getBlitzProgress(seasonId: string, walletAddress: string): Promise<BlitzRiderProgress>;
   openBlitzLobby(input: { actorId: string; walletAddress: string; capacity: number }): Promise<ApiResult<BlitzLobbySummary>>;
   claimBlitzSeat(lobbyId: string, input: { actorId: string; walletAddress: string }): Promise<ApiResult<BlitzSeatClaim>>;
   getBlitzLobby(lobbyId: string): Promise<BlitzLobbyView | null>;
@@ -186,6 +188,7 @@ export function createAtlasApiClient(options: { baseUrl?: string; fetchImpl?: At
     getBlitzLeaderboard: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/leaderboard?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzLeaderboard),
     getBlitzPrizes: (seasonId, cityId, challengeId) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/prizes?seasonId=${encodeURIComponent(seasonId)}&cityId=${cityId}${challengeId ? `&challengeId=${encodeURIComponent(challengeId)}` : ''}`, isBlitzPrizeTable),
     getBlitzRewards: (walletAddress) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/rewards?walletAddress=${encodeURIComponent(walletAddress)}`, isBlitzRewards),
+    getBlitzProgress: (seasonId, walletAddress) => requestData(fetchImpl, `${baseUrl}/atlas/api/blitz/progress?seasonId=${encodeURIComponent(seasonId)}&walletAddress=${encodeURIComponent(walletAddress)}`, isBlitzRiderProgress),
     openBlitzLobby: (input) => authenticatedAtlasRequest<BlitzLobbySummary>('/atlas/api/blitz/lobbies', 'atlas.ticket.issue', input.actorId, input, isBlitzLobby, { apiBase: baseUrl, fetchImpl }),
     claimBlitzSeat: (lobbyId, input) => authenticatedAtlasRequest<BlitzSeatClaim>(`/atlas/api/blitz/lobbies/${encodeURIComponent(lobbyId)}/seats`, 'atlas.ticket.issue', input.actorId, input, isBlitzSeatClaim, { apiBase: baseUrl, fetchImpl }),
     /*

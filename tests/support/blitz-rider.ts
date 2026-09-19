@@ -1,4 +1,4 @@
-import { blitzCity, blitzEnabledObstacles } from '../../shared/atlas/blitz/cities';
+import { blitzCity, blitzLiveObstacles } from '../../shared/atlas/blitz/cities';
 import { obstacleShape } from '../../shared/atlas/blitz/course';
 import type { BlitzInput, BlitzRunState } from '../../shared/atlas/blitz/types';
 
@@ -26,7 +26,9 @@ const MIN_CORRIDOR = 1.2;
 export function blitzRacingLine(state: BlitzRunState): number {
   const city = blitzCity(state.cityId);
   const edge = city.roadWidth / 2;
-  const blocked = blitzEnabledObstacles(city, state.difficulty)
+  // The layout this run actually has: identical to the enabled set on old
+  // seeds, mirrored and extended by sector on V6 ones.
+  const blocked = blitzLiveObstacles(city, state.difficulty, state.seed)
     .map((obstacle) => {
       const shape = obstacleShape(obstacle.id);
       return { distance: obstacle.distance01 * city.lengthMeters, from: obstacle.lane - shape.halfWidth - HIT_MARGIN, to: obstacle.lane + shape.halfWidth + HIT_MARGIN };
