@@ -65,7 +65,7 @@ const POSTURE_SPEED = { tucked: 1.16, neutral: 0.86 } as const;
  * what turns the hill into speed. The numbers are tuned, not guessed: see the
  * targets in tests/atlas-rush-skill.test.ts.
  */
-const POSTURE_SPEED_RIDDEN = { tucked: 1.32, neutral: 0.5 } as const;
+const POSTURE_SPEED_RIDDEN = { tucked: 1.38, neutral: 0.3 } as const;
 /*
  * How much of the gradient a rider who is sitting up gets to keep.
  *
@@ -74,7 +74,34 @@ const POSTURE_SPEED_RIDDEN = { tucked: 1.32, neutral: 0.5 } as const;
  * the one who converts the hill into speed, which is why a real descent is
  * ridden tucked and sat up only to turn.
  */
-const GRADE_UPRIGHT_SHARE = 0.35;
+const GRADE_UPRIGHT_SHARE = 0.1;
+/*
+ * What a bike does when nobody is steering it.
+ *
+ * A lane is measured from the centre line, so a rider who touches nothing sits
+ * exactly in the middle of the road - and the road, not the rider, does the
+ * cornering. The corner push was the answer to that, but it scales with the
+ * SQUARE of speed, so a coasting bike at 27 km/h feels about a sixteenth of
+ * what a racing one feels, and it tracked every bend perfectly. The owner
+ * caught it: 'it still bends accurately even without playing'.
+ *
+ * This is the missing correction rather than a new force: a bike held in a
+ * bend needs continuous input, and without any it runs wide. It scales with
+ * speed rather than its square, so it is felt at a crawl too, and it fades out
+ * as soon as the rider puts a real steer in - a rider IS the correction.
+ */
+const UNSTEERED_DRIFT = 30;
+/*
+ * Terminal velocity, because a bike does stop accelerating.
+ *
+ * The gradient is worth up to 14 m/s on the steepest pitches, and with a tuck
+ * on top of it the steep half of Dubai was reaching 212 km/h - a number that
+ * belongs to a motorway, not a mountain bike, and one that makes the steep
+ * sections about luck rather than control. Drag catches the bike at 162 km/h
+ * instead, which is still absurd enough to be fun.
+ */
+const TERMINAL_MPS = 45;
+const UNSTEERED_UNTIL = 0.18;
 /*
  * And the cost. Tucked, the bike goes where it was already going; sat up with
  * the brakes on, it turns. Braking into a corner and tucking out of it is
@@ -303,8 +330,10 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    * it is the reason braking before a corner is worth the speed it costs.
    */
   const corner = roadHere.bend * (speedRatio * speedRatio) * CORNER_PUSH;
+  const unsteered = features.skillSpeed ? clamp(1 - Math.abs(input.steer) / UNSTEERED_UNTIL, 0, 1) : 0;
+  const wandering = roadHere.bend * speedRatio * UNSTEERED_DRIFT * unsteered;
   const lateralAcceleration = input.steer * (driftActive ? 13 : 8) * surfaceProfile.grip * postureGrip
-    - corner / Math.max(0.35, surfaceProfile.grip * postureGrip);
+    - (corner + wandering) / Math.max(0.35, surfaceProfile.grip * postureGrip);
   let lateralVelocityMps = clamp(state.lateralVelocityMps + lateralAcceleration / BLITZ_TICK_RATE, -12, 12);
   lateralVelocityMps *= driftActive ? 0.988 : Math.pow(surfaceProfile.grip, 0.35) * 0.94;
   let laneOffset = clamp(state.laneOffset + lateralVelocityMps / BLITZ_TICK_RATE, -city.roadWidth * 0.72, city.roadWidth * 0.72);
@@ -327,10 +356,11 @@ export function stepBlitzRun(state: BlitzRunState, rawInput: BlitzInput, rivals:
    */
   const gradeSpeed = clamp(-roadHere.slope, -0.24, 0.24) * GRADE_SPEED_MPS
     * (features.skillSpeed && !tuckActive ? GRADE_UPRIGHT_SHARE : 1);
-  const targetSpeed = brakeActive ? 0 : offRoad
+  let targetSpeed = brakeActive ? 0 : offRoad
     ? city.baseSpeedMps * grassProfile.resistance / (1 + shoulderDepth * 0.18)
     : Math.max(4, city.baseSpeedMps * pace * surfaceProfile.resistance * (tuckActive ? postureSpeed.tucked : postureSpeed.neutral)
       + gradeSpeed + (boostActive ? 8.5 : 0) - (driftActive ? 1.1 : 0));
+  if (features.skillSpeed) targetSpeed = Math.min(targetSpeed, TERMINAL_MPS);
   let speedMps = approach(state.speedMps, targetSpeed, state.speedMps < targetSpeed ? 0.68 : brakeActive ? 1.02 * surfaceProfile.braking : 0.55);
   if (offRoad && !brakeActive && !state.airborne) {
     const here = sampleCourse(city.id, state.distanceMeters);

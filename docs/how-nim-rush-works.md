@@ -60,11 +60,14 @@ Four controls, each with a cost:
 | **Boost** | 8.5 m/s on top | nitro |
 
 From 20 September 2026, **coasting does not get you down the hill**. Sitting
-up rolls at half the course speed, and the gradient only pays out properly to a
-rider who is folded onto the bars: a run nobody touches runs out of clock
-around four fifths of the way down, every time, on every city. Steering all the
-way but never tucking finishes, and scores about a third of what riding it
-properly does.
+up rolls at under a third of the course speed and keeps almost none of the
+gradient, so a run nobody touches averages about 35 km/h and runs out of clock
+near the half-way point, on every city. Steering all the way but never tucking
+does not finish either.
+
+**And it does not hold the line.** A bike nobody is steering runs wide in a
+bend and leaves the road, because staying on the racing line is the rider's
+job, not the road's. Top speed is capped at 162 km/h, where drag catches you.
 
 Before that date a hands-off run reached the bottom of Lagos in 97 seconds and
 scored zero, which is the bug this fixes: the hill was doing the work.

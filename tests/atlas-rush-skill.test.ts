@@ -43,9 +43,11 @@ describe('a descent that has to be ridden', () => {
     for (const city of BLITZ_CITIES) {
       const state = ride(city.id, () => idle);
       expect(state.phase, city.id).toBe('timeout');
-      expect(state.score, city.id).toBe(0);
+      // Not exactly nothing any more - a wandering bike scrapes past the odd
+      // thing - but nothing against the ~14,000 a ridden run scores.
+      expect(state.score, city.id).toBeLessThan(500);
       // And not just short: short enough that nobody mistakes it for bad luck.
-      expect(state.distanceMeters / city.lengthMeters, city.id).toBeLessThan(0.9);
+      expect(state.distanceMeters / city.lengthMeters, city.id).toBeLessThan(0.7);
     }
   }, 30_000);
 
@@ -59,14 +61,40 @@ describe('a descent that has to be ridden', () => {
     }
   }, 30_000);
 
-  it('still lets an ordinary rider finish with time in hand', () => {
-    // The scripted rider is deliberately mediocre: no braking plan, one
-    // obstacle of lookahead. If it can finish, a person can, and the margin
-    // here is what stops the clock feeling like a punishment.
+  it('still lets an ordinary rider finish, and rewards one who commits to the tuck', () => {
+    /*
+     * Two riders, both scripted. The timid one only tucks when it is barely
+     * steering, which is the floor: it must still get down. The keen one holds
+     * the tuck through small corrections, the way a person does once posture is
+     * the throttle, and it is the one that should have time in hand.
+     */
     for (const city of BLITZ_CITIES) {
-      const ridden = ride(city.id, (state) => blitzRiderInput(state));
-      expect(ridden.phase, city.id).toBe('finished');
-      expect(ridden.elapsedMs / 1_000, city.id).toBeLessThan(BLITZ_LIMIT_SECONDS - 25);
+      const timid = ride(city.id, (state) => blitzRiderInput(state));
+      const keen = ride(city.id, (state) => { const input = blitzRiderInput(state); return { ...input, tuck: Math.abs(input.steer) < 0.5 }; });
+      expect(timid.phase, city.id).toBe('finished');
+      expect(keen.phase, city.id).toBe('finished');
+      expect(keen.elapsedMs, city.id).toBeLessThan(timid.elapsedMs);
+      expect(keen.elapsedMs / 1_000, city.id).toBeLessThan(BLITZ_LIMIT_SECONDS - 20);
+    }
+  }, 30_000);
+
+  it('does not hold the racing line for a rider who is not steering', () => {
+    /*
+     * The owner's catch: "it still bends accurately even without playing".
+     * A lane is measured from the centre line, so an untouched bike sat in the
+     * middle of the road and the road did the cornering - and the corner push
+     * that was meant to prevent it scales with the SQUARE of speed, so at a
+     * coasting 30 km/h it was worth almost nothing. An unsteered bike now runs
+     * wide in a bend and leaves the road on every city.
+     */
+    for (const city of BLITZ_CITIES) {
+      let state = createBlitzRun({ cityId: city.id, seed: seedFor(city.id) });
+      let widest = 0;
+      while (state.phase === 'countdown' || state.phase === 'running') {
+        state = stepBlitzRun(state, idle);
+        widest = Math.max(widest, Math.abs(state.laneOffset));
+      }
+      expect(widest, city.id).toBeGreaterThan(city.roadWidth / 2);
     }
   }, 30_000);
 
@@ -75,6 +103,6 @@ describe('a descent that has to be ridden', () => {
     // on the same course, with no steering in either.
     const tucked = ride('lagos', () => ({ ...idle, tuck: true }));
     const upright = ride('lagos', () => idle);
-    expect(tucked.distanceMeters).toBeGreaterThan(upright.distanceMeters * 1.15);
+    expect(tucked.distanceMeters).toBeGreaterThan(upright.distanceMeters * 1.3);
   }, 30_000);
 });
