@@ -122,10 +122,12 @@ const COAST_DRAG = 0.0063;
  *
  * Nitro is a shove, not a posture, so it has to work whatever the rider is
  * doing - sitting up out of a corner is exactly when it is worth spending.
- * As an acceleration rather than a target speed, it fights the same drag
- * everything else does: on its own it settles the bike around 80 km/h.
+ * An acceleration rather than a target speed, so it fights the same drag as
+ * everything else. A full tank is only about 1.7 seconds of burn, which is why
+ * it has to hit hard: at 3.5 m/s^2 the whole bottle was worth 6 km/h and the
+ * rider could not feel it at all.
  */
-const BOOST_THRUST_MPS2 = 3.5;
+const BOOST_THRUST_MPS2 = 6;
 const UNSTEERED_UNTIL = 0.18;
 /*
  * And the cost. Tucked, the bike goes where it was already going; sat up with
