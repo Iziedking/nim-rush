@@ -2727,7 +2727,101 @@ button + .blitz-quiet { margin-top: 11px; }
 @media (orientation: landscape) and (max-height: 370px) {
   .blitz-run { --rush-pad: 120px; --rush-spend: 54px; }
   .blitz-run .blitz-boost-wrap { top: max(140px, calc(env(safe-area-inset-top) + 128px)); }
+  .blitz-mission-hud {
+    top: max(74px, calc(env(safe-area-inset-top) + 62px));
+    width: min(188px, 36vw);
+  }
+  .blitz-mission-card { padding: 6px 7px 5px; }
+  .blitz-mission-label { font-size: 10px; }
+  .blitz-mission-verb,
+  .blitz-mission-progress { font-size: 9px; }
   .blitz-ui .blitz-posture { border-radius: 22px; }
   .blitz-posture-name { font-size: 14px; }
   .blitz-posture-hint { display: none; }
+}
+
+/*
+ * Portrait phones need the road to remain the stage. Keep every control large
+ * enough for a thumb, but cap the deck so it does not consume the lower third
+ * of the race. The fade visually joins that deck to the world beneath it.
+ */
+.blitz-run { isolation: isolate; }
+.blitz-run::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 0;
+  display: none;
+  height: calc(var(--rush-floor) + var(--rush-pad) + var(--rush-spend) + 76px);
+  background: linear-gradient(180deg, rgb(5 15 16 / 0), rgb(5 15 16 / .58) 28%, rgb(5 15 16 / .9) 100%);
+  pointer-events: none;
+}
+.blitz-run .blitz-controls,
+.blitz-run .blitz-boost-wrap { z-index: 2; }
+
+@media (orientation: portrait) and (max-width: 720px) {
+  .blitz-run {
+    --rush-pad: clamp(108px, 32vw, 128px);
+    --rush-spend: clamp(54px, 15vw, 60px);
+  }
+  .blitz-run::before { display: block; }
+  .blitz-run .blitz-controls {
+    grid-template-rows: calc(var(--rush-spend) + 8px) auto;
+    gap: 8px;
+  }
+  .blitz-run .blitz-spend { min-height: var(--rush-spend); }
+  .blitz-run .blitz-spend-key { width: var(--rush-spend); height: var(--rush-spend); }
+  .blitz-run .blitz-boost-wrap {
+    bottom: calc(var(--rush-floor) + var(--rush-pad) + var(--rush-spend) + 20px);
+  }
+  .blitz-mission-hud {
+    width: min(178px, 52vw);
+    top: max(100px, calc(env(safe-area-inset-top) + 88px));
+  }
+  .blitz-mission-heading { font-size: 9px; }
+  .blitz-mission-card { padding: 6px 7px 5px; }
+  .blitz-mission-label { font-size: 10px; }
+  .blitz-mission-verb,
+  .blitz-mission-progress { font-size: 9px; }
+}
+
+/*
+ * Short portrait phones still need a game identity and basic utilities. Use
+ * the compact logo lockup and remove only the duplicate title copy.
+ */
+@media (orientation: portrait) and (max-height: 620px) {
+  .blitz-intro.blitz-fullscreen-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    place-content: stretch;
+    gap: 8px;
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+  }
+  .blitz-intro-masthead {
+    display: flex;
+    align-items: center;
+    min-height: 54px;
+  }
+  .blitz-intro-masthead .blitz-rush-logo {
+    display: block;
+    width: 126px;
+    max-width: 126px;
+    margin: 0;
+  }
+  .blitz-intro-masthead .blitz-edition,
+  .blitz-intro-masthead .blitz-title,
+  .blitz-intro-masthead .blitz-tagline { display: none; }
+  .blitz-intro-command {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    padding: 10px;
+    align-self: start !important;
+  }
+  .blitz-intro-utility {
+    display: flex;
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 44px;
+  }
 }
