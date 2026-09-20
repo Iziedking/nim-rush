@@ -2593,3 +2593,109 @@ button + .blitz-quiet { margin-top: 11px; }
   letter-spacing: .14em;
 }
 .blitz-posture.is-tucking .blitz-posture-hint { color: rgb(20 19 29 / .62); }
+
+/*
+ * Landscape, where height is the scarce thing.
+ *
+ * On a phone turned sideways the viewport is about 1003x380, and the portrait
+ * stack - spend keys in a row ABOVE the pad - took 204px of that 380 and
+ * squeezed the pads to 118px, which put the brake half at 7.8mm: under the
+ * size a thumb can rely on. Width is the one thing there is plenty of, so the
+ * keys move beside the pad and everything sits in one band along the bottom.
+ */
+@media (orientation: landscape) and (max-height: 560px) {
+  .blitz-run {
+    --rush-pad: 150px;
+    --rush-spend: 64px;
+    --rush-floor: max(10px, env(safe-area-inset-bottom));
+  }
+  .blitz-run .blitz-controls {
+    grid-template-columns: var(--rush-pad) 1fr auto auto;
+    grid-template-areas: 'steer . spend posture';
+    grid-template-rows: auto;
+    gap: 12px;
+    align-items: end;
+  }
+  /* A column of keys the height of the pad beside it, not a row above it. */
+  .blitz-run .blitz-spend {
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+    min-height: 0;
+  }
+  .blitz-run .blitz-spend-key { width: var(--rush-spend); height: var(--rush-spend); }
+  /* Clear of the pad rather than of the pad plus a row of keys. */
+  .blitz-run .blitz-boost-wrap {
+    bottom: calc(var(--rush-floor) + var(--rush-pad) + 12px);
+  }
+  /* The contract card is a third of a short screen otherwise. */
+  .blitz-run .blitz-mission-hud { max-width: 46vw; }
+  /*
+   * The supply rack hangs under the speed readout instead of floating up from
+   * the pad. Bottom-anchored on a 380px-tall screen it landed on the speed
+   * number - measured, 31x18px of overlap.
+   */
+  .blitz-run .blitz-boost-wrap {
+    top: max(146px, calc(env(safe-area-inset-top) + 134px));
+    bottom: auto;
+  }
+  /*
+   * The result screen keeps its doors on screen.
+   *
+   * The portrait fix reorders the card so the actions come straight after the
+   * score, but it is keyed to narrow screens and a phone on its side is
+   * 1003px wide - so Ride again and Menu fell below the fold again, the exact
+   * bug that was fixed once already. Same ordering here, plus a hero trimmed
+   * to fit 380px: the logo goes (the name is on the gate and the HUD already)
+   * and the score comes down a few points. A pinned bar was tried first and
+   * laid itself over the score, which is its own kind of broken.
+   */
+  /*
+   * Two columns, because 380px of height cannot hold the card in one. The
+   * score, contracts and badges take the left; the doors and the ledger take
+   * the right, with the doors STUCK to the top of it - so Ride again and Menu
+   * are on screen at every scroll position without a bar laid over anything.
+   */
+  .blitz-result.blitz-fullscreen-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-content: start;
+    gap: 10px 14px;
+    padding: 12px 14px 18px;
+    overflow: auto;
+  }
+  .blitz-result.blitz-fullscreen-page > * { width: 100%; max-width: none; grid-column: 2; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-primary { grid-column: 1; grid-row: 1 / span 99; }
+  .blitz-result.blitz-fullscreen-page > .blitz-result-actions {
+    /* Row 1 by name, not by luck: the pool panel is appended first and is
+     * 600px tall, so auto-placement put the doors at y=682 on a 401px screen. */
+    grid-row: 1;
+    /* Start, not stretch: the left column spans every row, so a stretched
+     * item in row 1 grew to 652px and took the whole screen with it. */
+    align-self: start;
+    /* Not sticky. Pinned, it painted over the top row of the ledger behind
+     * it - the overlap the owner reported. In row 1 it is on screen the moment
+     * the card opens, and it scrolls away honestly like everything else. */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 0 0 4px;
+  }
+  .blitz-result.blitz-fullscreen-page > :not(.blitz-result-primary) { align-self: start; }
+  /*
+   * The ledger is placed at column 2 row 1 by the wide-screen layout, which is
+   * the same cell the doors now take - so the two were drawn on top of each
+   * other and the ledger's first line sat under Ride again. It moves down a
+   * row here, and keeps its own scroll.
+   */
+  .blitz-result.blitz-fullscreen-page > .blitz-result-ledger {
+    grid-row: 2;
+    max-height: calc(100vh - 140px);
+  }
+  .blitz-result .blitz-rush-logo { display: none; }
+  .blitz-result-hero { margin-top: 8px; padding: 10px 12px 12px; }
+  .blitz-result-score { font-size: 44px; }
+  .blitz-result-actions { display: flex; gap: 10px; }
+  .blitz-result-actions > * { flex: 1 1 auto; }
+}

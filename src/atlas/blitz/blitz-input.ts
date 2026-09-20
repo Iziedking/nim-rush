@@ -13,13 +13,35 @@ export class BlitzInputController {
   private readonly latchTargets = new Map<string, HTMLElement>();
 
   constructor(target: Window = window) {
+    /*
+     * A rider typing their name is not steering.
+     *
+     * The controls take KeyA, KeyD, KeyS, KeyW and Space and call
+     * preventDefault on them, which is right in a run and wrong in a text
+     * field: a rider typing "jake" got "jke", because the a never reached the
+     * input. Reported from a real session, and it would have hit every name
+     * with a, d, s, w or a space in it - which is most names.
+     *
+     * So a key that lands in something editable is left entirely alone: not
+     * swallowed, and not read as a control either, because a held W while
+     * typing must not tuck the bike behind the keyboard.
+     */
+    const isTyping = (event: KeyboardEvent): boolean => {
+      const node = event.target as HTMLElement | null;
+      if (!node || typeof node.tagName !== 'string') return false;
+      return node.isContentEditable === true || /^(input|textarea|select)$/i.test(node.tagName);
+    };
     const keydown = (event: KeyboardEvent) => {
+      if (isTyping(event)) return;
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyS', 'KeyW', 'ShiftLeft', 'ShiftRight', 'Space'].includes(event.code)) event.preventDefault();
       this.pressed.add(event.code);
       this.readKeyboard();
     };
     const keyup = (event: KeyboardEvent) => {
+      // Released while typing still clears: a key held before focus moved into
+      // a field would otherwise stay stuck down for the rest of the run.
       this.pressed.delete(event.code);
+      if (isTyping(event)) return;
       this.readKeyboard();
     };
     const blur = () => this.reset();

@@ -38,6 +38,19 @@ function ride(steer: number, ticks = 45): BlitzRunState {
   return state;
 }
 
+/** The same, but able to say where the key was typed. */
+function typedInto(tag: string, code: string): { prevented: boolean; steer: number } {
+  const listeners = new Map<string, (event: KeyboardEvent) => void>();
+  const target = {
+    addEventListener: (name: string, listener: (event: KeyboardEvent) => void) => { listeners.set(name, listener); },
+    removeEventListener: (name: string) => { listeners.delete(name); },
+  } as unknown as Window;
+  const input = new BlitzInputController(target);
+  let prevented = false;
+  listeners.get('keydown')?.({ code, target: { tagName: tag, isContentEditable: tag === 'DIV' }, preventDefault: () => { prevented = true; } } as unknown as KeyboardEvent);
+  return { prevented, steer: input.sample().steer };
+}
+
 /** A Window that only records listeners, so the controller runs without a DOM. */
 function fakeWindow(): { target: Window; press: (code: string) => void; release: (code: string) => void } {
   const listeners = new Map<string, (event: KeyboardEvent) => void>();
@@ -100,5 +113,28 @@ describe('steering handedness', () => {
       for (let skip = 0; skip < 90 && state.phase === 'running'; skip += 1) state = stepBlitzRun(state, straight);
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe('typing a name', () => {
+  /*
+   * Reported from a real session: \"i am trying to type jake but a is not
+   * working\". The controls claim KeyA, KeyD, KeyS, KeyW and Space and call
+   * preventDefault on them, which is correct in a run and swallowed letters in
+   * the rider-name field - most names contain at least one of them.
+   */
+  it('leaves letters alone in a text field, and still steers outside one', () => {
+    for (const code of ['KeyA', 'KeyD', 'KeyS', 'KeyW', 'Space']) {
+      const typed = typedInto('INPUT', code);
+      expect(typed.prevented, code).toBe(false);
+      expect(typed.steer, code).toBe(0);
+    }
+    // Contenteditable counts as typing too.
+    expect(typedInto('DIV', 'KeyA').prevented).toBe(false);
+    // And on the page itself, A still steers and is still swallowed so the
+    // browser does not scroll the run out from under the rider.
+    const onPage = typedInto('BODY', 'KeyA');
+    expect(onPage.prevented).toBe(true);
+    expect(onPage.steer).not.toBe(0);
   });
 });
