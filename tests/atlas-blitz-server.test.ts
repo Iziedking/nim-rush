@@ -10,6 +10,7 @@ import { blitzRiderInput } from './support/blitz-rider';
 
 const walletA = 'NQ12 TEST WALLET A';
 const walletB = 'NQ34 TEST WALLET B';
+const walletC = 'NQ56 TEST WALLET C';
 
 function identity(bindings: Record<string, string>) {
   return { getBinding: (actorId: string, seasonId: string) => {
@@ -41,6 +42,42 @@ describe('Beacon Blitz verified competition service', () => {
       seed: 'season-1:lagos:1970-01-01:rush-nimtrail-v11-rookie',
     });
     await expect(service.issueTicket({ actorId: 'actor-a', walletAddress: walletB, username: 'Sface', cityId: 'lagos', seasonId: 'season-1' })).rejects.toThrow(/wallet binding/i);
+  });
+
+  it('keeps ghosts scoped to the active daily challenge', async () => {
+    let current = Date.parse('2026-09-17T12:00:00.000Z');
+    const service = createAtlasBlitzService({
+      identity: identity({ 'season-1:actor-a': walletA, 'season-1:actor-b': walletB, 'season-1:actor-c': walletC }),
+      now: () => current,
+      randomId: (() => {
+        let id = 0;
+        return () => `ticket-ghost-${++id}`;
+      })(),
+    });
+
+    const yesterday = await service.issueTicket({ actorId: 'actor-a', walletAddress: walletA, username: 'Yesterday', cityId: 'lagos', seasonId: 'season-1' });
+    const yesterdayTrace = await completeTrace('lagos', yesterday.seed, yesterday.rivals);
+    current += yesterdayTrace.elapsedMs + 3_000;
+    await service.submit({
+      runId: 'run-yesterday', ticketId: yesterday.id, actorId: 'actor-a', walletAddress: walletA, username: 'Yesterday',
+      cityId: 'lagos', seasonId: 'season-1', seed: yesterday.seed, frames: yesterdayTrace.frames,
+      traceHash: yesterdayTrace.hash, claimedScore: yesterdayTrace.score,
+    });
+
+    current = Date.parse('2026-09-18T12:00:00.000Z');
+    const today = await service.issueTicket({ actorId: 'actor-b', walletAddress: walletB, username: 'Today', cityId: 'lagos', seasonId: 'season-1' });
+    expect(today.rivals).toEqual([]);
+
+    const todayTrace = await completeTrace('lagos', today.seed, today.rivals);
+    current += todayTrace.elapsedMs + 3_000;
+    await service.submit({
+      runId: 'run-today', ticketId: today.id, actorId: 'actor-b', walletAddress: walletB, username: 'Today',
+      cityId: 'lagos', seasonId: 'season-1', seed: today.seed, frames: todayTrace.frames,
+      traceHash: todayTrace.hash, claimedScore: todayTrace.score,
+    });
+
+    const sameDay = await service.issueTicket({ actorId: 'actor-c', walletAddress: walletC, username: 'SameDay', cityId: 'lagos', seasonId: 'season-1' });
+    expect((sameDay.rivals ?? []).map((rival) => rival.username)).toEqual(['Today']);
   });
 
   it('replays a finished trace, rejects tampering and is idempotent by run id', async () => {

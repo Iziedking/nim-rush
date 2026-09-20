@@ -507,28 +507,16 @@ export function createAtlasBlitzService(options: {
   }
 
   /*
-   * The pack, and where it comes from when today is still empty.
+   * The pack belongs to one daily challenge, not to the city in general.
    *
-   * Lines were only ever drawn from the current day's challenge, and a
-   * challenge id carries the date - so the pack reset to nothing every midnight
-   * and the first riders of every single day raced an empty hill. Not a
-   * cold start once: a cold start daily, for as long as the game runs.
-   *
-   * It is fixable because the course does not change. `sampleCourse` and
-   * `nearbyCourseColliders` are keyed on the city alone; the seed moves the
-   * missions and the supplies, not the road or the rocks. A line ridden down
-   * Lagos yesterday is a true line down Lagos today, so yesterday's riders can
-   * fill today's pack until today has riders of its own.
-   *
-   * Today is always preferred, because those runs were ridden under exactly
-   * these conditions. Older days only backfill the empty seats, newest first.
-   * Every one of them is a real run by a real wallet that the server verified.
-   * Nothing here invents a rider.
+   * A ghost is part of the challenge contract the rider sees. Reusing a line
+   * from yesterday would make an old rider look like today's competitor and
+   * would blur the meaning of the daily leaderboard. An empty pack is honest:
+   * the first rider of a new day is setting the line for everyone who follows.
    */
   function packFor(challengeId: string, walletAddress: string, username: string): BlitzRivalPath[] {
     const mine = (entry: { path: BlitzRivalPath }) =>
       entry.path.username === username || entry.path.runId === walletAddress;
-    const city = cityOfChallenge(challengeId);
     const seen = new Set<string>();
     const pack: BlitzRivalPath[] = [];
 
@@ -544,26 +532,7 @@ export function createAtlasBlitzService(options: {
     };
 
     take(rivalPaths.get(challengeId) ?? []);
-    if (pack.length >= RIVALS_PER_TICKET) return pack;
-
-    // Same city, other days. Newest first, so a rider meets recent company.
-    const older = [...rivalPaths.entries()]
-      .filter(([id]) => id !== challengeId && cityOfChallenge(id) === city)
-      .sort((left, right) => right[0].localeCompare(left[0]));
-    for (const [, entries] of older) {
-      take(entries);
-      if (pack.length >= RIVALS_PER_TICKET) break;
-    }
     return pack;
-  }
-
-  /*
-   * A challenge id looks like `cycle-2:lagos:2026-09-17:rush-missions-v5-rookie`.
-   * The city is the one part that decides whether a recorded line is still a
-   * valid line, because it is the only part that shapes the road.
-   */
-  function cityOfChallenge(challengeId: string): string {
-    return challengeId.split(':')[1] ?? challengeId;
   }
 
   function serialiseSnapshot(): AtlasBlitzSnapshot {

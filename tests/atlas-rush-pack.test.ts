@@ -139,14 +139,14 @@ describe('a finished run becomes somebody else\'s rival', () => {
  * single day raced nobody. That is not a cold start, it is a cold start daily.
  *
  * It is safe to reach back because the course does not move: `sampleCourse`
- * and `nearbyCourseColliders` are keyed on the city, and the seed changes the
- * missions and the supplies rather than the road. Yesterday's line down Lagos
- * is a true line down Lagos today.
+ * and `nearbyCourseColliders` are keyed on the city, but a daily ghost still
+ * belongs to the challenge it was verified against. Yesterday's line is not
+ * presented as today's competitor.
  */
-describe('yesterday fills today until today fills itself', () => {
+describe('daily ghosts stay scoped to their challenge', () => {
   const DAY = 24 * 60 * 60 * 1_000;
 
-  it('gives the next day a pack instead of an empty hill', async () => {
+  it('starts the next day with an empty ghost pack', async () => {
     const clock = { now: 1_700_000_000_000 };
     const blitz = service(clock);
 
@@ -159,7 +159,7 @@ describe('yesterday fills today until today fills itself', () => {
     });
 
     expect(today.challengeId).not.toBe(yesterday.ticket.challengeId);
-    expect((today.rivals ?? []).map((rival) => rival.username)).toEqual(['Alpha']);
+    expect(today.rivals ?? []).toEqual([]);
   });
 
   it('still refuses to hand a rider their own ghost across days', async () => {
@@ -174,7 +174,7 @@ describe('yesterday fills today until today fills itself', () => {
     expect(again.rivals ?? []).toEqual([]);
   });
 
-  it('prefers today, and only backfills the seats today has not filled', async () => {
+  it('uses today\'s verified rider without backfilling from yesterday', async () => {
     const clock = { now: 1_700_000_000_000 };
     const blitz = service(clock);
     await rideAndSubmit(blitz, clock, 'alpha', 'Alpha');
@@ -186,8 +186,6 @@ describe('yesterday fills today until today fills itself', () => {
     });
 
     const names = (third.rivals ?? []).map((rival) => rival.username);
-    // Today's rider comes first; yesterday's fills the seat behind them.
-    expect(names[0]).toBe('Beta');
-    expect(names).toContain('Alpha');
+    expect(names).toEqual(['Beta']);
   });
 });
