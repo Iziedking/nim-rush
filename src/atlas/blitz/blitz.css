@@ -2825,3 +2825,59 @@ button + .blitz-quiet { margin-top: 11px; }
     min-height: 44px;
   }
 }
+
+/*
+ * Safari can report a short visual viewport while the browser chrome is open.
+ * That used to let the older short-height grid restore a 360px column after
+ * the phone layout had already collapsed to one column. Keep the landing
+ * panel inside the safe width, including its borders and padding, and let the
+ * pool address shrink instead of widening the whole card.
+ */
+@media (orientation: portrait) and (max-width: 720px) {
+  .blitz-intro.blitz-fullscreen-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+  .blitz-intro-command {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .blitz-intro-command > *,
+  .blitz-intro-command .blitz-ranked-launch,
+  .blitz-intro-command .blitz-mode-free,
+  .blitz-intro-command .blitz-pool,
+  .blitz-intro-command .blitz-pool-place {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .blitz-pool-place {
+    grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  }
+  .blitz-pool-place strong { min-width: 0; }
+}
+
+/*
+ * Keep the masthead readable on iOS-sized portrait screens. The display face
+ * has tall glyphs and a hard shadow, so its desktop-tight line box makes the
+ * edition badge and RIDGE RUN look painted into one another on a phone.
+ */
+@media (orientation: portrait) and (max-width: 720px) {
+  .blitz-intro-masthead {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .blitz-intro-masthead .blitz-edition { margin-top: 0; }
+  .blitz-intro-masthead .blitz-title {
+    margin-top: 0;
+    line-height: .84;
+  }
+}
