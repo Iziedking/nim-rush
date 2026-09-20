@@ -2660,8 +2660,8 @@ button + .blitz-quiet { margin-top: 11px; }
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
     align-content: start;
-    gap: 10px 14px;
-    padding: 12px 14px 18px;
+    gap: 8px 14px;
+    padding: 12px 14px 14px;
     overflow: auto;
   }
   .blitz-result.blitz-fullscreen-page > * { width: 100%; max-width: none; grid-column: 2; }
@@ -2691,11 +2691,43 @@ button + .blitz-quiet { margin-top: 11px; }
    */
   .blitz-result.blitz-fullscreen-page > .blitz-result-ledger {
     grid-row: 2;
-    max-height: calc(100vh - 140px);
+    /* Leaves room under it for the circuit doors, which were the last thing
+     * still needing a scroll. The ledger keeps its own. */
+    /* Budgeted, not guessed: on a 401px screen the column is doors 104 +
+     * ledger + two circuit panels, and it came to 423 of 363 usable. */
+    max-height: calc(100vh - 302px);
+    padding: 10px;
   }
+  /* One line of doors rather than two: the row was 120px of a 401px screen. */
+  .blitz-result .blitz-result-actions { gap: 6px; padding: 0; }
+  .blitz-result .blitz-result-actions .blitz-start { min-height: 46px; padding: 0 14px; font-size: 15px; }
+  .blitz-result .blitz-result-actions .blitz-again { min-height: 46px; padding: 0 12px; }
+  .blitz-result .blitz-competition { padding: 4px 10px; }
+  .blitz-result .blitz-competition-summary { min-height: 44px; }
   .blitz-result .blitz-rush-logo { display: none; }
   .blitz-result-hero { margin-top: 8px; padding: 10px 12px 12px; }
   .blitz-result-score { font-size: 44px; }
   .blitz-result-actions { display: flex; gap: 10px; }
   .blitz-result-actions > * { flex: 1 1 auto; }
+}
+
+/*
+ * Every control a thumb has to find is at least 40px tall. Change was 38,
+ * which is the one that decides whether a rider can rename themselves.
+ */
+.blitz-ui .blitz-name-change { min-height: 40px; padding: 0 14px; }
+
+/*
+ * A small phone on its side: 640x360, where 150px pads plus the rack do not
+ * fit above each other. Measured there, the GEARBOX line landed on the TUCK
+ * pad. Smaller pads, and the rack tucked directly under the speed readout.
+ */
+/* 370, not 420: a Pixel on its side is 380-401 tall and keeps the full pads.
+ * Only genuinely small phones give up pad size. */
+@media (orientation: landscape) and (max-height: 370px) {
+  .blitz-run { --rush-pad: 120px; --rush-spend: 54px; }
+  .blitz-run .blitz-boost-wrap { top: max(140px, calc(env(safe-area-inset-top) + 128px)); }
+  .blitz-ui .blitz-posture { border-radius: 22px; }
+  .blitz-posture-name { font-size: 14px; }
+  .blitz-posture-hint { display: none; }
 }
